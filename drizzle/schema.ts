@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,30 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+export const pipelineRuns = mysqlTable("pipeline_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  pipelineType: mysqlEnum("pipelineType", ["video", "static"]).notNull(),
+  status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending").notNull(),
+  product: varchar("product", { length: 64 }).notNull(),
+  priority: mysqlEnum("priority", ["Low", "Medium", "High", "Urgent"]).default("Medium").notNull(),
+  triggerSource: varchar("triggerSource", { length: 64 }).default("manual").notNull(),
+  foreplayAdId: varchar("foreplayAdId", { length: 256 }),
+  foreplayAdTitle: text("foreplayAdTitle"),
+  foreplayAdBrand: text("foreplayAdBrand"),
+  videoUrl: text("videoUrl"),
+  thumbnailUrl: text("thumbnailUrl"),
+  transcript: text("transcript"),
+  visualAnalysis: text("visualAnalysis"),
+  scriptsJson: json("scriptsJson"),
+  clickupTasksJson: json("clickupTasksJson"),
+  staticAdImages: json("staticAdImages"),
+  staticAnalysis: text("staticAnalysis"),
+  generatedImageUrl: text("generatedImageUrl"),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type PipelineRun = typeof pipelineRuns.$inferSelect;
+export type InsertPipelineRun = typeof pipelineRuns.$inferInsert;
