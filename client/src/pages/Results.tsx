@@ -398,55 +398,26 @@ function ExpertReviewPanel({ review }: { review: any }) {
             onClick={() => setExpandedRound(expandedRound === ri ? null : ri)}
             className="w-full flex items-center justify-between py-2 text-sm"
           >
-            <div className="flex items-center gap-2">
-              {expandedRound === ri ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-              <span className="text-white font-medium">Round {round.roundNumber}</span>
-              <span className="text-gray-400">Avg: {round.averageScore}/100</span>
-              {ri === review.rounds.length - 1 && (
-                <span className="text-xs bg-emerald-600 text-white px-1.5 py-0.5 rounded">Final</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              {round.expertReviews?.slice(0, 5).map((_: any, ei: number) => (
-                <div key={ei} className="w-2 h-2 rounded-full bg-emerald-500" />
-              ))}
-              {round.expertReviews?.length > 5 && (
-                <span className="text-xs text-gray-500">+{round.expertReviews.length - 5}</span>
-              )}
-            </div>
+            <span className="text-gray-400">Round {round.roundNumber}</span>
+            <span className="flex items-center gap-2">
+              <span className="text-orange-400 font-semibold">{round.averageScore}</span>
+              <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${expandedRound === ri ? "rotate-180" : ""}`} />
+            </span>
           </button>
 
-          {expandedRound === ri && round.expertReviews && (
-            <div className="ml-6 mt-2 space-y-1">
-              {/* Bar chart */}
-              <div className="mb-4 space-y-1.5">
-                {round.expertReviews.map((er: any, ei: number) => (
-                  <div key={ei} className="flex items-center gap-3">
-                    <span className="text-xs text-gray-500 w-4 text-right">{ei + 1}</span>
-                    <div className="flex-1 h-5 bg-[#191B1F] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
-                        style={{ width: `${er.score}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-orange-400 font-medium w-8 text-right">{er.score}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Expert details */}
-              {round.expertReviews.map((er: any, ei: number) => (
-                <div key={ei} className="border-b border-white/5 last:border-0">
+          {expandedRound === ri && (
+            <div className="ml-4 border-l border-white/10 pl-4 py-2 space-y-2">
+              {round.expertReviews?.map((er: any, ei: number) => (
+                <div key={ei} className="text-sm">
                   <button
                     onClick={() => toggleExpert(ri * 100 + ei)}
-                    className="w-full flex items-center justify-between py-2.5 text-sm"
+                    className="w-full flex items-center justify-between py-1 text-gray-300 hover:text-white"
                   >
-                    <div className="flex items-center gap-2">
-                      {expandedExperts.has(ri * 100 + ei) ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
-                      <span className="text-white font-medium">{er.expertName}</span>
-                      <span className="text-gray-500">— {er.domain}</span>
-                    </div>
-                    <span className="text-orange-400 font-medium">{er.score}/100</span>
+                    <span>{er.expertName} ({er.domain})</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-orange-400 font-semibold">{er.score}</span>
+                      <ChevronRight className={`w-3 h-3 text-gray-600 transition-transform ${expandedExperts.has(ri * 100 + ei) ? "rotate-90" : ""}`} />
+                    </span>
                   </button>
                   {expandedExperts.has(ri * 100 + ei) && (
                     <div className="ml-6 pb-3 text-sm text-gray-400">
@@ -464,18 +435,21 @@ function ExpertReviewPanel({ review }: { review: any }) {
 }
 
 function StaticResults({ run }: { run: any }) {
-  const images = (run.staticAdImages as any[]) || [];
+  const referenceImages = (run.staticAdImages as any[])?.filter((img: any) => !img.variation) || [];
+  const generatedImages = (run.staticAdImages as any[])?.filter((img: any) => img.variation) || [];
+
   return (
     <div className="space-y-6">
-      {images.length > 0 && (
+      {/* Reference Ads */}
+      {referenceImages.length > 0 && (
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4">Selected Reference Ads</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {images.map((img: any, i: number) => (
-              <div key={i} className="rounded-lg overflow-hidden bg-[#01040A]">
+          <h2 className="text-white font-semibold mb-4">Reference Competitor Ads</h2>
+          <div className="grid grid-cols-2 gap-4">
+            {referenceImages.map((img: any, i: number) => (
+              <div key={i} className="rounded-lg overflow-hidden bg-[#01040A] border border-white/5">
                 {img.imageUrl && <img src={img.imageUrl} alt={img.title || "Ad"} className="w-full aspect-square object-cover" />}
-                <div className="p-2">
-                  <p className="text-white text-xs truncate">{img.title || "Untitled"}</p>
+                <div className="p-3">
+                  <p className="text-white text-sm font-medium truncate">{img.title || "Untitled"}</p>
                   <p className="text-gray-500 text-xs">{img.brandName}</p>
                 </div>
               </div>
@@ -483,20 +457,53 @@ function StaticResults({ run }: { run: any }) {
           </div>
         </div>
       )}
+
+      {/* Static Ad Analysis */}
       {run.staticAnalysis && (
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-            <Eye className="w-4 h-4 text-emerald-400" /> Static Ad Analysis
+            <Eye className="w-4 h-4 text-emerald-400" /> Competitor Ad Analysis
           </h2>
           <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
             <MarkdownContent content={run.staticAnalysis} />
           </div>
         </div>
       )}
-      {run.generatedImageUrl && (
+
+      {/* Generated ONEST Variations */}
+      {generatedImages.length > 0 && (
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4">Generated ONEST Creative</h2>
-          <img src={run.generatedImageUrl} alt="Generated creative" className="w-full max-w-lg rounded-lg" />
+          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <span className="text-[#FF3838]">✨</span> Generated ONEST Creatives ({generatedImages.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-6">
+            {generatedImages.map((img: any, i: number) => (
+              <div key={i} className="rounded-lg overflow-hidden bg-[#01040A] border border-white/10 p-4">
+                <div className="mb-3">
+                  <span className="text-xs font-bold text-[#FF3838] bg-[#FF3838]/10 px-2 py-1 rounded">
+                    {img.variation?.toUpperCase() || `Variation ${i + 1}`}
+                  </span>
+                </div>
+                <img src={img.url} alt={img.variation || "Generated creative"} className="w-full rounded-lg mb-3" />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(img.url); toast.success("Image URL copied!"); }}
+                    className="flex-1 text-xs bg-[#FF3838] hover:bg-[#FF3838]/90 text-white px-3 py-2 rounded transition-colors"
+                  >
+                    Copy URL
+                  </button>
+                  <a
+                    href={img.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-xs bg-white/5 hover:bg-white/10 text-white px-3 py-2 rounded text-center transition-colors"
+                  >
+                    Download
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

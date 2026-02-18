@@ -3,9 +3,8 @@ import { useLocation } from "wouter";
 import { LayoutDashboard, Zap, Settings, LogOut, Image } from "lucide-react";
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Zap, label: "Manual Trigger", path: "/trigger" },
-  { icon: Image, label: "Static Ads", path: "/static" },
+  { icon: Image, label: "Browse Creatives", path: "/" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
@@ -19,7 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className="w-56 bg-[#0D0F12] border-r border-white/5 flex flex-col shrink-0 fixed h-screen z-30">
         {/* Logo */}
         <div className="p-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-sm">
+          <div className="w-9 h-9 rounded-full bg-[#FF3838] flex items-center justify-center text-white font-bold text-sm">
             O
           </div>
           <div>
@@ -32,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 px-3 py-2 space-y-1">
           {navItems.map((item) => {
             const isActive = location === item.path || 
-              (item.path === "/" && location === "/dashboard");
+              (item.path === "/" && location === "/browse");
             return (
               <button
                 key={item.path}

@@ -45,3 +45,15 @@
 - [x] BUG: Static image generation — must analyze inspo reference and create similar layout
 - [x] BUG: Static image generation — must generate 3 variations with different backgrounds
 - [x] BUG: Static image generation — must composite product render onto AI-generated backgrounds
+
+## REBUILD REQUIREMENTS
+
+- [x] BUG FIX: Whisper transcription regression — fix video download, ffmpeg audio extraction, OpenAI API call
+- [x] REBUILD: Browse Creatives page — unified gallery with videos + statics from both Foreplay boards
+- [x] REBUILD: Creative detail view — show full creative with Run Pipeline button
+- [x] REBUILD: Configuration step — product selector, priority selector
+- [x] REBUILD: Video pipeline — with fixed Whisper transcription
+- [x] REBUILD: Static pipeline — ACTUALLY GENERATE 3 images using nano banana + product render compositing
+- [x] REBUILD: Results page — display generated static images with approval workflow
+- [ ] TEST: End-to-end video pipeline with transcription
+- [ ] TEST: End-to-end static pipeline with image generation
