@@ -15,6 +15,13 @@
       "when": 1771418007067,
       "tag": "0001_little_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1771457869629,
+      "tag": "0002_quick_the_stranger",
+      "breakpoints": true
     }
   ]
 }

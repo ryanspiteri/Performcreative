@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Play, Image as ImageIcon, Filter, Loader2, ChevronRight } from "lucide-react";
+import { Play, Image as ImageIcon, Filter, Loader2, ChevronRight, CheckCircle, Clock } from "lucide-react";
 
 type Creative = {
   id: string;
@@ -29,6 +29,29 @@ export default function BrowseCreatives() {
   const videosQuery = trpc.pipeline.fetchForeplayVideos.useQuery();
   const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery();
 
+  // FEATURE 2: Fetch pipeline history to show badges
+  const pipelineHistory = trpc.pipeline.list.useQuery();
+
+  // Build a set of foreplayAdIds that have been processed
+  const processedAdIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (pipelineHistory.data) {
+      for (const run of pipelineHistory.data) {
+        if (run.foreplayAdId) ids.add(run.foreplayAdId);
+      }
+    }
+    return ids;
+  }, [pipelineHistory.data]);
+
+  // Get pipeline status for a specific ad
+  const getAdPipelineStatus = (adId: string): { status: string; count: number } | null => {
+    if (!pipelineHistory.data) return null;
+    const runs = pipelineHistory.data.filter(r => r.foreplayAdId === adId);
+    if (runs.length === 0) return null;
+    const latestRun = runs[0]; // already sorted by createdAt desc
+    return { status: latestRun.status, count: runs.length };
+  };
+
   // Combine and filter creatives
   const creatives = useMemo(() => {
     const videos: Creative[] = (videosQuery.data || []).map((ad: any) => ({
@@ -53,6 +76,7 @@ export default function BrowseCreatives() {
     return all.filter(c => c.type === filterType);
   }, [videosQuery.data, staticsQuery.data, filterType]);
 
+  // FIX 1: Video mutation now passes the selected creative's data
   const triggerVideoMutation = trpc.pipeline.triggerVideo.useMutation({
     onSuccess: (data) => {
       toast.success("Video pipeline triggered!");
@@ -77,18 +101,26 @@ export default function BrowseCreatives() {
     if (!selectedCreative) return;
 
     if (selectedCreative.type === "VIDEO") {
-      triggerVideoMutation.mutate({ product, priority });
+      triggerVideoMutation.mutate({
+        product,
+        priority,
+        foreplayAdId: selectedCreative.id,
+        foreplayAdTitle: selectedCreative.title,
+        foreplayAdBrand: selectedCreative.brandName,
+        mediaUrl: selectedCreative.mediaUrl || "",
+        thumbnailUrl: selectedCreative.thumbnailUrl,
+      });
     } else {
       triggerStaticMutation.mutate({
         product,
         priority,
-        selectedAdIds: [selectedCreative.id],
-        selectedAdImages: [{
+        selectedAdId: selectedCreative.id,
+        selectedAdImage: {
           id: selectedCreative.id,
           imageUrl: selectedCreative.imageUrl || "",
           brandName: selectedCreative.brandName,
           title: selectedCreative.title,
-        }],
+        },
       });
     }
   };
@@ -138,63 +170,95 @@ export default function BrowseCreatives() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
-                {creatives.map((creative) => (
-                  <div
-                    key={creative.id}
-                    onClick={() => setSelectedCreative(creative)}
-                    className={`cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
-                      selectedCreative?.id === creative.id
-                        ? "border-[#FF3838] shadow-lg shadow-[#FF3838]/20"
-                        : "border-white/10 hover:border-white/20"
-                    }`}
-                  >
-                    {/* Thumbnail */}
-                    <div className="relative bg-[#01040A] aspect-square flex items-center justify-center overflow-hidden">
-                      {creative.type === "VIDEO" && creative.thumbnailUrl ? (
-                        <>
+                {creatives.map((creative) => {
+                  const pipelineStatus = getAdPipelineStatus(creative.id);
+                  return (
+                    <div
+                      key={creative.id}
+                      onClick={() => setSelectedCreative(creative)}
+                      className={`cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative ${
+                        selectedCreative?.id === creative.id
+                          ? "border-[#FF3838] shadow-lg shadow-[#FF3838]/20"
+                          : "border-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      {/* FEATURE 2: Pipeline History Badge */}
+                      {pipelineStatus && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold backdrop-blur-sm ${
+                            pipelineStatus.status === "completed"
+                              ? "bg-emerald-500/90 text-white"
+                              : pipelineStatus.status === "running"
+                              ? "bg-orange-500/90 text-white"
+                              : pipelineStatus.status === "failed"
+                              ? "bg-red-500/90 text-white"
+                              : "bg-blue-500/90 text-white"
+                          }`}>
+                            {pipelineStatus.status === "completed" ? (
+                              <CheckCircle className="w-3 h-3" />
+                            ) : pipelineStatus.status === "running" ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Clock className="w-3 h-3" />
+                            )}
+                            {pipelineStatus.status === "completed" ? "Processed" : 
+                             pipelineStatus.status === "running" ? "Running" : 
+                             pipelineStatus.status === "failed" ? "Failed" : "Pending"}
+                            {pipelineStatus.count > 1 && (
+                              <span className="ml-1 bg-white/20 px-1 rounded">{pipelineStatus.count}x</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Thumbnail */}
+                      <div className="relative bg-[#01040A] aspect-square flex items-center justify-center overflow-hidden">
+                        {creative.type === "VIDEO" && creative.thumbnailUrl ? (
+                          <>
+                            <img
+                              src={creative.thumbnailUrl}
+                              alt={creative.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                              <Play className="w-8 h-8 text-white fill-white" />
+                            </div>
+                          </>
+                        ) : creative.type === "STATIC" && creative.imageUrl ? (
                           <img
-                            src={creative.thumbnailUrl}
+                            src={creative.imageUrl}
                             alt={creative.title}
                             className="w-full h-full object-cover"
                           />
-                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                            <Play className="w-8 h-8 text-white fill-white" />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            {creative.type === "VIDEO" ? (
+                              <Play className="w-8 h-8 mb-2" />
+                            ) : (
+                              <ImageIcon className="w-8 h-8 mb-2" />
+                            )}
+                            <p className="text-xs">No preview</p>
                           </div>
-                        </>
-                      ) : creative.type === "STATIC" && creative.imageUrl ? (
-                        <img
-                          src={creative.imageUrl}
-                          alt={creative.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-gray-500">
-                          {creative.type === "VIDEO" ? (
-                            <Play className="w-8 h-8 mb-2" />
-                          ) : (
-                            <ImageIcon className="w-8 h-8 mb-2" />
-                          )}
-                          <p className="text-xs">No preview</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="p-3 bg-[#0F1117]">
-                      <div className="flex items-start justify-between mb-1">
-                        <p className="text-sm font-medium text-white truncate flex-1">{creative.title}</p>
-                        <span className={`text-xs font-bold px-2 py-1 rounded ml-2 ${
-                          creative.type === "VIDEO"
-                            ? "bg-blue-900/50 text-blue-300"
-                            : "bg-purple-900/50 text-purple-300"
-                        }`}>
-                          {creative.type}
-                        </span>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-400">{creative.brandName}</p>
+
+                      {/* Info */}
+                      <div className="p-3 bg-[#0F1117]">
+                        <div className="flex items-start justify-between mb-1">
+                          <p className="text-sm font-medium text-white truncate flex-1">{creative.title}</p>
+                          <span className={`text-xs font-bold px-2 py-1 rounded ml-2 ${
+                            creative.type === "VIDEO"
+                              ? "bg-blue-900/50 text-blue-300"
+                              : "bg-purple-900/50 text-purple-300"
+                          }`}>
+                            {creative.type}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400">{creative.brandName}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -298,6 +362,13 @@ export default function BrowseCreatives() {
                       </>
                     )}
                   </Button>
+
+                  {/* Pipeline type description */}
+                  <p className="text-xs text-gray-500 mt-3">
+                    {selectedCreative.type === "VIDEO"
+                      ? "Video pipeline: Transcription → Visual Analysis → 4 Script Variants → Expert Review → ClickUp"
+                      : "Static pipeline: Analysis → Brief → Expert Review → 3 Image Variations → Expert Review → Team Approval → ClickUp"}
+                  </p>
                 </div>
               </>
             ) : (

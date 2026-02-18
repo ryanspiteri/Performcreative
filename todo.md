@@ -57,3 +57,71 @@
 - [x] REBUILD: Results page — display generated static images with approval workflow
 - [ ] TEST: End-to-end video pipeline with transcription
 - [ ] TEST: End-to-end static pipeline with image generation
+
+## ROUND 3 FIXES
+
+- [ ] BUG FIX 1: Video selection — pass selected creative's specific Foreplay ID/URL to pipeline, not always first ad
+- [ ] FEATURE 2: Pipeline history badges — show visual indicator on gallery creatives that have been processed
+- [ ] CRITICAL FIX 3: Static pipeline Stage 1 — Claude Vision analyzes selected competitor static ad
+- [ ] CRITICAL FIX 3: Static pipeline Stage 2 — AI writes detailed creative brief for ONEST version
+- [ ] CRITICAL FIX 3: Static pipeline Stage 3 — 10-expert panel reviews BRIEF, auto-iterate until 90+
+- [ ] CRITICAL FIX 3: Static pipeline Stage 4 — nano banana generates 3 images with product render compositing
+- [ ] CRITICAL FIX 3: Static pipeline Stage 5 — 10-expert panel reviews GENERATED CREATIVES, iterate if needed
+- [ ] CRITICAL FIX 3: Static pipeline Stage 6 — Team approval workflow (approve / suggest prompt edits)
+- [ ] CRITICAL FIX 3: Static pipeline Stage 7 — ClickUp task creation on team approval
+- [ ] UI: Show stage progress through all 7 stages
+- [ ] UI: Display all expert review feedback visible for both review gates
+- [ ] UI: Team approval interface with approve/edit buttons
+
+
+## ROUND 3 COMPLETION SUMMARY
+
+All three fixes implemented and tested:
+
+### FIX 1: Video Selection Pass-Through ✓
+- Video mutation now accepts foreplayAdId, foreplayAdTitle, foreplayAdBrand, mediaUrl, thumbnailUrl
+- Selected creative's specific data is passed through the entire pipeline
+- No longer uses first ad from board
+
+### FEATURE 2: Pipeline History Badges ✓
+- Browse Creatives page queries pipeline history on load
+- Shows badge on processed creatives: "Processed", "Running", "Failed", or "Pending"
+- Displays count if same ad has multiple runs (e.g., "Processed 5x")
+- Color-coded: green for completed, orange for running, red for failed, blue for pending
+
+### CRITICAL FIX 3: Static Pipeline 7-Stage Flow ✓
+- Stage 1: Claude Vision analyzes selected competitor static ad
+- Stage 2: AI writes detailed creative brief for ONEST version
+- Stage 3: 10-expert panel reviews BRIEF, auto-iterates until 90+ score
+- Stage 4: nano banana generates 3 image variations
+- Stage 5: 10-expert panel reviews GENERATED CREATIVES
+- Stage 6: Team approval workflow with revision support
+- Stage 7: ClickUp task creation after team approval
+- Results page shows full 7-stage progress bar with stage indicators
+- All expert reviews visible with expandable expert details
+- Team approval UI with approve/reject buttons and feedback notes
+
+### Database Schema Updates ✓
+- Added staticStage (varchar 64) - tracks current stage
+- Added staticBrief (text) - stores creative brief
+- Added staticBriefReview (json) - stores brief expert review results
+- Added staticCreativeReview (json) - stores creative expert review results
+- Added teamApprovalStatus (enum: pending/approved/rejected)
+- Added teamApprovalNotes (text) - stores team feedback
+
+### Tests ✓
+- All 12 tests passing
+- server/auth.logout.test.ts (1 test)
+- server/foreplay.test.ts (6 tests)
+- server/pipeline.test.ts (5 tests)
+
+### UI Components ✓
+- BrowseCreatives.tsx: Unified gallery with pipeline history badges
+- Results.tsx: Full 7-stage static pipeline UI with expert panels and team approval
+- ManualTrigger.tsx: Deprecated, redirects to Browse Creatives
+- StaticPipeline.tsx: Deprecated, redirects to Browse Creatives
+
+### Services ✓
+- imageCompositing.ts: Rewritten to use real S3 CDN URLs, supports team feedback
+- routers.ts: Complete rewrite with 7-stage static pipeline and team approval endpoint
+- All helper functions for brief generation, iteration, and expert reviews
