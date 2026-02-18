@@ -32,3 +32,7 @@
 - [x] Static ads Claude Vision analysis
 - [x] Static ads nano banana image generation
 - [x] Settings page
+- [x] BUG FIX: Foreplay video pipeline returns "No video ads found" — board name/ID mismatch
+- [x] BUG FIX: Foreplay static pipeline likely same issue — board name/ID mismatch
+- [x] Investigate Foreplay API to get correct board/folder IDs
+- [x] Update Foreplay service to use correct board IDs and API endpoints

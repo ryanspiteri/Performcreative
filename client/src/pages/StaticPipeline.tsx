@@ -47,7 +47,7 @@ export default function StaticPipeline() {
       selectedAdIds: Array.from(selectedAds),
       selectedAdImages: selected.map(a => ({
         id: a.id,
-        imageUrl: a.thumbnailUrl || a.mediaUrl || "",
+        imageUrl: a.imageUrl || a.thumbnailUrl || a.mediaUrl || "",
         brandName: a.brandName,
         title: a.title,
       })),
@@ -124,7 +124,7 @@ export default function StaticPipeline() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {ads.map((ad) => {
             const isSelected = selectedAds.has(ad.id);
-            const imageUrl = ad.thumbnailUrl || ad.mediaUrl || "";
+            const imageUrl = ad.imageUrl || ad.thumbnailUrl || ad.mediaUrl || "";
             return (
               <button
                 key={ad.id}
