@@ -6,6 +6,7 @@ import { z } from "zod";
 import * as db from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
 import { analyzeVideoFrames, generateScripts, reviewScript, analyzeStaticAd } from "./services/claude";
+import { generateStaticAdVariations } from "./services/imageCompositing";
 import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
 import { TRPCError } from "@trpc/server";
@@ -182,6 +183,8 @@ function formatScriptForClickUp(script: any): string {
 
 async function runStaticPipeline(runId: number, input: any) {
   console.log(`[Pipeline] Starting static pipeline run #${runId}`);
+  
+  // Analyze selected competitor ads
   const analyses: string[] = [];
   for (const ad of input.selectedAdImages) {
     if (ad.imageUrl) {
@@ -190,11 +193,47 @@ async function runStaticPipeline(runId: number, input: any) {
     }
   }
   await db.updatePipelineRun(runId, { staticAnalysis: analyses.join("\n\n---\n\n") });
+  
   try {
-    const { generateImage } = await import("./_core/imageGeneration");
-    const prompt = `Create a premium health supplement advertisement for ONEST Health. Dark background (#01040A). Product: ${input.product}. Style: modern, clean, professional fitness/health aesthetic. Bold typography and vibrant product imagery. Brand colors: deep black, white text, orange accents (#FF3838), electric blue (#0347ED).`;
-    const result = await generateImage({ prompt });
-    await db.updatePipelineRun(runId, { generatedImageUrl: result.url, status: "completed", completedAt: new Date() });
+    // Get product render path
+    const { generateStaticAdVariations } = await import("./services/imageCompositing");
+    const path = require("path");
+    
+    // Use the first selected ad as inspiration (or use a default if none selected)
+    const inspireImageUrl = input.selectedAdImages?.[0]?.imageUrl || "https://via.placeholder.com/1200x1200?text=Inspiration";
+    
+    // Find a product render file
+    const fs = require("fs");
+    const rendersDir = path.join(__dirname, "../brand_assets/renders");
+    let productRenderPath = "";
+    
+    if (fs.existsSync(rendersDir)) {
+      const files = fs.readdirSync(rendersDir).filter((f: string) => f.endsWith(".png"));
+      if (files.length > 0) {
+        productRenderPath = path.join(rendersDir, files[0]);
+      }
+    }
+    
+    if (!productRenderPath) {
+      throw new Error("No product render files found in brand_assets/renders");
+    }
+    
+    // Generate 3 variations with product compositing
+    const variations = await generateStaticAdVariations(
+      productRenderPath,
+      inspireImageUrl,
+      input.product,
+      input.selectedAdImages?.[0]?.brandName || "Competitor"
+    );
+    
+    // Store the generated images (use staticAdImages to store all variations)
+    const generatedImages = variations.map(v => ({ url: v.url, variation: v.variation }));
+    await db.updatePipelineRun(runId, { 
+      generatedImageUrl: variations[0].url,
+      staticAdImages: generatedImages,
+      status: "completed", 
+      completedAt: new Date() 
+    });
   } catch (err: any) {
     console.warn("[Pipeline] Image generation failed:", err.message);
     await db.updatePipelineRun(runId, { status: "completed", completedAt: new Date(), errorMessage: "Image generation unavailable: " + err.message });

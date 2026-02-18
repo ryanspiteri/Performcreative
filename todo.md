@@ -36,3 +36,12 @@
 - [x] BUG FIX: Foreplay static pipeline likely same issue — board name/ID mismatch
 - [x] Investigate Foreplay API to get correct board/folder IDs
 - [x] Update Foreplay service to use correct board IDs and API endpoints
+
+## CRITICAL BUG FIXES
+
+- [x] BUG: Video pipeline regression — restore expert review panel visibility in UI
+- [x] BUG: Video pipeline regression — ensure scripts display in 3-column table format (Timestamp | Visual | Dialogue)
+- [x] BUG: Static image generation — MUST use actual product renders, not AI-generated products
+- [x] BUG: Static image generation — must analyze inspo reference and create similar layout
+- [x] BUG: Static image generation — must generate 3 variations with different backgrounds
+- [x] BUG: Static image generation — must composite product render onto AI-generated backgrounds
