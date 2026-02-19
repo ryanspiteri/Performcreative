@@ -1,0 +1,37 @@
+{
+  "query": "SHOW CREATE TABLE foreplay_creatives;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SHOW CREATE TABLE foreplay_creatives;",
+  "rows": [
+    {
+      "Table": "foreplay_creatives",
+      "Create Table": "CREATE TABLE `foreplay_creatives` ("
+    }
+  ],
+  "messages": [
+    "  `id` int NOT NULL AUTO_INCREMENT,",
+    "  `foreplayAdId` varchar(256) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `type` enum('VIDEO','STATIC') COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `board` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `title` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `brandName` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `thumbnailUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `imageUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `mediaUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `mediaType` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `platform` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `headline` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `displayFormat` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `transcription` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `foreplayCreatedAt` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `isNew` int NOT NULL DEFAULT '1',",
+    "  `syncedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `foreplay_creatives_foreplayAdId_unique` (`foreplayAdId`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001"
+  ],
+  "stdout": "Table\tCreate Table\nforeplay_creatives\tCREATE TABLE `foreplay_creatives` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `foreplayAdId` varchar(256) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `type` enum('VIDEO','STATIC') COLLATE utf8mb4_unicode_ci NOT NULL,\n  `board` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `title` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `brandName` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `thumbnailUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `imageUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `mediaUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `mediaType` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `platform` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `headline` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `displayFormat` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `transcription` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `foreplayCreatedAt` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `isNew` int NOT NULL DEFAULT '1',\n  `syncedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `foreplay_creatives_foreplayAdId_unique` (`foreplayAdId`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\n",
+  "stderr": "",
+  "execution_time_ms": 1517
+}

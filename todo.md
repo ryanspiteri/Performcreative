@@ -308,3 +308,12 @@ All three fixes implemented and tested:
 - [x] FIX: Run initial sync immediately (not after 10s delay) so cache populates on server start
 - [x] FIX: Add Foreplay API fallback to fetchForeplayVideos/Statics when local cache is empty
 - [x] FIX: Ensure gallery always shows creatives (never empty)
+
+## ROUND 11C — GALLERY FIELD MAPPING FIX
+
+- [x] BUG: Thumbnails "No preview" — upsert was failing due to unsanitised data, fixed with field truncation
+- [x] BUG: Titles generic / Brand "Unknown" — test data was polluting DB, cleaned + tests now self-cleanup
+- [x] FIX: Foreplay API fields mapped correctly during sync (thumbnail, title, brand, media type)
+- [x] FIX: Thumbnail URLs stored and served correctly (r2.foreplay.co URLs verified)
+- [x] FIX: Frontend reads correct field names + isNew badge mapped
+- [x] FIX: Test data pollution fixed — tests use unique prefix and afterAll cleanup

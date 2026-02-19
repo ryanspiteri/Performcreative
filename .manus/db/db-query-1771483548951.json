@@ -1,0 +1,66 @@
+{
+  "query": "SELECT foreplayAdId, title, brandName, thumbnailUrl IS NOT NULL as hasThumbnail, imageUrl IS NOT NULL as hasImage, mediaUrl IS NOT NULL as hasMedia FROM foreplay_creatives ORDER BY createdAt DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT foreplayAdId, title, brandName, thumbnailUrl IS NOT NULL as hasThumbnail, imageUrl IS NOT NULL as hasImage, mediaUrl IS NOT NULL as hasMedia FROM foreplay_creatives ORDER BY createdAt DESC;",
+  "rows": [
+    {
+      "foreplayAdId": "test-ad-1771483505969-1",
+      "title": "Test Video",
+      "brandName": "Test Brand",
+      "hasThumbnail": "1",
+      "hasImage": "0",
+      "hasMedia": "1"
+    },
+    {
+      "foreplayAdId": "test-ad-dedup-1771483507594",
+      "title": "Test Static",
+      "brandName": "Test Brand",
+      "hasThumbnail": "0",
+      "hasImage": "1",
+      "hasMedia": "0"
+    },
+    {
+      "foreplayAdId": "rj2EqftuHRlrzliEap3x",
+      "title": "🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌",
+      "brandName": "Inno Supps",
+      "hasThumbnail": "0",
+      "hasImage": "1",
+      "hasMedia": "0"
+    },
+    {
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "title": "the FUTURE of cleaning 🧼",
+      "brandName": "Lucent Globe",
+      "hasThumbnail": "1",
+      "hasImage": "0",
+      "hasMedia": "1"
+    },
+    {
+      "foreplayAdId": "1AXNGgtVMsgJeG2NLGVY",
+      "title": "the FUTURE of cleaning 🧼",
+      "brandName": "Lucent Globe",
+      "hasThumbnail": "1",
+      "hasImage": "0",
+      "hasMedia": "1"
+    },
+    {
+      "foreplayAdId": "xADS2VAHxrLPbcDPvUtC",
+      "title": "Jess Wilson Nutrition",
+      "brandName": "Jess Wilson Nutrition",
+      "hasThumbnail": "1",
+      "hasImage": "0",
+      "hasMedia": "1"
+    },
+    {
+      "foreplayAdId": "lPONXVHBYABTGoD02Wtj",
+      "title": "It's never too late >>>",
+      "brandName": "V Shred",
+      "hasThumbnail": "1",
+      "hasImage": "0",
+      "hasMedia": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "foreplayAdId\ttitle\tbrandName\thasThumbnail\thasImage\thasMedia\ntest-ad-1771483505969-1\tTest Video\tTest Brand\t1\t0\t1\ntest-ad-dedup-1771483507594\tTest Static\tTest Brand\t0\t1\t0\nrj2EqftuHRlrzliEap3x\t🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌\tInno Supps\t0\t1\t0\nUKiOthLvodQ0YISqRmuL\tthe FUTURE of cleaning 🧼\tLucent Globe\t1\t0\t1\n1AXNGgtVMsgJeG2NLGVY\tthe FUTURE of cleaning 🧼\tLucent Globe\t1\t0\t1\nxADS2VAHxrLPbcDPvUtC\tJess Wilson Nutrition\tJess Wilson Nutrition\t1\t0\t1\nlPONXVHBYABTGoD02Wtj\tIt's never too late >>>\tV Shred\t1\t0\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1620
+}

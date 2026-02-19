@@ -72,6 +72,7 @@ export default function BrowseCreatives() {
       brandName: ad.brandName || "Unknown",
       thumbnailUrl: ad.thumbnailUrl,
       mediaUrl: ad.mediaUrl,
+      isNew: ad.isNew,
     }));
 
     const statics: Creative[] = (staticsQuery.data || []).map((ad: any) => ({
@@ -80,6 +81,8 @@ export default function BrowseCreatives() {
       title: ad.title || "Untitled Static",
       brandName: ad.brandName || "Unknown",
       imageUrl: ad.imageUrl,
+      thumbnailUrl: ad.thumbnailUrl,
+      isNew: ad.isNew,
     }));
 
     const all = [...videos, ...statics];

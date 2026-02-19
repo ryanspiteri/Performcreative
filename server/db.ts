@@ -174,16 +174,42 @@ export async function listAllProductInfo() {
 export async function upsertForeplayCreative(data: InsertForeplayCreative): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+
+  // Sanitise data — truncate varchar fields to fit column limits, convert nullish to null
+  const sanitised: InsertForeplayCreative = {
+    foreplayAdId: String(data.foreplayAdId || "").slice(0, 255),
+    type: data.type,
+    board: String(data.board || "").slice(0, 63),
+    title: data.title ? String(data.title).slice(0, 10000) : null,
+    brandName: data.brandName ? String(data.brandName).slice(0, 255) : null,
+    thumbnailUrl: data.thumbnailUrl || null,
+    imageUrl: data.imageUrl || null,
+    mediaUrl: data.mediaUrl || null,
+    mediaType: data.mediaType ? String(data.mediaType).slice(0, 63) : null,
+    platform: data.platform ? String(data.platform).slice(0, 63) : null,
+    description: data.description ? String(data.description).slice(0, 50000) : null,
+    headline: data.headline || null,
+    displayFormat: data.displayFormat ? String(data.displayFormat).slice(0, 63) : null,
+    transcription: data.transcription || null,
+    foreplayCreatedAt: data.foreplayCreatedAt ? String(data.foreplayCreatedAt).slice(0, 127) : null,
+    isNew: data.isNew ?? 1,
+  };
+
   try {
-    await db.insert(foreplayCreatives).values(data).onDuplicateKeyUpdate({
-      // On duplicate, just update syncedAt to mark the latest sync time
+    await db.insert(foreplayCreatives).values(sanitised).onDuplicateKeyUpdate({
       set: { syncedAt: new Date() },
     });
-    // Check if it was an insert (affectedRows=1) or update (affectedRows=2 for onDuplicateKeyUpdate)
-    // MySQL returns 1 for insert, 2 for update-on-duplicate
-    return true; // We'll count new vs existing separately
+    return true;
   } catch (err: any) {
     if (err.code === "ER_DUP_ENTRY") return false;
+    // Log the full error for debugging
+    console.error(`[DB] upsertForeplayCreative FULL ERROR for ${data.foreplayAdId}:`, {
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage,
+      message: err.message?.slice(0, 500),
+    });
     throw err;
   }
 }

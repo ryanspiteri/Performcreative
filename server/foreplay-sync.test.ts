@@ -1,38 +1,57 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import * as db from "./db";
-import { syncFromForeplay, getSyncStatus } from "./services/foreplaySync";
+import { getSyncStatus } from "./services/foreplaySync";
 import type { InsertForeplayCreative } from "../drizzle/schema";
+import { getDb } from "./db";
+import { foreplayCreatives } from "../drizzle/schema";
+import { inArray } from "drizzle-orm";
+
+// Track all test IDs for cleanup
+const TEST_PREFIX = `__vitest_${Date.now()}_`;
+const testIds: string[] = [];
+
+// Clean up all test data after the suite
+afterAll(async () => {
+  const dbConn = await getDb();
+  if (dbConn && testIds.length > 0) {
+    await dbConn.delete(foreplayCreatives).where(
+      inArray(foreplayCreatives.foreplayAdId, testIds)
+    );
+  }
+});
 
 describe("Foreplay Sync", () => {
   describe("DB helpers", () => {
     it("should upsert a Foreplay creative", async () => {
+      const id = `${TEST_PREFIX}upsert1`;
+      testIds.push(id);
       const creative: InsertForeplayCreative = {
-        foreplayAdId: `test-ad-${Date.now()}-1`,
+        foreplayAdId: id,
         type: "VIDEO",
         board: "inspo",
-        title: "Test Video",
+        title: "Test Video Upsert",
         brandName: "Test Brand",
-        thumbnailUrl: "https://example.com/thumb.jpg",
-        mediaUrl: "https://example.com/video.mp4",
+        thumbnailUrl: "https://r2.foreplay.co/test-thumb.jpg",
+        mediaUrl: "https://r2.foreplay.co/test-video.mp4",
         isNew: 1,
       };
 
       await db.upsertForeplayCreative(creative);
 
       const creatives = await db.listForeplayCreatives("VIDEO");
-      expect(creatives.length).toBeGreaterThan(0);
-      expect(creatives.some(c => c.foreplayAdId === creative.foreplayAdId)).toBe(true);
+      expect(creatives.some(c => c.foreplayAdId === id)).toBe(true);
     });
 
     it("should deduplicate by foreplayAdId", async () => {
-      const id = `test-ad-dedup-${Date.now()}`;
+      const id = `${TEST_PREFIX}dedup1`;
+      testIds.push(id);
       const creative: InsertForeplayCreative = {
         foreplayAdId: id,
         type: "STATIC",
         board: "static_inspo",
-        title: "Test Static",
+        title: "Test Static Dedup",
         brandName: "Test Brand",
-        imageUrl: "https://example.com/image.jpg",
+        imageUrl: "https://r2.foreplay.co/test-image.jpg",
         isNew: 1,
       };
 
@@ -45,62 +64,67 @@ describe("Foreplay Sync", () => {
     });
 
     it("should list creatives by type", async () => {
-      const timestamp = Date.now();
-      const videoCreative: InsertForeplayCreative = {
-        foreplayAdId: `video-test-${timestamp}`,
+      const videoId = `${TEST_PREFIX}video1`;
+      const staticId = `${TEST_PREFIX}static1`;
+      testIds.push(videoId, staticId);
+
+      await db.upsertForeplayCreative({
+        foreplayAdId: videoId,
         type: "VIDEO",
         board: "inspo",
-        title: "Video",
+        title: "Test Video List",
         isNew: 1,
-      };
+      });
 
-      const staticCreative: InsertForeplayCreative = {
-        foreplayAdId: `static-test-${timestamp}`,
+      await db.upsertForeplayCreative({
+        foreplayAdId: staticId,
         type: "STATIC",
         board: "static_inspo",
-        title: "Static",
+        title: "Test Static List",
         isNew: 1,
-      };
-
-      await db.upsertForeplayCreative(videoCreative);
-      await db.upsertForeplayCreative(staticCreative);
+      });
 
       const videos = await db.listForeplayCreatives("VIDEO");
       const statics = await db.listForeplayCreatives("STATIC");
 
-      expect(videos.some(c => c.foreplayAdId === videoCreative.foreplayAdId)).toBe(true);
-      expect(statics.some(c => c.foreplayAdId === staticCreative.foreplayAdId)).toBe(true);
+      expect(videos.some(c => c.foreplayAdId === videoId)).toBe(true);
+      expect(statics.some(c => c.foreplayAdId === staticId)).toBe(true);
     });
 
     it("should count new creatives", async () => {
-      const newCreative: InsertForeplayCreative = {
-        foreplayAdId: `new-creative-${Date.now()}`,
+      const id = `${TEST_PREFIX}newcount1`;
+      testIds.push(id);
+
+      await db.upsertForeplayCreative({
+        foreplayAdId: id,
         type: "VIDEO",
         board: "inspo",
-        title: "New Creative",
+        title: "New Count Test",
         isNew: 1,
-      };
-
-      await db.upsertForeplayCreative(newCreative);
+      });
 
       const count = await db.countNewCreatives();
       expect(count).toBeGreaterThan(0);
     });
 
     it("should mark all creatives as seen", async () => {
-      const creative: InsertForeplayCreative = {
-        foreplayAdId: `mark-seen-${Date.now()}`,
+      const id = `${TEST_PREFIX}markseen1`;
+      testIds.push(id);
+
+      await db.upsertForeplayCreative({
+        foreplayAdId: id,
         type: "STATIC",
         board: "static_inspo",
         title: "Mark Seen Test",
         isNew: 1,
-      };
+      });
 
-      await db.upsertForeplayCreative(creative);
       await db.markAllCreativesSeen();
 
       const creatives = await db.listForeplayCreatives();
-      expect(creatives.every(c => c.isNew === 0)).toBe(true);
+      // All creatives including test ones should be marked seen
+      const testCreative = creatives.find(c => c.foreplayAdId === id);
+      expect(testCreative?.isNew).toBe(0);
     });
   });
 

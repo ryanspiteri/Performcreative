@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM foreplay_creatives WHERE foreplayAdId LIKE 'test-%' OR foreplayAdId LIKE 'video-test-%' OR foreplayAdId LIKE 'static-test-%' OR foreplayAdId LIKE 'new-creative-%' OR foreplayAdId LIKE 'mark-seen-%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute DELETE FROM foreplay_creatives WHERE foreplayAdId LIKE 'test-%' OR foreplayAdId LIKE 'video-test-%' OR foreplayAdId LIKE 'static-test-%' OR foreplayAdId LIKE 'new-creative-%' OR foreplayAdId LIKE 'mark-seen-%';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1526
+}

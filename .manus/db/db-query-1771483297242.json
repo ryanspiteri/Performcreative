@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, foreplayAdId, title, brandName, thumbnailUrl, type FROM foreplay_creatives LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, foreplayAdId, title, brandName, thumbnailUrl, type FROM foreplay_creatives LIMIT 10;",
+  "rows": [
+    {
+      "id": "1",
+      "foreplayAdId": "test-ad-123",
+      "title": "Test Video",
+      "brandName": "Test Brand",
+      "thumbnailUrl": "https://example.com/thumb.jpg",
+      "type": "VIDEO"
+    },
+    {
+      "id": "2",
+      "foreplayAdId": "test-ad-dedup",
+      "title": "Test Static",
+      "brandName": "Test Brand",
+      "thumbnailUrl": "NULL",
+      "type": "STATIC"
+    },
+    {
+      "id": "4",
+      "foreplayAdId": "video-test-456",
+      "title": "Video",
+      "brandName": "NULL",
+      "thumbnailUrl": "NULL",
+      "type": "VIDEO"
+    },
+    {
+      "id": "5",
+      "foreplayAdId": "static-test-456",
+      "title": "Static",
+      "brandName": "NULL",
+      "thumbnailUrl": "NULL",
+      "type": "STATIC"
+    },
+    {
+      "id": "6",
+      "foreplayAdId": "new-creative-789",
+      "title": "New Creative",
+      "brandName": "NULL",
+      "thumbnailUrl": "NULL",
+      "type": "VIDEO"
+    },
+    {
+      "id": "7",
+      "foreplayAdId": "mark-seen-test",
+      "title": "Mark Seen Test",
+      "brandName": "NULL",
+      "thumbnailUrl": "NULL",
+      "type": "STATIC"
+    },
+    {
+      "id": "15",
+      "foreplayAdId": "test-ad-1771483023053-1",
+      "title": "Test Video",
+      "brandName": "Test Brand",
+      "thumbnailUrl": "https://example.com/thumb.jpg",
+      "type": "VIDEO"
+    },
+    {
+      "id": "16",
+      "foreplayAdId": "test-ad-dedup-1771483024697",
+      "title": "Test Static",
+      "brandName": "Test Brand",
+      "thumbnailUrl": "NULL",
+      "type": "STATIC"
+    },
+    {
+      "id": "18",
+      "foreplayAdId": "video-test-1771483025372",
+      "title": "Video",
+      "brandName": "NULL",
+      "thumbnailUrl": "NULL",
+      "type": "VIDEO"
+    },
+    {
+      "id": "19",
+      "foreplayAdId": "static-test-1771483025372",
+      "title": "Static",
+      "brandName": "NULL",
+      "thumbnailUrl": "NULL",
+      "type": "STATIC"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tforeplayAdId\ttitle\tbrandName\tthumbnailUrl\ttype\n1\ttest-ad-123\tTest Video\tTest Brand\thttps://example.com/thumb.jpg\tVIDEO\n2\ttest-ad-dedup\tTest Static\tTest Brand\tNULL\tSTATIC\n4\tvideo-test-456\tVideo\tNULL\tNULL\tVIDEO\n5\tstatic-test-456\tStatic\tNULL\tNULL\tSTATIC\n6\tnew-creative-789\tNew Creative\tNULL\tNULL\tVIDEO\n7\tmark-seen-test\tMark Seen Test\tNULL\tNULL\tSTATIC\n15\ttest-ad-1771483023053-1\tTest Video\tTest Brand\thttps://example.com/thumb.jpg\tVIDEO\n16\ttest-ad-dedup-1771483024697\tTest Static\tTest Brand\tNULL\tSTATIC\n18\tvideo-test-1771483025372\tVideo\tNULL\tNULL\tVIDEO\n19\tstatic-test-1771483025372\tStatic\tNULL\tNULL\tSTATIC\n",
+  "stderr": "",
+  "execution_time_ms": 1484
+}
