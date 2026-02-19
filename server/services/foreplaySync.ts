@@ -25,10 +25,10 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
     const existingIds = await db.getExistingForeplayAdIds();
     console.log(`[ForeplaySync] ${existingIds.size} existing creatives in local DB`);
 
-    // Fetch from both boards
+    // Fetch from both boards - request 1000 to get all available ads
     const [videoAds, staticAds] = await Promise.all([
-      fetchVideoAds(200),
-      fetchStaticAds(200),
+      fetchVideoAds(1000),
+      fetchStaticAds(1000),
     ]);
 
     const totalFetched = videoAds.length + staticAds.length;

@@ -112,32 +112,22 @@ function normalizeAds(ads: any[]): ForeplayAd[] {
 
 /**
  * Fetch video ads from the #inspo board
+ * Returns all ads from the board (no filtering, since board is already curated)
  */
 export async function fetchVideoAds(limit = 10): Promise<ForeplayAd[]> {
   const ads = await fetchBoardAds(BOARD_IDS.inspo, limit);
-  // Filter for video ads only (display_format = "VIDEO")
-  const videoAds = ads.filter(a =>
-    a.mediaType === "video" ||
-    a.displayFormat?.toUpperCase() === "VIDEO" ||
-    (a.mediaUrl && a.mediaUrl.includes(".mp4"))
-  );
-  console.log(`[Foreplay] ${videoAds.length} video ads out of ${ads.length} total from #inspo`);
-  return videoAds.length > 0 ? videoAds : ads;
+  console.log(`[Foreplay] Fetched ${ads.length} ads from #inspo (video board)`);
+  return ads;
 }
 
 /**
  * Fetch static/image ads from the #static_inspo board
+ * Returns all ads from the board (no filtering, since board is already curated)
  */
 export async function fetchStaticAds(limit = 20): Promise<ForeplayAd[]> {
   const ads = await fetchBoardAds(BOARD_IDS.static_inspo, limit);
-  // Filter for image/static ads
-  const staticAds = ads.filter(a =>
-    a.mediaType === "image" ||
-    a.displayFormat?.toUpperCase() === "IMAGE" ||
-    a.imageUrl
-  );
-  console.log(`[Foreplay] ${staticAds.length} static ads out of ${ads.length} total from #static_inspo`);
-  return staticAds.length > 0 ? staticAds : ads;
+  console.log(`[Foreplay] Fetched ${ads.length} ads from #static_inspo (static board)`);
+  return ads;
 }
 
 /**

@@ -1,0 +1,18 @@
+{
+  "query": "SELECT type, COUNT(*) as total FROM foreplay_creatives GROUP BY type;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT type, COUNT(*) as total FROM foreplay_creatives GROUP BY type;",
+  "rows": [
+    {
+      "type": "VIDEO",
+      "total": "4"
+    },
+    {
+      "type": "STATIC",
+      "total": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "type\ttotal\nVIDEO\t4\nSTATIC\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1576
+}

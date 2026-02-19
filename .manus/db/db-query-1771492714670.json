@@ -1,0 +1,40 @@
+{
+  "query": "SELECT foreplayAdId, type, title, board FROM foreplay_creatives;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT foreplayAdId, type, title, board FROM foreplay_creatives;",
+  "rows": [
+    {
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "type": "VIDEO",
+      "title": "the FUTURE of cleaning 🧼",
+      "board": "inspo"
+    },
+    {
+      "foreplayAdId": "1AXNGgtVMsgJeG2NLGVY",
+      "type": "VIDEO",
+      "title": "the FUTURE of cleaning 🧼",
+      "board": "inspo"
+    },
+    {
+      "foreplayAdId": "xADS2VAHxrLPbcDPvUtC",
+      "type": "VIDEO",
+      "title": "Jess Wilson Nutrition",
+      "board": "inspo"
+    },
+    {
+      "foreplayAdId": "lPONXVHBYABTGoD02Wtj",
+      "type": "VIDEO",
+      "title": "It's never too late >>>",
+      "board": "inspo"
+    },
+    {
+      "foreplayAdId": "rj2EqftuHRlrzliEap3x",
+      "type": "STATIC",
+      "title": "🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌",
+      "board": "static_inspo"
+    }
+  ],
+  "messages": [],
+  "stdout": "foreplayAdId\ttype\ttitle\tboard\nUKiOthLvodQ0YISqRmuL\tVIDEO\tthe FUTURE of cleaning 🧼\tinspo\n1AXNGgtVMsgJeG2NLGVY\tVIDEO\tthe FUTURE of cleaning 🧼\tinspo\nxADS2VAHxrLPbcDPvUtC\tVIDEO\tJess Wilson Nutrition\tinspo\nlPONXVHBYABTGoD02Wtj\tVIDEO\tIt's never too late >>>\tinspo\nrj2EqftuHRlrzliEap3x\tSTATIC\t🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌\tstatic_inspo\n",
+  "stderr": "",
+  "execution_time_ms": 1535
+}
