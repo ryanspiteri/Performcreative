@@ -42,6 +42,9 @@ export default function Results() {
       if (d.pipelineType === "static" && d.staticStage === "stage_3b_selection") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_team_approval") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_revising") return 3000;
+      // Video pipeline: keep polling during stages 1-3 and 4-5, stop at brief approval
+      if (d.pipelineType === "video" && d.videoStage === "stage_3b_brief_approval") return false;
+      if (d.pipelineType === "video" && (["running", "pending"] as string[]).includes(d.status)) return 3000;
       return false;
     }}
   );
@@ -103,113 +106,251 @@ export default function Results() {
       {run.pipelineType === "static" && <StaticResults run={run} />}
 
       {/* Video pipeline results */}
-      {run.pipelineType === "video" && (
-        <>
-          {/* Running Status */}
-          {isRunning && (
-            <div className="bg-[#191B1F] border border-orange-500/20 rounded-xl p-6 mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
-                <span className="text-white font-medium">Pipeline in progress...</span>
-              </div>
-              <div className="space-y-2 text-sm text-gray-400">
-                <StepStatus label="Foreplay Pull" done={!!run.foreplayAdId} />
-                <StepStatus label="Transcription" done={!!run.transcript} />
-                <StepStatus label="Visual Analysis" done={!!run.visualAnalysis} />
-                <StepStatus label="Script Generation & Expert Review" done={scripts.length > 0} />
-                <StepStatus label="ClickUp Task Creation" done={clickupTasks.length > 0} />
-              </div>
-            </div>
-          )}
+      {run.pipelineType === "video" && <VideoResults run={run} />}
+    </div>
+  );
+}
 
-          {/* Section 1 & 2: Original Creative + Transcript side by side */}
-          {(run.videoUrl || run.transcript) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              {/* Original Creative */}
-              <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
-                <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-                  <Play className="w-4 h-4 text-[#FF3838]" /> Original Creative
+// ============================================================
+// VIDEO PIPELINE STAGES
+// ============================================================
+const VIDEO_STAGES = [
+  { key: "stage_1_transcription", label: "Transcription", icon: FileText },
+  { key: "stage_2_analysis", label: "Visual Analysis", icon: Eye },
+  { key: "stage_3_brief", label: "Creative Brief", icon: PenTool },
+  { key: "stage_3b_brief_approval", label: "Brief Approval", icon: ThumbsUp },
+  { key: "stage_4_scripts", label: "Script Generation", icon: Sparkles },
+  { key: "stage_5_clickup", label: "ClickUp Tasks", icon: ListChecks },
+  { key: "completed", label: "Completed", icon: CheckCircle },
+];
+
+function getVideoStageIndex(stage: string | null): number {
+  if (!stage) return -1;
+  return VIDEO_STAGES.findIndex(s => s.key === stage);
+}
+
+// ============================================================
+// VIDEO RESULTS — Full Pipeline UI with Brief Approval
+// ============================================================
+function VideoResults({ run }: { run: any }) {
+  const [briefNotes, setBriefNotes] = useState("");
+  const utils = trpc.useUtils();
+  const scripts = (run.scriptsJson as any[]) || [];
+  const clickupTasks = (run.clickupTasksJson as any[]) || [];
+  const isRunning = run.status === "running" || run.status === "pending";
+  const videoStage = run.videoStage || "";
+  const currentVideoStageIdx = getVideoStageIndex(videoStage);
+
+  const approveBriefMutation = trpc.pipeline.approveVideoBrief.useMutation({
+    onSuccess: () => {
+      toast.success("Brief approved! Generating scripts...");
+      utils.pipeline.get.invalidate({ id: run.id });
+    },
+    onError: (err: any) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Video Stage Progress Bar */}
+      {videoStage && (
+        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+          <h2 className="text-white font-semibold mb-4">Pipeline Progress</h2>
+          <div className="flex items-center gap-1 overflow-x-auto pb-2">
+            {VIDEO_STAGES.map((stage, i) => {
+              const stageIdx = getVideoStageIndex(stage.key);
+              const isComplete = currentVideoStageIdx > stageIdx || run.status === "completed";
+              const isCurrent = videoStage === stage.key;
+              const isPending = currentVideoStageIdx < stageIdx && run.status !== "completed";
+              const Icon = stage.icon;
+              return (
+                <div key={stage.key} className="flex items-center">
+                  <div className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap ${
+                    isComplete ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : isCurrent ? "bg-[#FF3838]/20 text-[#FF3838] border border-[#FF3838]/30"
+                    : "bg-white/5 text-gray-500 border border-white/10"
+                  }`}>
+                    {isComplete ? <CheckCircle className="w-3.5 h-3.5" />
+                    : isCurrent ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Icon className="w-3.5 h-3.5" />}
+                    {stage.label}
+                  </div>
+                  {i < VIDEO_STAGES.length - 1 && (
+                    <ChevronRight className="w-4 h-4 text-gray-600 mx-1 flex-shrink-0" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Original Creative + Transcript side by side */}
+      {(run.videoUrl || run.transcript) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Original Creative */}
+          <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <Play className="w-4 h-4 text-[#FF3838]" /> Stage 1: Original Creative
+            </h2>
+            {run.videoUrl ? (
+              <div className="rounded-lg overflow-hidden bg-black mb-3">
+                <video src={run.videoUrl} controls className="w-full" poster={run.thumbnailUrl || undefined} />
+              </div>
+            ) : run.thumbnailUrl ? (
+              <img src={run.thumbnailUrl} alt="Thumbnail" className="w-full rounded-lg mb-3" />
+            ) : null}
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              <span className="bg-white/5 px-2 py-1 rounded">{run.product}</span>
+              <span className="bg-white/5 px-2 py-1 rounded">{run.priority}</span>
+              <span>{new Date(run.createdAt).toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Transcript */}
+          {run.transcript && (
+            <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-white font-semibold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-400" /> Stage 1: Transcript
                 </h2>
-                {run.videoUrl ? (
-                  <div className="rounded-lg overflow-hidden bg-black mb-3">
-                    <video src={run.videoUrl} controls className="w-full" poster={run.thumbnailUrl || undefined} />
-                  </div>
-                ) : run.thumbnailUrl ? (
-                  <img src={run.thumbnailUrl} alt="Thumbnail" className="w-full rounded-lg mb-3" />
-                ) : null}
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <span className="bg-white/5 px-2 py-1 rounded">{run.product}</span>
-                  <span className="bg-white/5 px-2 py-1 rounded">{run.priority}</span>
-                  <span>{new Date(run.createdAt).toLocaleString()}</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(run.transcript || ""); toast.success("Copied!"); }}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy
+                </button>
+              </div>
+              <div className="text-gray-300 text-sm leading-relaxed max-h-80 overflow-y-auto pr-2">
+                {run.transcript}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stage 2: Visual Analysis */}
+      {run.visualAnalysis && (
+        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <Eye className="w-4 h-4 text-[#FF3838]" /> Stage 2: Visual Analysis
+          </h2>
+          <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+            <MarkdownContent content={run.visualAnalysis} />
+          </div>
+        </div>
+      )}
+
+      {/* Stage 3: Video Creative Brief */}
+      {run.videoBrief && (
+        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-semibold flex items-center gap-2">
+              <PenTool className="w-4 h-4 text-[#FF3838]" /> Stage 3: Video Creative Brief
+            </h2>
+            <button
+              onClick={() => { navigator.clipboard.writeText(run.videoBrief || ""); toast.success("Brief copied!"); }}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+            >
+              <Copy className="w-3.5 h-3.5" /> Copy
+            </button>
+          </div>
+          <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+            <MarkdownContent content={run.videoBrief} />
+          </div>
+        </div>
+      )}
+
+      {/* Stage 3b: Brief Approval Gate */}
+      {videoStage === "stage_3b_brief_approval" && run.videoBrief && (
+        <div className="bg-[#191B1F] border border-[#FF3838]/30 rounded-xl p-5">
+          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <ThumbsUp className="w-4 h-4 text-[#FF3838]" /> Stage 3b: Approve Creative Brief
+          </h2>
+          <div className="bg-[#01040A] rounded-lg p-4 border border-white/10 mb-4">
+            <p className="text-gray-300 text-sm mb-3">
+              Review the creative brief above. If the concept analysis, hook style, and script concepts look good, approve to proceed with script generation. Otherwise, reject with feedback.
+            </p>
+            <textarea
+              value={briefNotes}
+              onChange={(e) => setBriefNotes(e.target.value)}
+              placeholder="Optional: Add notes or feedback..."
+              className="w-full bg-[#191B1F] border border-white/10 rounded-lg p-3 text-white text-sm placeholder-gray-500 resize-none focus:outline-none focus:border-[#FF3838]/50"
+              rows={3}
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => approveBriefMutation.mutate({ runId: run.id, approved: true, notes: briefNotes || "Approved" })}
+              disabled={approveBriefMutation.isPending}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {approveBriefMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ThumbsUp className="w-4 h-4 mr-2" />}
+              Approve Brief & Generate Scripts
+            </Button>
+            <Button
+              onClick={() => {
+                if (!briefNotes.trim()) {
+                  toast.error("Please provide feedback for rejection");
+                  return;
+                }
+                approveBriefMutation.mutate({ runId: run.id, approved: false, notes: briefNotes });
+              }}
+              disabled={approveBriefMutation.isPending}
+              variant="outline"
+              className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+            >
+              {approveBriefMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ThumbsDown className="w-4 h-4 mr-2" />}
+              Reject Brief
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Stage 4: Generated Scripts */}
+      {scripts.length > 0 && <ScriptsSection scripts={scripts} />}
+
+      {/* Stage 5: ClickUp Tasks */}
+      {clickupTasks.length > 0 && (
+        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <ListChecks className="w-4 h-4 text-emerald-400" /> Stage 5: ClickUp Tasks ({clickupTasks.length})
+          </h2>
+          <div className="space-y-2">
+            {clickupTasks.map((task: any, i: number) => (
+              <div key={i} className="flex items-center justify-between bg-[#01040A] rounded-lg px-4 py-3 border border-white/5">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span className="text-white text-sm">{task.name}</span>
+                  {scripts[i]?.review?.finalScore && (
+                    <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">
+                      Score: {scripts[i].review.finalScore}
+                    </span>
+                  )}
                 </div>
+                {task.url && task.url !== "#" && (
+                  <a href={task.url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white">
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
               </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-              {/* Transcript */}
-              {run.transcript && (
-                <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-white font-semibold flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-blue-400" /> Transcript
-                    </h2>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(run.transcript || ""); toast.success("Copied!"); }}
-                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
-                    >
-                      <Copy className="w-3.5 h-3.5" /> Copy
-                    </button>
-                  </div>
-                  <div className="text-gray-300 text-sm leading-relaxed max-h-80 overflow-y-auto pr-2">
-                    {run.transcript}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Section 3: Visual Analysis */}
-          {run.visualAnalysis && (
-            <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5 mb-6">
-              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <Eye className="w-4 h-4 text-[#FF3838]" /> Visual Analysis
-              </h2>
-              <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-                <MarkdownContent content={run.visualAnalysis} />
-              </div>
-            </div>
-          )}
-
-          {/* Section 4: Generated Scripts */}
-          {scripts.length > 0 && <ScriptsSection scripts={scripts} />}
-
-          {/* Section 5: ClickUp Tasks */}
-          {clickupTasks.length > 0 && (
-            <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5 mt-6">
-              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <ListChecks className="w-4 h-4 text-[#FF3838]" /> ClickUp Tasks Created ({clickupTasks.length})
-              </h2>
-              <div className="space-y-2">
-                {clickupTasks.map((task: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between bg-[#01040A] rounded-lg px-4 py-3 border border-white/5">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-4 h-4 text-emerald-400" />
-                      <span className="text-white text-sm">{task.name}</span>
-                      {scripts[i]?.review?.finalScore && (
-                        <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">
-                          Score: {scripts[i].review.finalScore}
-                        </span>
-                      )}
-                    </div>
-                    {task.url && task.url !== "#" && (
-                      <a href={task.url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+      {/* Running indicator */}
+      {isRunning && videoStage && !["stage_3b_brief_approval", "completed"].includes(videoStage) && (
+        <div className="bg-[#191B1F] border border-orange-500/20 rounded-xl p-6">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+            <span className="text-white font-medium">
+              Processing: {VIDEO_STAGES.find(s => s.key === videoStage)?.label || videoStage}...
+            </span>
+          </div>
+          <p className="text-gray-400 text-sm mt-2">This page auto-refreshes every 3 seconds.</p>
+        </div>
       )}
     </div>
   );

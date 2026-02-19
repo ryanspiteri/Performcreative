@@ -1,0 +1,28 @@
+{
+  "query": "SELECT id, status, staticStage, errorMessage FROM pipeline_runs ORDER BY id DESC LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, status, staticStage, errorMessage FROM pipeline_runs ORDER BY id DESC LIMIT 3;",
+  "rows": [
+    {
+      "id": "270003",
+      "status": "running",
+      "staticStage": "NULL",
+      "errorMessage": "NULL"
+    },
+    {
+      "id": "270002",
+      "status": "running",
+      "staticStage": "stage_6_team_approval",
+      "errorMessage": "NULL"
+    },
+    {
+      "id": "270001",
+      "status": "failed",
+      "staticStage": "stage_3_brief_review",
+      "errorMessage": "Stage 3 (Brief Review) failed: socket hang up"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\tstaticStage\terrorMessage\n270003\trunning\tNULL\tNULL\n270002\trunning\tstage_6_team_approval\tNULL\n270001\tfailed\tstage_3_brief_review\tStage 3 (Brief Review) failed: socket hang up\n",
+  "stderr": "",
+  "execution_time_ms": 1537
+}

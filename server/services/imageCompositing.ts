@@ -123,33 +123,124 @@ async function getBrowser() {
     return _browserInstance;
   }
   const puppeteer = await import("puppeteer");
-  _browserInstance = await puppeteer.default.launch({
-    executablePath: "/usr/bin/chromium-browser",
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-gpu",
-      "--disable-dev-shm-usage",
-      "--font-render-hinting=none",
-    ],
-  });
-  console.log("[Puppeteer] Browser launched");
-  return _browserInstance;
+  
+  // Auto-detect Chromium path
+  let chromiumPath = "/usr/bin/chromium-browser";
+  try {
+    const fs = require('fs');
+    const altPaths = ["/usr/bin/chromium", "/snap/bin/chromium", "/usr/bin/google-chrome"];
+    
+    if (!fs.existsSync(chromiumPath)) {
+      console.log(`[Puppeteer] Default path ${chromiumPath} not found, searching alternatives...`);
+      for (const path of altPaths) {
+        if (fs.existsSync(path)) {
+          chromiumPath = path;
+          console.log(`[Puppeteer] ✓ Found Chromium at: ${chromiumPath}`);
+          break;
+        }
+      }
+    } else {
+      console.log(`[Puppeteer] Using default Chromium path: ${chromiumPath}`);
+    }
+  } catch (e) {
+    console.warn(`[Puppeteer] Failed to detect Chromium path, using default: ${chromiumPath}`);
+  }
+  
+  try {
+    console.log(`[Puppeteer] Launching browser with: ${chromiumPath}`);
+    _browserInstance = await puppeteer.default.launch({
+      executablePath: chromiumPath,
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--font-render-hinting=none",
+      ],
+    });
+    console.log("[Puppeteer] ✓ Browser launched successfully");
+    return _browserInstance;
+  } catch (err: any) {
+    console.error(`[Puppeteer] ✗ Failed to launch browser: ${err.message}`);
+    console.error(`[Puppeteer] Stack: ${err.stack}`);
+    throw new Error(`Puppeteer launch failed: ${err.message}`);
+  }
 }
 
 async function renderHtmlToPng(html: string, width: number, height: number): Promise<Buffer> {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+  let page: any;
   try {
+    console.log(`[Puppeteer] Getting browser instance...`);
+    const browser = await getBrowser();
+    
+    console.log(`[Puppeteer] Creating new page...`);
+    page = await browser.newPage();
+    
+    console.log(`[Puppeteer] Setting viewport: ${width}x${height}`);
     await page.setViewport({ width, height, deviceScaleFactor: 2 });
+    
+    // Log network errors
+    page.on('requestfailed', (request: any) => {
+      console.warn(`[Puppeteer] Request failed: ${request.url()} - ${request.failure().errorText}`);
+    });
+    
+    console.log(`[Puppeteer] Setting page content (waiting for networkidle0)...`);
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+    
+    console.log(`[Puppeteer] Waiting for fonts...`);
     await page.evaluate(() => document.fonts.ready);
+    
+    console.log(`[Puppeteer] Waiting for render (800ms)...`);
     await new Promise(resolve => setTimeout(resolve, 800));
+    
+    console.log(`[Puppeteer] Taking screenshot...`);
     const screenshot = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width, height } });
+    
+    console.log(`[Puppeteer] ✓ Screenshot complete: ${(screenshot.length / 1024).toFixed(1)}KB`);
     return Buffer.from(screenshot);
+  } catch (err: any) {
+    console.error(`[Puppeteer] ✗ Rendering failed: ${err.message}`);
+    console.error(`[Puppeteer] Stack: ${err.stack}`);
+    throw err;
   } finally {
-    await page.close();
+    if (page) {
+      try {
+        await page.close();
+      } catch (e) {
+        console.warn(`[Puppeteer] Failed to close page:`, e);
+      }
+    }
+  }
+}
+
+// ============================================================
+// IMAGE TO BASE64 HELPER
+// ============================================================
+
+/**
+ * Fetch a remote image and convert it to a base64 data URI.
+ * This is critical because Puppeteer's headless browser often can't
+ * access external CDN URLs (net::ERR_FAILED). By converting to
+ * data URIs, the images are embedded directly in the HTML.
+ */
+async function imageToBase64(url: string): Promise<string> {
+  try {
+    console.log(`[ImageCompositing] Fetching image for base64: ${url.substring(0, 80)}...`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`[ImageCompositing] Failed to fetch image (${response.status}): ${url}`);
+      return url; // fallback to original URL
+    }
+    const buffer = await response.arrayBuffer();
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const base64 = Buffer.from(buffer).toString('base64');
+    const dataUri = `data:${contentType};base64,${base64}`;
+    console.log(`[ImageCompositing] ✓ Converted to base64 (${(buffer.byteLength / 1024).toFixed(1)}KB): ${url.substring(0, 60)}...`);
+    return dataUri;
+  } catch (err: any) {
+    console.warn(`[ImageCompositing] ✗ Failed to convert image to base64: ${err.message}`);
+    return url; // fallback to original URL
   }
 }
 
@@ -698,9 +789,19 @@ export async function generateStaticAdVariations(
     }
   }
 
-  const logoUrl = LOGOS.wordmark_white;
+  const rawLogoUrl = LOGOS.wordmark_white;
   const W = 1080;
   const H = 1080;
+
+  // Pre-fetch images and convert to base64 data URIs
+  // This prevents Puppeteer from failing to load external CDN URLs
+  console.log(`[ImageCompositing] Pre-fetching images for base64 embedding...`);
+  const [productRenderBase64, logoBase64] = await Promise.all([
+    imageToBase64(productRenderUrl),
+    imageToBase64(rawLogoUrl),
+  ]);
+  // Also convert uploaded background images to base64
+  const logoUrl = logoBase64;
 
   // Build per-image config from selections or fallback
   const imageConfigs = buildImageConfigs(selections, creativeBrief, product, teamFeedback);
@@ -723,6 +824,8 @@ export async function generateStaticAdVariations(
       console.log(`[ImageCompositing] === Image ${i + 1}/3: ${variationLabel} (${template.name}) ===`);
       console.log(`[ImageCompositing] Headline: "${config.headline}"`);
       console.log(`[ImageCompositing] Background: ${config.background.type} - ${config.background.title}`);
+      console.log(`[ImageCompositing] Product render: ${productRenderUrl}`);
+      console.log(`[ImageCompositing] Logo: ${logoUrl}`);
 
       const copy = {
         headline: config.headline,
@@ -732,11 +835,18 @@ export async function generateStaticAdVariations(
         product,
       };
 
-      const html = template.fn(config.background, productRenderUrl, logoUrl, copy, W, H);
+      // Convert uploaded background image to base64 if needed
+      let bgForTemplate = config.background;
+      if (config.background.type === 'uploaded' && config.background.url) {
+        const bgBase64 = await imageToBase64(config.background.url);
+        bgForTemplate = { ...config.background, url: bgBase64 };
+      }
+
+      const html = template.fn(bgForTemplate, productRenderBase64, logoUrl, copy, W, H);
 
       console.log(`[ImageCompositing] Rendering ${template.name} template via Puppeteer...`);
       const pngBuffer = await renderHtmlToPng(html, W, H);
-      console.log(`[ImageCompositing] PNG rendered: ${(pngBuffer.length / 1024 / 1024).toFixed(1)}MB`);
+      console.log(`[ImageCompositing] PNG rendered: ${(pngBuffer.length / 1024 / 1024).toFixed(1)}MB (SUCCESS)`);
 
       const { storagePut } = await import("../storage");
       const fileKey = `static-ads/${variationLabel.toLowerCase().replace(/\s+/g, "_")}-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
@@ -745,7 +855,8 @@ export async function generateStaticAdVariations(
       results.push({ url, variation: variationLabel });
       console.log(`[ImageCompositing] Image ${i + 1} DONE: ${url}`);
     } catch (err: any) {
-      console.error(`[ImageCompositing] Failed image ${i + 1}:`, err.message);
+      console.error(`[ImageCompositing] FAILED image ${i + 1} (${variationLabel}): ${err.message}`);
+      console.error(`[ImageCompositing] Error stack:`, err.stack);
       results.push({
         url: `https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+${i + 1}+Failed`,
         variation: `${variationLabel} (failed)`,

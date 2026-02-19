@@ -449,3 +449,21 @@ All three fixes implemented and tested:
 - Pipeline code updated to skip AI background generation
 - Server restarted successfully, no compilation errors
 - Test pipeline run #270001 started but hit socket hang up at Stage 3 (Brief Review) — restarting server to retry
+
+## ROUND 13 — VIDEO PIPELINE BRIEF + STATIC IMAGE FIX
+
+### Video Pipeline Issues
+- [x] BUG: Script doesn't match example ad concept — should base script structure/hook on competitor's approach
+- [x] BUG: Only generating 1 DR script instead of 2 DR + 2 UGC
+- [x] BUG: No brief shown to user — user needs to see and approve brief before scripts are generated
+- [x] FIX: Add brief display stage to video pipeline (like static pipeline has)
+- [x] FIX: Add user approval gate for video brief before script generation
+- [x] FIX: Script generation must reference competitor transcript/concept when writing scripts
+- [x] FIX: Ensure all 4 scripts generated (2 DR + 2 UGC)
+- [x] TEST: End-to-end video pipeline with brief approval and 4 scripts
+
+### Static Pipeline Issues
+- [x] BUG: Puppeteer image generation fails — all 3 images show "(failed)" placeholder
+- [x] FIX: Debug and fix Chromium path / Puppeteer launch issue
+- [x] FIX: Verify image compositing produces proper output with text + product + background
+- [x] TEST: End-to-end static pipeline produces 3 working images

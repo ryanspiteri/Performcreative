@@ -9,6 +9,7 @@ import { syncFromForeplay, startAutoSync, getSyncStatus } from "./services/forep
 import { analyzeVideoFrames, generateScripts, reviewScript } from "./services/claude";
 import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
+import { runVideoPipelineStages1to3, runVideoPipelineStages4to5 } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
@@ -102,9 +103,10 @@ export const appRouter = router({
           foreplayAdBrand: input.foreplayAdBrand,
           videoUrl: input.mediaUrl,
           thumbnailUrl: input.thumbnailUrl || "",
+          videoStage: "stage_1_transcription",
         });
-        runVideoPipeline(runId, input).catch(err => {
-          console.error("[Pipeline] Video pipeline failed:", err);
+        runVideoPipelineStages1to3(runId, input).catch(err => {
+          console.error("[Pipeline] Video pipeline stages 1-3 failed:", err);
           db.updatePipelineRun(runId, { status: "failed", errorMessage: err.message || "Pipeline failed" });
         });
         return { runId, status: "running" };
@@ -428,6 +430,41 @@ Return JSON in this exact format:
 
         return { success: true };
       }),
+
+    // Video brief approval — user approves the brief before scripts are generated
+    approveVideoBrief: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        approved: z.boolean(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.videoStage !== "stage_3b_brief_approval") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline is not in brief approval stage" });
+        }
+
+        if (input.approved) {
+          await db.updatePipelineRun(input.runId, {
+            videoStage: "stage_4_scripts",
+          });
+          // Resume pipeline from Stage 4
+          runVideoPipelineStages4to5(input.runId, run).catch(err => {
+            console.error("[Pipeline] Video stages 4-5 failed:", err);
+            db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
+          });
+        } else {
+          // User rejected — mark as failed with notes
+          await db.updatePipelineRun(input.runId, {
+            status: "failed",
+            errorMessage: `Brief rejected by user: ${input.notes || "No reason given"}`,
+            videoStage: "stage_3b_brief_approval",
+          });
+        }
+
+        return { success: true };
+      }),
   }),
 
   // ============================================================
@@ -548,9 +585,9 @@ Return JSON in this exact format:
 });
 
 // ============================================================
-// VIDEO PIPELINE
+// LEGACY VIDEO PIPELINE (kept for reference, no longer called)
 // ============================================================
-async function runVideoPipeline(runId: number, input: {
+async function _legacyRunVideoPipeline(runId: number, input: {
   product: string;
   priority: string;
   foreplayAdId: string;
