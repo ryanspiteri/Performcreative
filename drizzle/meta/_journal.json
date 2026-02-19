@@ -29,6 +29,20 @@
       "when": 1771469856366,
       "tag": "0003_true_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1771476670703,
+      "tag": "0004_demonic_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1771477335032,
+      "tag": "0005_fat_galactus",
+      "breakpoints": true
     }
   ]
 }

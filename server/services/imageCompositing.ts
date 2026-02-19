@@ -11,22 +11,37 @@ interface CompositeResult {
 }
 
 /**
- * Generate 3 variations of static ads by:
+ * User selections for each image variation.
+ * Each image gets its own headline, optional subheadline, and background.
+ * Benefits are shared across all 3 images.
+ */
+export interface ImageSelections {
+  images: Array<{
+    headline: string;
+    subheadline: string | null; // null means no subheadline
+    background: { title: string; description: string; prompt: string };
+  }>;
+  benefits: string; // shared across all 3 images
+}
+
+/**
+ * Generate 3 ad creative variations by:
  * 1. Pulling a product render from the Product Render Manager (DB/S3)
- * 2. Downloading the competitor reference image for style transfer
- * 3. Extracting variation prompts from the approved creative brief
- * 4. Generating 3 background variations using nano banana with the reference image
- * 5. Compositing the actual product render on top of each background using Sharp
- * 6. Adding ONEST branding and logo
+ * 2. Downloading the competitor reference image for style transfer on Image 1
+ * 3. Generating BACKGROUND-ONLY images via nano banana (no text, no product)
+ * 4. Compositing the real product render onto each background using Sharp
+ * 5. Overlaying crisp TEXT via SVG: headline, subheadline, benefits, CTA, logo
+ * 6. Uploading final composites to S3
  */
 export async function generateStaticAdVariations(
   creativeBrief: string,
   inspireImageUrl: string,
   product: string,
   brandName: string,
+  selections?: ImageSelections,
   teamFeedback?: string
 ): Promise<CompositeResult[]> {
-  console.log("[ImageCompositing] Starting static ad generation with 3 variations");
+  console.log("[ImageCompositing] Starting ad creative generation with 3 variations");
   console.log("[ImageCompositing] Reference image:", inspireImageUrl?.substring(0, 100));
 
   // Pull product render from DB (Product Render Manager)
@@ -55,7 +70,7 @@ export async function generateStaticAdVariations(
 
   const logoUrl = LOGOS.wordmark_white;
 
-  // Download the competitor reference image for style transfer
+  // Download the competitor reference image for style transfer (Image 1 only)
   let referenceImageData: { url: string; mimeType: string } | null = null;
   if (inspireImageUrl && inspireImageUrl.startsWith("http")) {
     try {
@@ -65,16 +80,12 @@ export async function generateStaticAdVariations(
         timeout: 30000,
         headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" },
       });
-
-      // Upload to S3 so nano banana can access it via URL
       const { storagePut } = await import("../storage");
       const refKey = `reference-images/ref-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
       const { url: refUrl } = await storagePut(refKey, Buffer.from(refRes.data), "image/jpeg");
-
       let mimeType = refRes.headers["content-type"] || "image/jpeg";
       if (mimeType.includes(";")) mimeType = mimeType.split(";")[0].trim();
       if (!mimeType.startsWith("image/")) mimeType = "image/jpeg";
-
       referenceImageData = { url: refUrl, mimeType };
       console.log("[ImageCompositing] Reference image uploaded to S3:", refUrl);
     } catch (err: any) {
@@ -82,62 +93,73 @@ export async function generateStaticAdVariations(
     }
   }
 
-  // Extract the 3 variation prompts from the creative brief
-  const variationPrompts = extractVariationPrompts(creativeBrief, product, teamFeedback);
-  console.log("[ImageCompositing] Extracted variation prompts:", variationPrompts.map(p => p.substring(0, 80) + "..."));
+  // Build per-image config from selections or fallback
+  const imageConfigs = buildImageConfigs(selections, creativeBrief, product, teamFeedback);
 
-  // Generate 3 background variations using nano banana
+  // Generate backgrounds and composite
   const { generateImage } = await import("../_core/imageGeneration");
   const results: CompositeResult[] = [];
 
   for (let i = 0; i < 3; i++) {
+    const config = imageConfigs[i];
+    const variationLabel = i === 0 ? "Control (Closest to Inspo)" : `Variation ${i + 1}`;
+
     try {
-      console.log(`[ImageCompositing] Generating variation ${i + 1}/3...`);
+      console.log(`[ImageCompositing] === Image ${i + 1}/3: ${variationLabel} ===`);
+      console.log(`[ImageCompositing] Headline: "${config.headline}"`);
+      console.log(`[ImageCompositing] Subheadline: "${config.subheadline || 'NONE'}"`);
+      console.log(`[ImageCompositing] Benefits: "${config.benefits}"`);
 
-      // Build the generation options with reference image for style transfer
-      const genOptions: any = {
-        prompt: variationPrompts[i],
-      };
+      // Step 1: Generate BACKGROUND ONLY via nano banana (no text, no product)
+      const bgPrompt = buildBackgroundPrompt(config.backgroundPrompt, product);
+      const genOptions: any = { prompt: bgPrompt };
 
-      // Pass the competitor ad as a reference image for style transfer (image-to-image)
-      // This is the KEY fix — nano banana uses the reference to match visual style
+      // Image 1 uses competitor reference for closest style match
       if (referenceImageData && i === 0) {
-        // Variation 1 uses the reference image directly for closest style match
         genOptions.originalImages = [{
           url: referenceImageData.url,
           mimeType: referenceImageData.mimeType,
         }];
-        console.log(`[ImageCompositing] Variation ${i + 1}: Using reference image for style transfer`);
+        console.log(`[ImageCompositing] Image 1: Using reference image for style transfer`);
       }
 
+      console.log(`[ImageCompositing] Generating background ${i + 1}...`);
       const bgResult = await generateImage(genOptions);
       const bgUrl = bgResult.url as string;
       console.log(`[ImageCompositing] Background ${i + 1} generated: ${bgUrl}`);
 
-      // Composite product render onto background
-      const compositeUrl = await compositeProductOntoBackground(
+      // Step 2: Composite product render + text overlays onto background
+      const compositeUrl = await compositeAdCreative(
         bgUrl,
         productRenderUrl,
         logoUrl,
-        `variation_${i + 1}`
+        {
+          headline: config.headline,
+          subheadline: config.subheadline,
+          benefits: config.benefits,
+          cta: "SHOP NOW",
+          product,
+        },
+        `${i === 0 ? "control" : `variation_${i + 1}`}`
       );
 
       results.push({
         url: compositeUrl,
-        variation: `variation_${i + 1}`,
+        variation: variationLabel,
       });
 
-      console.log(`[ImageCompositing] Variation ${i + 1} completed`);
+      console.log(`[ImageCompositing] Image ${i + 1} completed: ${variationLabel}`);
     } catch (err: any) {
-      console.error(`[ImageCompositing] Failed to generate variation ${i + 1}:`, err.message);
-      // If compositing fails, try to at least return the background
+      console.error(`[ImageCompositing] Failed to generate image ${i + 1}:`, err.message);
+      // Fallback: try background-only without compositing
       try {
-        const bgResult = await generateImage({ prompt: variationPrompts[i] });
-        results.push({ url: bgResult.url as string, variation: `variation_${i + 1}` });
+        const bgPrompt = buildBackgroundPrompt(config.backgroundPrompt, product);
+        const bgResult = await generateImage({ prompt: bgPrompt });
+        results.push({ url: bgResult.url as string, variation: `${variationLabel} (background only - compositing failed)` });
       } catch {
         results.push({
-          url: `https://via.placeholder.com/1200x1200?text=Variation+${i + 1}+Failed`,
-          variation: `variation_${i + 1}`,
+          url: `https://via.placeholder.com/1200x1200/01040A/FF3838?text=Image+${i + 1}+Failed`,
+          variation: `${variationLabel} (failed)`,
         });
       }
     }
@@ -147,19 +169,73 @@ export async function generateStaticAdVariations(
 }
 
 /**
- * Extract the 3 variation prompts from the creative brief.
- * The brief contains a "## 7. THREE IMAGE GENERATION PROMPTS" section
- * with VARIATION 1 PROMPT, VARIATION 2 PROMPT, VARIATION 3 PROMPT.
- * Falls back to generic prompts if extraction fails.
+ * Build per-image configs from user selections or fallback to brief extraction
+ */
+function buildImageConfigs(
+  selections: ImageSelections | undefined,
+  brief: string,
+  product: string,
+  teamFeedback?: string
+): Array<{ headline: string; subheadline: string | null; benefits: string; backgroundPrompt: string }> {
+  if (selections && selections.images && selections.images.length >= 3) {
+    return selections.images.map((img, i) => ({
+      headline: img.headline,
+      subheadline: img.subheadline,
+      benefits: selections.benefits,
+      backgroundPrompt: img.background.prompt + (teamFeedback ? `\n\nADJUSTMENTS: ${teamFeedback}` : ""),
+    }));
+  }
+
+  // Fallback: extract from brief
+  const fallbackPrompts = extractVariationPrompts(brief, product, teamFeedback);
+  return [
+    {
+      headline: `FUEL YOUR ${product.toUpperCase()}`,
+      subheadline: "Premium Australian Formulation",
+      benefits: "Science-Backed Results",
+      backgroundPrompt: fallbackPrompts[0],
+    },
+    {
+      headline: `UNLOCK ${product.toUpperCase()} POWER`,
+      subheadline: "Trusted by Athletes",
+      benefits: "Science-Backed Results",
+      backgroundPrompt: fallbackPrompts[1],
+    },
+    {
+      headline: `${product.toUpperCase()} REDEFINED`,
+      subheadline: "No Compromises",
+      benefits: "Science-Backed Results",
+      backgroundPrompt: fallbackPrompts[2],
+    },
+  ];
+}
+
+/**
+ * Build a background-only prompt that explicitly tells nano banana NOT to include text or products
+ */
+function buildBackgroundPrompt(basePrompt: string, product: string): string {
+  return `${basePrompt}
+
+CRITICAL INSTRUCTIONS:
+- Generate ONLY the background scene/environment. 
+- DO NOT include any text, words, letters, numbers, or typography.
+- DO NOT include any product bottles, containers, or packaging.
+- DO NOT include any logos or brand marks.
+- The image should be a pure background/scene that a product can be composited onto later.
+- Leave clear space in the center-bottom area for product placement.
+- Square format, 1200x1200 pixels.
+- Style: Premium health supplement advertisement background.
+- Brand colors: deep black (#01040A), red accents (#FF3838), blue accents (#0347ED).`;
+}
+
+/**
+ * Extract variation prompts from the creative brief (fallback when no selections)
  */
 function extractVariationPrompts(brief: string, product: string, teamFeedback?: string): string[] {
   const prompts: string[] = [];
+  const feedbackClause = teamFeedback ? `\nADJUSTMENTS: ${teamFeedback}` : "";
 
-  const feedbackClause = teamFeedback
-    ? `\n\nCRITICAL ADJUSTMENTS BASED ON TEAM FEEDBACK: ${teamFeedback}`
-    : "";
-
-  // Try to extract prompts from the brief using various patterns
+  // Try to extract prompts from brief
   const patterns = [
     /\*\*VARIATION\s*1\s*PROMPT\*\*[^:]*:\s*([\s\S]*?)(?=\*\*VARIATION\s*2|\n##|\n\*\*V)/i,
     /\*\*VARIATION\s*2\s*PROMPT\*\*[^:]*:\s*([\s\S]*?)(?=\*\*VARIATION\s*3|\n##|\n\*\*V)/i,
@@ -169,126 +245,161 @@ function extractVariationPrompts(brief: string, product: string, teamFeedback?: 
   for (const pattern of patterns) {
     const match = brief.match(pattern);
     if (match && match[1]) {
-      let prompt = match[1].trim();
-      // Clean up markdown formatting
-      prompt = prompt.replace(/^\s*[-*]\s*/gm, "").trim();
-      // Remove any trailing section headers
-      prompt = prompt.replace(/\n##[\s\S]*$/, "").trim();
-      if (prompt.length > 50) {
-        prompts.push(prompt + feedbackClause);
-      }
+      let prompt = match[1].trim().replace(/^\s*[-*]\s*/gm, "").replace(/\n##[\s\S]*$/, "").trim();
+      if (prompt.length > 50) prompts.push(prompt + feedbackClause);
     }
   }
 
-  // If we couldn't extract all 3, try a simpler split approach
-  if (prompts.length < 3) {
-    const section7Match = brief.match(/##\s*7[\s\S]*?(?=##\s*\d|$)/i);
-    if (section7Match) {
-      const section = section7Match[0];
-      const varSplits = section.split(/\*\*VARIATION\s*[0-9]/i);
-      for (let i = 1; i < varSplits.length && prompts.length < 3; i++) {
-        let text = varSplits[i].replace(/^[^:]*:\s*/, "").trim();
-        text = text.replace(/^\s*[-*]\s*/gm, "").trim();
-        if (text.length > 50) {
-          prompts.push(text + feedbackClause);
-        }
-      }
-    }
-  }
-
-  // Fallback: if we still don't have 3 prompts, generate from the brief's visual direction
+  // Fallback generic prompts
   while (prompts.length < 3) {
     const idx = prompts.length + 1;
-    const visualSection = brief.match(/##\s*4[\s\S]*?(?=##\s*5|$)/i)?.[0] || "";
-    const fallbackPrompt = `Premium health supplement advertisement background for ONEST Health ${product}. ${
-      idx === 1
-        ? "Dark dramatic background matching the competitor reference style. Deep charcoal black base with warm amber and electric crimson accent lighting. Dramatic rim lighting from the right side. Subtle smoke or particle effects. Energy and power aesthetic."
-        : idx === 2
-        ? "Bold energetic background with deep navy to black gradient. Electric blue (#0347ED) accent lighting from below. Geometric angular shapes suggesting speed and power. Cool-toned with warm crimson (#FF3838) highlight accents."
-        : "Minimalist premium dark background with sophisticated matte black texture. Soft warm spotlight from above creating a subtle gradient. Clean and refined with minimal effects. Premium luxury supplement aesthetic."
-    } ${visualSection ? `Visual reference: ${visualSection.substring(0, 200)}` : ""} Leave ample space in the center for product placement. Square format 1200x1200px. No text, no product, no logo, just background.${feedbackClause}`;
-    prompts.push(fallbackPrompt);
+    const fallback = idx === 1
+      ? `Dark dramatic background for premium health supplement ad. Deep charcoal black base (#01040A) with warm amber and electric crimson (#FF3838) accent lighting. Dramatic rim lighting from the right. Subtle smoke and particle effects. Energy and power aesthetic. Premium gym/fitness atmosphere.${feedbackClause}`
+      : idx === 2
+      ? `Bold energetic background for supplement ad. Deep navy to black gradient. Electric blue (#0347ED) accent lighting from below. Geometric angular shapes suggesting speed and power. Cool-toned with warm crimson (#FF3838) highlight accents.${feedbackClause}`
+      : `Minimalist premium dark background for supplement ad. Sophisticated matte black texture (#01040A). Soft warm spotlight from above creating subtle gradient. Clean and refined. Premium luxury aesthetic.${feedbackClause}`;
+    prompts.push(fallback);
   }
 
   return prompts.slice(0, 3);
 }
 
 /**
- * Composite product render onto background using Sharp
+ * Composite a full ad creative: background + product render + text overlays
+ * Uses Sharp for image compositing and SVG for crisp text rendering
  */
-async function compositeProductOntoBackground(
+async function compositeAdCreative(
   backgroundUrl: string,
   productRenderUrl: string,
   logoUrl: string,
+  copy: {
+    headline: string;
+    subheadline: string | null;
+    benefits: string;
+    cta: string;
+    product: string;
+  },
   variationName: string
 ): Promise<string> {
   const sharp = (await import("sharp")).default;
   const tmpDir = os.tmpdir();
 
-  // Download background image
-  console.log("[Composite] Downloading background image...");
+  // Download all assets
+  console.log("[Composite] Downloading background...");
   const bgResponse = await axios.get(backgroundUrl, { responseType: "arraybuffer", timeout: 30000 });
   const bgPath = path.join(tmpDir, `bg_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
   fs.writeFileSync(bgPath, Buffer.from(bgResponse.data));
 
-  // Download product render from S3 CDN
-  console.log("[Composite] Downloading product render from CDN...");
+  console.log("[Composite] Downloading product render...");
   const productResponse = await axios.get(productRenderUrl, { responseType: "arraybuffer", timeout: 30000 });
   const productPath = path.join(tmpDir, `product_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
   fs.writeFileSync(productPath, Buffer.from(productResponse.data));
 
-  // Download logo from S3 CDN
-  console.log("[Composite] Downloading logo from CDN...");
+  console.log("[Composite] Downloading logo...");
   const logoResponse = await axios.get(logoUrl, { responseType: "arraybuffer", timeout: 30000 });
   const logoPath = path.join(tmpDir, `logo_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
   fs.writeFileSync(logoPath, Buffer.from(logoResponse.data));
 
   try {
-    // Get dimensions
     const bgMeta = await sharp(bgPath).metadata();
     const productMeta = await sharp(productPath).metadata();
     const logoMeta = await sharp(logoPath).metadata();
 
-    const bgWidth = bgMeta.width || 1200;
-    const bgHeight = bgMeta.height || 1200;
+    const W = bgMeta.width || 1200;
+    const H = bgMeta.height || 1200;
 
-    // Resize product to fit (55% of background width, maintaining aspect ratio)
-    const productWidth = Math.floor(bgWidth * 0.55);
-    const productHeight = productMeta.height
-      ? Math.floor(productWidth * (productMeta.height / (productMeta.width || 1)))
-      : productWidth;
+    // ============================================================
+    // LAYOUT PLAN (1200x1200 ad creative):
+    //
+    //  ┌──────────────────────────────────┐
+    //  │  ONEST LOGO (top-left)           │  <- 30px from top
+    //  │                                  │
+    //  │     ██ HEADLINE ██               │  <- ~15% from top, large bold
+    //  │     subheadline (if present)     │  <- below headline
+    //  │                                  │
+    //  │        ┌─────────┐               │
+    //  │        │ PRODUCT │               │  <- center, ~45% of width
+    //  │        │ RENDER  │               │
+    //  │        └─────────┘               │
+    //  │                                  │
+    //  │     ★ BENEFIT CALLOUT ★          │  <- below product
+    //  │                                  │
+    //  │     ┌──────────────┐             │
+    //  │     │  SHOP NOW    │             │  <- CTA button, bottom area
+    //  │     └──────────────┘             │
+    //  └──────────────────────────────────┘
+    // ============================================================
 
-    // Resize logo (12% of background width)
-    const logoWidth = Math.floor(bgWidth * 0.12);
-    const logoHeight = logoMeta.height
-      ? Math.floor(logoWidth * (logoMeta.height / (logoMeta.width || 1)))
-      : Math.floor(logoWidth * 0.3);
+    // Resize product render (45% of width, centered)
+    const productWidth = Math.floor(W * 0.45);
+    const productRatio = (productMeta.height || 1) / (productMeta.width || 1);
+    const productHeight = Math.floor(productWidth * productRatio);
+    const productX = Math.floor((W - productWidth) / 2);
+    const productY = Math.floor(H * 0.32); // Start at ~32% from top
 
-    console.log(`[Composite] BG: ${bgWidth}x${bgHeight}, Product: ${productWidth}x${productHeight}, Logo: ${logoWidth}x${logoHeight}`);
+    // Resize logo (15% of width, top-left)
+    const logoWidth = Math.floor(W * 0.15);
+    const logoRatio = (logoMeta.height || 1) / (logoMeta.width || 1);
+    const logoHeight = Math.floor(logoWidth * logoRatio);
+    const logoX = 40;
+    const logoY = 35;
 
-    // Position: product centered, logo top-right
-    const productX = Math.floor((bgWidth - productWidth) / 2);
-    const productY = Math.floor((bgHeight - productHeight) / 2);
-    const logoX = bgWidth - logoWidth - 30;
-    const logoY = 30;
+    console.log(`[Composite] Layout: ${W}x${H}, Product: ${productWidth}x${productHeight} at (${productX},${productY}), Logo: ${logoWidth}x${logoHeight}`);
 
+    // Build SVG text overlay
+    const textSvg = buildTextOverlaySvg(W, H, copy, productY, productY + productHeight);
+
+    // Prepare composite layers
+    const compositeInputs: any[] = [];
+
+    // Layer 1: Semi-transparent dark gradient overlay for text readability
+    const gradientSvg = `<svg width="${W}" height="${H}">
+      <defs>
+        <linearGradient id="topGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#01040A" stop-opacity="0.85"/>
+          <stop offset="35%" stop-color="#01040A" stop-opacity="0.3"/>
+          <stop offset="55%" stop-color="#01040A" stop-opacity="0.1"/>
+          <stop offset="75%" stop-color="#01040A" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#01040A" stop-opacity="0.9"/>
+        </linearGradient>
+      </defs>
+      <rect width="${W}" height="${H}" fill="url(#topGrad)"/>
+    </svg>`;
+    compositeInputs.push({
+      input: Buffer.from(gradientSvg),
+      top: 0,
+      left: 0,
+    });
+
+    // Layer 2: Product render
+    compositeInputs.push({
+      input: await sharp(productPath)
+        .resize(productWidth, productHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .toBuffer(),
+      left: productX,
+      top: productY,
+    });
+
+    // Layer 3: Logo
+    compositeInputs.push({
+      input: await sharp(logoPath)
+        .resize(logoWidth, logoHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .toBuffer(),
+      left: logoX,
+      top: logoY,
+    });
+
+    // Layer 4: Text overlay (headline, subheadline, benefits, CTA)
+    compositeInputs.push({
+      input: Buffer.from(textSvg),
+      top: 0,
+      left: 0,
+    });
+
+    // Composite all layers
     const compositeBuffer = await sharp(bgPath)
-      .composite([
-        {
-          input: await sharp(productPath)
-            .resize(productWidth, productHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-            .toBuffer(),
-          left: productX,
-          top: productY,
-        },
-        {
-          input: await sharp(logoPath)
-            .resize(logoWidth, logoHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-            .toBuffer(),
-          left: logoX,
-          top: logoY,
-        },
-      ])
+      .resize(W, H, { fit: "cover" })
+      .composite(compositeInputs)
       .png()
       .toBuffer();
 
@@ -297,12 +408,126 @@ async function compositeProductOntoBackground(
     const fileKey = `static-ads/${variationName}-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
     const { url } = await storagePut(fileKey, compositeBuffer, "image/png");
 
-    console.log("[Composite] Composite image uploaded to S3:", url);
+    console.log("[Composite] Ad creative uploaded to S3:", url);
     return url;
   } finally {
-    // Clean up temp files
     try { fs.unlinkSync(bgPath); } catch {}
     try { fs.unlinkSync(productPath); } catch {}
     try { fs.unlinkSync(logoPath); } catch {}
   }
+}
+
+/**
+ * Build SVG text overlay with headline, subheadline, benefits, and CTA
+ * Uses Liberation Sans (available on system) for clean, professional text
+ */
+function buildTextOverlaySvg(
+  width: number,
+  height: number,
+  copy: {
+    headline: string;
+    subheadline: string | null;
+    benefits: string;
+    cta: string;
+    product: string;
+  },
+  productTop: number,
+  productBottom: number
+): string {
+  const escXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  // Font sizes relative to canvas width
+  const headlineFontSize = Math.floor(width * 0.055); // ~66px at 1200w
+  const subheadlineFontSize = Math.floor(width * 0.028); // ~34px
+  const benefitFontSize = Math.floor(width * 0.024); // ~29px
+  const ctaFontSize = Math.floor(width * 0.022); // ~26px
+
+  // Headline positioning: above the product
+  const headlineY = Math.floor(height * 0.14);
+
+  // Word-wrap headline if too long
+  const headlineLines = wrapText(copy.headline.toUpperCase(), 22);
+
+  let svgParts: string[] = [];
+
+  // HEADLINE — large, bold, white with red accent underline
+  headlineLines.forEach((line, i) => {
+    const lineY = headlineY + (i * (headlineFontSize + 8));
+    svgParts.push(`
+      <text x="${width / 2}" y="${lineY}" text-anchor="middle"
+        font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+        font-size="${headlineFontSize}" font-weight="bold" fill="white"
+        letter-spacing="2">${escXml(line)}</text>
+    `);
+  });
+
+  // Red accent line under headline
+  const accentLineY = headlineY + (headlineLines.length * (headlineFontSize + 8)) + 5;
+  const accentWidth = Math.floor(width * 0.15);
+  svgParts.push(`
+    <rect x="${(width - accentWidth) / 2}" y="${accentLineY}" width="${accentWidth}" height="4" rx="2" fill="#FF3838"/>
+  `);
+
+  // SUBHEADLINE — below headline accent, lighter weight
+  if (copy.subheadline) {
+    const subY = accentLineY + 30;
+    svgParts.push(`
+      <text x="${width / 2}" y="${subY}" text-anchor="middle"
+        font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+        font-size="${subheadlineFontSize}" font-weight="normal" fill="#E0E0E0"
+        letter-spacing="1">${escXml(copy.subheadline)}</text>
+    `);
+  }
+
+  // BENEFIT CALLOUT — below product area, with icon-style marker
+  const benefitY = Math.min(productBottom + Math.floor(height * 0.06), Math.floor(height * 0.82));
+  svgParts.push(`
+    <text x="${width / 2}" y="${benefitY}" text-anchor="middle"
+      font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+      font-size="${benefitFontSize}" font-weight="bold" fill="#FF3838"
+      letter-spacing="1.5">★ ${escXml(copy.benefits.toUpperCase())} ★</text>
+  `);
+
+  // CTA BUTTON — bottom area, red pill-shaped button
+  const ctaY = Math.min(benefitY + Math.floor(height * 0.06), Math.floor(height * 0.90));
+  const ctaText = copy.cta.toUpperCase();
+  const ctaBoxWidth = Math.floor(width * 0.35);
+  const ctaBoxHeight = Math.floor(height * 0.055);
+  const ctaBoxX = (width - ctaBoxWidth) / 2;
+  const ctaBoxY = ctaY - ctaBoxHeight / 2;
+
+  svgParts.push(`
+    <rect x="${ctaBoxX}" y="${ctaBoxY}" width="${ctaBoxWidth}" height="${ctaBoxHeight}" rx="${ctaBoxHeight / 2}" fill="#FF3838"/>
+    <text x="${width / 2}" y="${ctaBoxY + ctaBoxHeight / 2 + ctaFontSize / 3}" text-anchor="middle"
+      font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+      font-size="${ctaFontSize}" font-weight="bold" fill="white"
+      letter-spacing="3">${escXml(ctaText)}</text>
+  `);
+
+  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    ${svgParts.join("\n")}
+  </svg>`;
+}
+
+/**
+ * Simple word-wrap for headline text
+ */
+function wrapText(text: string, maxCharsPerLine: number): string[] {
+  if (text.length <= maxCharsPerLine) return [text];
+
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
+      lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine += (currentLine ? " " : "") + word;
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+
+  return lines.slice(0, 3); // Max 3 lines
 }

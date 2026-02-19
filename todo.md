@@ -188,3 +188,49 @@ All three fixes implemented and tested:
 - [x] FIX Stage 4: Prompts extracted from brief — extremely detailed about replicating visual style, layout, composition
 - [x] FIX: Creative brief passed through entire pipeline to image generation step
 - [x] TEST: All 19 tests passing, visual matching pipeline ready for testing
+
+## ROUND 8 — USER SELECTION GATE
+
+- [x] DB: Add columns for creative_options (JSON) and user_selections (JSON) to pipeline_runs
+- [x] DB: Add new stage value "stage_3b_user_selection" between brief review and image generation
+- [x] BACKEND: Update Claude brief generation to produce 3 background concepts, 6 headlines, 6 subheadlines, 6 benefit callouts
+- [x] BACKEND: Parse Claude's brief output into structured options (JSON)
+- [x] BACKEND: New tRPC endpoint for submitting user selections
+- [x] BACKEND: Pipeline pauses at stage_3b_user_selection and waits for user input
+- [x] BACKEND: After user submits selections, pipeline resumes with selected options fed into image generation prompts
+- [x] FRONTEND: Selection UI showing all options laid out with radio/checkbox selectors
+- [x] FRONTEND: Background concepts with visual descriptions
+- [x] FRONTEND: 6 headlines (pick 3), 6 subheadlines (pick 3), 6 benefits (pick 3), 3 backgrounds (pick 1)
+- [x] FRONTEND: Confirm button to submit selections and resume pipeline
+- [x] IMAGE GEN: Image 1 (Control) = Headline 1 + Subheadline 1 + Benefit 1 + selected background (closest to inspo)
+- [x] IMAGE GEN: Image 2 (Variation) = Headline 2 + Subheadline 2 + Benefit 2 + selected background
+- [x] IMAGE GEN: Image 3 (Variation) = Headline 3 + Subheadline 3 + Benefit 3 + selected background
+- [x] ARCH: Extract static pipeline into server/staticPipeline.ts for cleaner code
+- [x] COMPOSITING: Update generateStaticAdVariations to accept per-image copy selections
+- [x] TEST: Verify pipeline pauses at selection gate and resumes after user input
+
+## ROUND 8B — CRITICAL IMAGE QUALITY FIX + SELECTION GATE
+
+### Fix 1: Image Generation Must Produce Actual Ad Creatives
+- [x] COMPOSITING: Nano banana generates BACKGROUND/SCENE only (no text, no product)
+- [x] COMPOSITING: Sharp composites real product render from S3 onto background
+- [x] COMPOSITING: Sharp/Canvas overlays clean crisp TEXT: headline, subheadline, benefit callouts, CTA
+- [x] COMPOSITING: Add ONEST logo overlay
+- [x] COMPOSITING: Text positioned based on competitor ad layout analysis
+- [x] COMPOSITING: Brand colors (#FF3838, #0347ED, #01040A) used throughout
+
+### Fix 2: Expert Panel Must Be Brutally Critical
+- [x] EXPERT: Recalibrate scoring prompts — no more rubber-stamping
+- [x] EXPERT: Score below 50 if no headline/CTA/hook visible
+- [x] EXPERT: Criteria: scroll-stopping, headline visibility, CTA presence, purchase intent, professional quality
+- [x] EXPERT: Compare against competitor inspo quality
+
+### Selection Gate (Updated Requirements)
+- [x] SELECTION: 6 headlines → user picks 3 (one per image) OR writes custom
+- [x] SELECTION: 6 subheadlines → user picks 3 OR picks NONE (optional) OR writes custom
+- [x] SELECTION: Benefits are SHARED across all 3 images (not per-image)
+- [x] SELECTION: 3 background concepts → CAN VARY per image (not shared)
+- [x] SELECTION: Custom text boxes for each element
+- [x] OUTPUT: Image 1 (Control) = Headline 1 + optional Sub 1 + shared benefits + Background 1 (closest to inspo)
+- [x] OUTPUT: Image 2 (Variation) = Headline 2 + optional Sub 2 + shared benefits + Background 2
+- [x] OUTPUT: Image 3 (Variation) = Headline 3 + optional Sub 3 + shared benefits + Background 3

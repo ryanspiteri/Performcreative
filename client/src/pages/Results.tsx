@@ -1,9 +1,10 @@
 import { trpc } from "@/lib/trpc";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import SelectionGate from "@/components/SelectionGate";
 
 // ============================================================
 // STATIC PIPELINE STAGES
@@ -12,6 +13,7 @@ const STATIC_STAGES = [
   { key: "stage_1_analysis", label: "Competitor Analysis", icon: Eye },
   { key: "stage_2_brief", label: "Creative Brief", icon: FileText },
   { key: "stage_3_brief_review", label: "Brief Expert Review", icon: Star },
+  { key: "stage_3b_selection", label: "Select Creative Direction", icon: Sparkles },
   { key: "stage_4_generation", label: "Image Generation", icon: ImageIcon },
   { key: "stage_5_creative_review", label: "Creative Expert Review", icon: Star },
   { key: "stage_6_team_approval", label: "Team Approval", icon: ThumbsUp },
@@ -37,6 +39,7 @@ export default function Results() {
       const d = query.state.data;
       if (!d) return false;
       if (d.status === "running" || d.status === "pending") return 3000;
+      if (d.pipelineType === "static" && d.staticStage === "stage_3b_selection") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_team_approval") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_revising") return 3000;
       return false;
@@ -327,6 +330,15 @@ function StaticResults({ run }: { run: any }) {
         </div>
       )}
 
+      {/* Stage 3b: Selection Gate */}
+      {run.staticStage === "stage_3b_selection" && run.briefOptionsJson && (
+        <SelectionGate
+          runId={run.id}
+          options={run.briefOptionsJson as any}
+          onSubmitted={() => {}}
+        />
+      )}
+
       {/* Stage 4: Generated Images */}
       {generatedImages.length > 0 && (
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
@@ -422,7 +434,7 @@ function StaticResults({ run }: { run: any }) {
       )}
 
       {/* Running indicator for static pipeline */}
-      {isRunning && run.staticStage && !["stage_6_team_approval", "completed"].includes(run.staticStage) && (
+      {isRunning && run.staticStage && !["stage_3b_selection", "stage_6_team_approval", "completed"].includes(run.staticStage) && (
         <div className="bg-[#191B1F] border border-orange-500/20 rounded-xl p-6">
           <div className="flex items-center gap-3">
             <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />

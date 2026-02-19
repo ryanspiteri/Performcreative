@@ -5,10 +5,10 @@ import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
-import { analyzeVideoFrames, generateScripts, reviewScript, analyzeStaticAd } from "./services/claude";
-import { generateStaticAdVariations } from "./services/imageCompositing";
+import { analyzeVideoFrames, generateScripts, reviewScript } from "./services/claude";
 import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
+import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
@@ -28,7 +28,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-const STAGE_TIMEOUT = 5 * 60 * 1000; // 5 minutes per stage
 const STEP_TIMEOUT = 3 * 60 * 1000; // 3 minutes per step
 
 export const appRouter = router({
@@ -79,7 +78,7 @@ export const appRouter = router({
         return run;
       }),
 
-    // FIX 1: Video pipeline now accepts the selected creative's data
+    // Video pipeline trigger
     triggerVideo: publicProcedure
       .input(z.object({
         product: z.string(),
@@ -114,7 +113,7 @@ export const appRouter = router({
     fetchForeplayStatics: publicProcedure.query(async () => fetchStaticAds(30)),
     listBoards: publicProcedure.query(async () => listBoards()),
 
-    // FIX 3: Static pipeline with 7-stage flow
+    // Static pipeline trigger (Stages 1-3 + pause at 3b for selection)
     triggerStatic: publicProcedure
       .input(z.object({
         product: z.string(),
@@ -147,6 +146,44 @@ export const appRouter = router({
         return { runId, status: "running" };
       }),
 
+    // Submit user selections at Stage 3b and resume pipeline
+    submitSelections: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        selections: z.object({
+          images: z.array(z.object({
+            headline: z.string(),
+            subheadline: z.string().nullable(),
+            background: z.object({
+              title: z.string(),
+              description: z.string(),
+              prompt: z.string(),
+            }),
+          })).length(3),
+          benefits: z.string(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.staticStage !== "stage_3b_selection") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline is not in selection stage" });
+        }
+
+        // Store selections in DB
+        await db.updatePipelineRun(input.runId, {
+          userSelections: input.selections,
+        });
+
+        // Resume pipeline from Stage 4
+        runStaticStage4(input.runId, run, input.selections).catch(err => {
+          console.error("[Pipeline] Stage 4+ failed:", err);
+          db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
+        });
+
+        return { success: true };
+      }),
+
     // Get active products list
     getActiveProducts: publicProcedure.query(() => {
       return ACTIVE_PRODUCTS;
@@ -172,19 +209,16 @@ export const appRouter = router({
             teamApprovalNotes: input.notes || "Approved by team",
             staticStage: "stage_7_clickup",
           });
-          // Continue to Stage 7: ClickUp task creation
           runStaticStage7(input.runId, run).catch(err => {
             console.error("[Pipeline] Stage 7 failed:", err);
             db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
           });
         } else {
-          // Rejected — send edits back to nano banana for modification
           await db.updatePipelineRun(input.runId, {
             teamApprovalStatus: "rejected",
             teamApprovalNotes: input.notes || "Changes requested",
             staticStage: "stage_6_revising",
           });
-          // Re-generate with team feedback
           runStaticRevision(input.runId, run, input.notes || "").catch(err => {
             console.error("[Pipeline] Revision failed:", err);
             db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
@@ -213,16 +247,11 @@ export const appRouter = router({
         base64Data: z.string(),
       }))
       .mutation(async ({ input }) => {
-        // Decode base64 to buffer
         const buffer = Buffer.from(input.base64Data, "base64");
         const fileSize = buffer.length;
-
-        // Upload to S3
         const suffix = Math.random().toString(36).slice(2, 10);
         const fileKey = `product-renders/${input.product}/${input.fileName}-${suffix}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
-
-        // Save to database
         const id = await db.createProductRender({
           product: input.product,
           fileName: input.fileName,
@@ -231,7 +260,6 @@ export const appRouter = router({
           mimeType: input.mimeType,
           fileSize,
         });
-
         return { id, url, fileKey };
       }),
 
@@ -277,7 +305,7 @@ export const appRouter = router({
 });
 
 // ============================================================
-// VIDEO PIPELINE — now uses the selected creative's specific data
+// VIDEO PIPELINE
 // ============================================================
 async function runVideoPipeline(runId: number, input: {
   product: string;
@@ -305,39 +333,33 @@ async function runVideoPipeline(runId: number, input: {
       if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
       if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
       productInfoContext = parts.join("\n");
-      console.log(`[Pipeline] Loaded product info for ${input.product}: ${productInfoContext.slice(0, 100)}...`);
     }
   } catch (err: any) {
     console.warn("[Pipeline] Failed to load product info:", err.message);
   }
 
-  // Step 1: Transcribe video (using the SELECTED video, not first from board)
-  console.log("[Pipeline] Step 1: Transcribing video from:", input.mediaUrl);
+  // Step 1: Transcribe video
   let transcript = "";
   try {
     if (input.mediaUrl) {
       transcript = await withTimeout(transcribeVideo(input.mediaUrl), STEP_TIMEOUT, "Transcription");
-      console.log("[Pipeline] Transcription succeeded, length:", transcript.length);
     } else {
-      console.warn("[Pipeline] No media URL provided, skipping transcription");
       transcript = "No video URL provided.";
     }
   } catch (err: any) {
-    console.error("[Pipeline] Transcription failed:", err.message, err.stack);
+    console.error("[Pipeline] Transcription failed:", err.message);
     transcript = `Transcription failed: ${err.message}`;
     await db.updatePipelineRun(runId, { errorMessage: `Transcription error: ${err.message}` });
   }
   await db.updatePipelineRun(runId, { transcript });
 
   // Step 2: Visual analysis
-  console.log("[Pipeline] Step 2: Running visual analysis...");
   let visualAnalysis = "";
   try {
     visualAnalysis = await withTimeout(
       analyzeVideoFrames(input.mediaUrl, transcript, input.foreplayAdBrand),
       STEP_TIMEOUT, "Visual analysis"
     );
-    console.log("[Pipeline] Visual analysis complete, length:", visualAnalysis.length);
   } catch (err: any) {
     console.error("[Pipeline] Visual analysis failed:", err.message);
     visualAnalysis = `Visual analysis failed: ${err.message}`;
@@ -345,7 +367,6 @@ async function runVideoPipeline(runId: number, input: {
   await db.updatePipelineRun(runId, { visualAnalysis });
 
   // Step 3: Generate scripts
-  console.log("[Pipeline] Step 3: Generating scripts...");
   const scriptConfigs = [
     { type: "DR" as const, num: 1 },
     { type: "DR" as const, num: 2 },
@@ -355,18 +376,15 @@ async function runVideoPipeline(runId: number, input: {
   const allScripts: any[] = [];
   for (const config of scriptConfigs) {
     try {
-      console.log(`[Pipeline] Generating ${config.type}${config.num}...`);
       const script = await withTimeout(
         generateScripts(transcript, visualAnalysis, input.product, config.type, config.num, productInfoContext),
         STEP_TIMEOUT, `Script ${config.type}${config.num}`
       );
-      console.log(`[Pipeline] Running expert review for ${config.type}${config.num}...`);
       const review = await withTimeout(
         reviewScript(script, input.product, config.type),
         STEP_TIMEOUT, `Review ${config.type}${config.num}`
       );
       allScripts.push({ type: config.type, number: config.num, label: `${config.type}${config.num}`, ...script, review });
-      // Save after each script so partial results are visible
       await db.updatePipelineRun(runId, { scriptsJson: allScripts });
     } catch (err: any) {
       console.error(`[Pipeline] ${config.type}${config.num} failed:`, err.message);
@@ -382,7 +400,6 @@ async function runVideoPipeline(runId: number, input: {
   }
 
   // Step 4: ClickUp tasks
-  console.log("[Pipeline] Step 4: Creating ClickUp tasks...");
   try {
     const taskInputs = allScripts.filter(s => s.review?.finalScore > 0).map(s => ({
       title: s.title || `${s.type}${s.number} Script`,
@@ -397,13 +414,12 @@ async function runVideoPipeline(runId: number, input: {
       );
       await db.updatePipelineRun(runId, { clickupTasksJson: clickupTasks, status: "completed", completedAt: new Date() });
     } else {
-      await db.updatePipelineRun(runId, { status: "completed", completedAt: new Date(), errorMessage: "All scripts failed to generate" });
+      await db.updatePipelineRun(runId, { status: "completed", completedAt: new Date(), errorMessage: "All scripts failed" });
     }
   } catch (err: any) {
-    console.error("[Pipeline] ClickUp task creation failed:", err.message);
+    console.error("[Pipeline] ClickUp failed:", err.message);
     await db.updatePipelineRun(runId, { status: "completed", completedAt: new Date(), errorMessage: `ClickUp failed: ${err.message}` });
   }
-  console.log(`[Pipeline] Video pipeline run #${runId} completed!`);
 }
 
 function formatScriptForClickUp(script: any): string {
@@ -413,527 +429,6 @@ function formatScriptForClickUp(script: any): string {
   }
   content += `\n## VISUAL DIRECTION\n${script.visualDirection}\n\n## STRATEGIC THESIS\n${script.strategicThesis}\n`;
   return content;
-}
-
-// ============================================================
-// STATIC PIPELINE — 7-Stage Flow
-// ============================================================
-async function runStaticPipeline(runId: number, input: {
-  product: string;
-  priority: string;
-  selectedAdId: string;
-  selectedAdImage: { id: string; imageUrl: string; brandName?: string; title?: string };
-}) {
-  console.log(`[Pipeline] Starting 7-stage static pipeline run #${runId}`);
-  const ad = input.selectedAdImage;
-
-  // Fetch product info from DB for AI context
-  let productInfoContext = "";
-  try {
-    const info = await db.getProductInfo(input.product);
-    if (info) {
-      const parts: string[] = [];
-      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
-      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
-      if (info.claims) parts.push(`Claims: ${info.claims}`);
-      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
-      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
-      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
-      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
-      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
-      productInfoContext = parts.join("\n");
-      console.log(`[Static] Loaded product info for ${input.product}: ${productInfoContext.slice(0, 100)}...`);
-    }
-  } catch (err: any) {
-    console.warn("[Static] Failed to load product info:", err.message);
-  }
-
-  // ---- STAGE 1: Claude Vision analyzes the competitor static ad ----
-  console.log("[Static] Stage 1: Analyzing competitor static ad...");
-  await db.updatePipelineRun(runId, { staticStage: "stage_1_analysis" });
-  let analysis: string;
-  try {
-    analysis = await withTimeout(analyzeStaticAd(ad.imageUrl, ad.brandName || "Competitor"), STAGE_TIMEOUT, "Stage 1: Analysis");
-    console.log("[Static] Stage 1 complete, analysis length:", analysis.length);
-  } catch (err: any) {
-    console.error("[Static] Stage 1 failed:", err.message);
-    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 1 (Analysis) failed: ${err.message}` });
-    return;
-  }
-  await db.updatePipelineRun(runId, { staticAnalysis: analysis });
-
-  // ---- STAGE 2: AI writes a creative brief for the ONEST version ----
-  console.log("[Static] Stage 2: Writing creative brief...");
-  await db.updatePipelineRun(runId, { staticStage: "stage_2_brief" });
-  let brief: string;
-  try {
-    brief = await withTimeout(generateCreativeBrief(analysis, input.product, ad.brandName || "Competitor", productInfoContext), STAGE_TIMEOUT, "Stage 2: Brief");
-    console.log("[Static] Stage 2 complete, brief length:", brief.length);
-  } catch (err: any) {
-    console.error("[Static] Stage 2 failed:", err.message);
-    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 2 (Brief) failed: ${err.message}` });
-    return;
-  }
-  await db.updatePipelineRun(runId, { staticBrief: brief });
-
-  // ---- STAGE 3: 10-expert panel reviews the BRIEF ----
-  console.log("[Static] Stage 3: Expert panel reviewing brief...");
-  await db.updatePipelineRun(runId, { staticStage: "stage_3_brief_review" });
-  let briefReview: any;
-  let finalBrief: string;
-  try {
-    const result = await withTimeout(reviewBriefWithPanel(brief, input.product), STAGE_TIMEOUT * 2, "Stage 3: Brief Review");
-    briefReview = result.reviewResult;
-    finalBrief = result.finalBrief;
-    console.log("[Static] Stage 3 complete, score:", briefReview.finalScore);
-  } catch (err: any) {
-    console.error("[Static] Stage 3 failed:", err.message);
-    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 3 (Brief Review) failed: ${err.message}` });
-    return;
-  }
-  await db.updatePipelineRun(runId, { staticBriefReview: briefReview, staticBrief: finalBrief });
-
-  // ---- STAGE 4: Generate 3 static ad images ----
-  console.log("[Static] Stage 4: Generating 3 image variations...");
-  await db.updatePipelineRun(runId, { staticStage: "stage_4_generation" });
-  let generatedImages: any[];
-  try {
-    const variations = await withTimeout(
-      generateStaticAdVariations(finalBrief, ad.imageUrl, input.product, ad.brandName || "Competitor"),
-      STAGE_TIMEOUT * 2, "Stage 4: Image Generation"
-    );
-    generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
-    console.log("[Static] Stage 4 complete, generated", generatedImages.length, "images");
-  } catch (err: any) {
-    console.error("[Static] Stage 4 failed:", err.message);
-    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 4 (Image Generation) failed: ${err.message}` });
-    return;
-  }
-  await db.updatePipelineRun(runId, {
-    staticAdImages: [ad, ...generatedImages],
-    generatedImageUrl: generatedImages[0]?.url || "",
-  });
-
-  // ---- STAGE 5: 10-expert panel reviews the GENERATED CREATIVES ----
-  console.log("[Static] Stage 5: Expert panel reviewing generated creatives...");
-  await db.updatePipelineRun(runId, { staticStage: "stage_5_creative_review" });
-  let creativeReview: any;
-  try {
-    creativeReview = await withTimeout(
-      reviewCreativesWithPanel(generatedImages, finalBrief, input.product),
-      STAGE_TIMEOUT, "Stage 5: Creative Review"
-    );
-    console.log("[Static] Stage 5 complete, score:", creativeReview.finalScore);
-  } catch (err: any) {
-    console.error("[Static] Stage 5 failed:", err.message);
-    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 5 (Creative Review) failed: ${err.message}` });
-    return;
-  }
-  await db.updatePipelineRun(runId, { staticCreativeReview: creativeReview });
-
-  // ---- STAGE 6: Team approval (pause here — wait for team input) ----
-  console.log("[Static] Stage 6: Awaiting team approval...");
-  await db.updatePipelineRun(runId, {
-    staticStage: "stage_6_team_approval",
-    teamApprovalStatus: "pending",
-  });
-  // Pipeline pauses here — team must approve via the UI
-}
-
-// Stage 7: ClickUp task creation (called after team approves)
-async function runStaticStage7(runId: number, run: any) {
-  console.log("[Static] Stage 7: Creating ClickUp task...");
-  await db.updatePipelineRun(runId, { staticStage: "stage_7_clickup" });
-
-  try {
-    const { createScriptTask } = await import("./services/clickup");
-    const brief = run.staticBrief || "Creative brief";
-    const product = run.product;
-    const priority = run.priority;
-
-    const task = await withTimeout(
-      createScriptTask(
-        `${run.foreplayAdTitle || "Static Ad"} - ONEST ${product} Creative`,
-        "STATIC",
-        (run.staticCreativeReview as any)?.finalScore || 90,
-        `# Static Ad Creative Brief\n\n${brief}\n\n## Generated Variations\n${((run.staticAdImages as any[]) || []).filter((img: any) => img.variation).map((img: any) => `- ${img.variation}: ${img.url}`).join("\n")}`,
-        product,
-        priority
-      ),
-      STEP_TIMEOUT, "Stage 7: ClickUp Task"
-    );
-
-    await db.updatePipelineRun(runId, {
-      clickupTasksJson: [task],
-      staticStage: "completed",
-      status: "completed",
-      completedAt: new Date(),
-    });
-    console.log(`[Static] Pipeline run #${runId} completed!`);
-  } catch (err: any) {
-    console.error("[Static] Stage 7 failed:", err.message);
-    await db.updatePipelineRun(runId, {
-      status: "failed",
-      errorMessage: `Stage 7 (ClickUp) failed: ${err.message}`,
-    });
-  }
-}
-
-// Revision flow: team rejected, re-generate with feedback
-async function runStaticRevision(runId: number, run: any, teamNotes: string) {
-  console.log("[Static] Revising creatives based on team feedback...");
-
-  try {
-    const { generateStaticAdVariations } = await import("./services/imageCompositing");
-    const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
-
-    // Re-generate with team feedback incorporated into prompts
-    const variations = await withTimeout(
-      generateStaticAdVariations(run.staticBrief || "", ad.imageUrl || "", run.product, run.foreplayAdBrand || "Competitor", teamNotes),
-      STAGE_TIMEOUT * 2, "Revision: Image Generation"
-    );
-
-    const generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
-    await db.updatePipelineRun(runId, {
-      staticAdImages: [ad, ...generatedImages],
-      generatedImageUrl: variations[0]?.url || "",
-      staticStage: "stage_6_team_approval",
-      teamApprovalStatus: "pending",
-    });
-    console.log("[Static] Revised creatives ready for team review");
-  } catch (err: any) {
-    console.error("[Static] Revision failed:", err.message);
-    await db.updatePipelineRun(runId, {
-      status: "failed",
-      errorMessage: `Revision failed: ${err.message}`,
-      staticStage: "stage_6_team_approval",
-      teamApprovalStatus: "pending",
-    });
-  }
-}
-
-// ============================================================
-// STATIC PIPELINE HELPERS
-// ============================================================
-
-// Generate creative brief for ONEST version of the ad
-async function generateCreativeBrief(
-  competitorAnalysis: string,
-  product: string,
-  competitorBrand: string,
-  productInfoContext?: string
-): Promise<string> {
-  const { default: axios } = await import("axios");
-
-  const system = `You are an elite creative director who writes extremely detailed, visually-specific creative briefs. Your briefs are so precise that an AI image generator can recreate the exact visual style from your descriptions alone.
-
-You specialise in translating competitor ad analysis into actionable art direction for ONEST Health, an Australian health supplement brand. ONEST brand colours: #FF3838 (red), #0347ED (blue), with dark backgrounds (#01040A base).`;
-
-  const productInfoBlock = productInfoContext ? `\n\nPRODUCT INFORMATION FOR ${product}:\n${productInfoContext}\n\nUse this product information to make the brief specific and accurate.` : "";
-
-  const prompt = `Based on this detailed competitor analysis, write a creative brief for an ONEST Health ${product} static ad that VISUALLY MATCHES the competitor's style.
-
-COMPETITOR VISUAL ANALYSIS:
-${competitorAnalysis}${productInfoBlock}
-
-Write a comprehensive creative brief with these EXACT sections:
-
-## 1. OBJECTIVE
-What this ad should achieve.
-
-## 2. TARGET AUDIENCE
-Demographics, psychographics, pain points.
-
-## 3. KEY MESSAGE
-The single most important takeaway for ${product}.
-
-## 4. VISUAL REFERENCE GUIDE
-This is the MOST IMPORTANT section. Based on the competitor analysis above, describe the EXACT visual style to replicate:
-- **Background**: Exact colors, gradients, textures, lighting effects (reference the competitor's specific colors and mood)
-- **Composition**: Where the product sits, how much space it takes, focal point
-- **Lighting**: Direction, intensity, color cast, glow effects (match the competitor's lighting)
-- **Mood**: The emotional feel conveyed through visuals
-- **Effects**: Any particles, smoke, geometric shapes, energy effects, grain, etc.
-- **Color mapping**: Map competitor colors to ONEST brand colors (e.g., "competitor uses teal accents → replace with ONEST #FF3838 red")
-
-## 5. COPY DIRECTION
-Headlines, subheadlines, body copy, CTA text.
-
-## 6. BRAND ELEMENTS
-ONEST logo placement (top-right, white wordmark), brand colors usage.
-
-## 7. THREE IMAGE GENERATION PROMPTS
-Write 3 EXTREMELY DETAILED prompts (200+ words each) for an AI image generator. Each prompt describes ONLY the background/environment — no product, no text, no logo (those are composited separately).
-
-**VARIATION 1 PROMPT** (Similar style to competitor reference):
-Describe a background that closely matches the competitor's visual style — same color palette mapped to ONEST colours, same lighting direction, same mood, same texture effects. Be hyper-specific about colors, gradients, light positions, and effects.
-
-**VARIATION 2 PROMPT** (Different background style):
-Describe a distinctly different background that still works for the same product and audience. Different color emphasis, different lighting approach, different texture.
-
-**VARIATION 3 PROMPT** (Different background style):
-Describe another distinctly different background. Explore a different mood or visual approach while maintaining brand consistency.
-
-Each prompt MUST:
-- Specify exact colors as descriptive terms ("deep charcoal black", "warm amber orange", "electric crimson red")
-- Describe lighting direction and intensity
-- Describe textures and effects in detail
-- Mention composition (where to leave space for product placement)
-- Be written as a single continuous paragraph suitable for an AI image generator
-- End with: "Square format 1200x1200px. No text, no product, no logo, just background."
-
-Be extremely specific. Vague prompts produce generic images.`;
-
-  const res = await axios.post("https://api.anthropic.com/v1/messages", {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 6000,
-    system,
-    messages: [{ role: "user", content: prompt }],
-  }, {
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 120000,
-  });
-
-  const content = res.data?.content;
-  if (Array.isArray(content)) return content.map((c: any) => c.text || "").join("\n");
-  return content?.text || JSON.stringify(content);
-}
-
-// Review brief with 10-expert panel (reuse same expert structure)
-async function reviewBriefWithPanel(
-  brief: string,
-  product: string
-): Promise<{ reviewResult: any; finalBrief: string }> {
-  const { default: axios } = await import("axios");
-
-  const EXPERTS = [
-    "Direct Response Copywriting Expert",
-    "Consumer Psychology Expert",
-    "Visual Design & Creative Direction Expert",
-    "Persuasion & Influence Expert",
-    "Brand Strategy Expert",
-    "Emotional Storytelling Expert",
-    "Conversion Rate Optimization Expert",
-    "Social Media Advertising Expert",
-    "Behavioral Economics Expert",
-    "Audience Research & Targeting Expert",
-  ];
-
-  let currentBrief = brief;
-  const rounds: any[] = [];
-  let finalScore = 0;
-  let approved = false;
-
-  for (let round = 1; round <= 3; round++) {
-    console.log(`[Static] Brief review round ${round}...`);
-
-    const prompt = `You are 10 advertising experts reviewing a creative brief for ONEST Health's ${product} static ad.
-
-CREATIVE BRIEF:
-${currentBrief}
-
-Review as ALL 10 experts. For each expert, provide a score (0-100) and specific feedback about the brief's quality, completeness, and likelihood to produce a high-converting ad.
-
-Return EXACTLY this JSON format:
-{
-  "reviews": [
-    ${EXPERTS.map(e => `{"expertName": "${e}", "score": <number 75-100>, "feedback": "<2-3 sentences of specific feedback>"}`).join(",\n    ")}
-  ]
-}
-
-Be realistic. Round ${round} briefs should score 85-95. Provide constructive, specific feedback.`;
-
-    const res = await axios.post("https://api.anthropic.com/v1/messages", {
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: "You are simulating a panel of 10 advertising experts reviewing a creative brief.",
-      messages: [{ role: "user", content: prompt }],
-    }, {
-      headers: {
-        "x-api-key": ENV.anthropicApiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      timeout: 120000,
-    });
-
-    const responseText = Array.isArray(res.data?.content) ? res.data.content.map((c: any) => c.text || "").join("") : "";
-    let reviews: any[] = [];
-
-    try {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        reviews = (parsed.reviews || []).map((r: any) => ({
-          expertName: r.expertName || "Expert",
-          score: Math.min(100, Math.max(0, Number(r.score) || 85)),
-          feedback: r.feedback || "Good brief.",
-        }));
-      }
-    } catch (e) {
-      console.warn("[Static] Failed to parse brief review, using fallback scores");
-    }
-
-    if (reviews.length === 0) {
-      reviews = EXPERTS.map(name => ({
-        expertName: name,
-        score: 85 + round * 2 + Math.floor(Math.random() * 5),
-        feedback: "The brief demonstrates strong strategic thinking with room for minor refinements.",
-      }));
-    }
-
-    const avgScore = reviews.reduce((sum, r) => sum + r.score, 0) / reviews.length;
-    finalScore = Math.round(avgScore * 10) / 10;
-
-    rounds.push({
-      roundNumber: round,
-      averageScore: finalScore,
-      expertReviews: reviews,
-    });
-
-    if (avgScore >= 90) {
-      approved = true;
-      break;
-    }
-
-    // Iterate brief if not approved and not last round
-    if (round < 3) {
-      const feedback = reviews.filter(r => r.score < 90).map(r => `${r.expertName}: ${r.feedback}`).join("\n");
-      currentBrief = await iterateBrief(currentBrief, feedback, product);
-    } else {
-      approved = avgScore >= 85;
-    }
-  }
-
-  return {
-    reviewResult: { rounds, finalScore, approved },
-    finalBrief: currentBrief,
-  };
-}
-
-async function iterateBrief(brief: string, feedback: string, product: string): Promise<string> {
-  const { default: axios } = await import("axios");
-
-  const res = await axios.post("https://api.anthropic.com/v1/messages", {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system: `You are an expert creative director refining a creative brief for ONEST Health's ${product} product based on expert feedback.`,
-    messages: [{
-      role: "user",
-      content: `Improve this creative brief based on expert feedback:\n\nCURRENT BRIEF:\n${brief}\n\nEXPERT FEEDBACK:\n${feedback}\n\nReturn the improved brief. Make meaningful improvements while maintaining the core concept.`,
-    }],
-  }, {
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 120000,
-  });
-
-  const content = res.data?.content;
-  if (Array.isArray(content)) return content.map((c: any) => c.text || "").join("\n");
-  return content?.text || brief;
-}
-
-// Review generated creatives with 10-expert panel
-async function reviewCreativesWithPanel(
-  generatedImages: any[],
-  brief: string,
-  product: string
-): Promise<any> {
-  const { default: axios } = await import("axios");
-
-  const EXPERTS = [
-    "Direct Response Copywriting Expert",
-    "Consumer Psychology Expert",
-    "Visual Design & Creative Direction Expert",
-    "Persuasion & Influence Expert",
-    "Brand Strategy Expert",
-    "Emotional Storytelling Expert",
-    "Conversion Rate Optimization Expert",
-    "Social Media Advertising Expert",
-    "Behavioral Economics Expert",
-    "Audience Research & Targeting Expert",
-  ];
-
-  const imageDescriptions = generatedImages.map((img, i) => `Variation ${i + 1} (${img.variation}): ${img.url}`).join("\n");
-
-  const prompt = `You are 10 advertising experts reviewing 3 generated static ad creatives for ONEST Health's ${product} product.
-
-CREATIVE BRIEF THAT GUIDED GENERATION:
-${brief}
-
-GENERATED IMAGES:
-${imageDescriptions}
-
-Review the creatives against the brief. For each expert, score how well the generated creatives match the brief and their likelihood to convert.
-
-Return EXACTLY this JSON format:
-{
-  "reviews": [
-    ${EXPERTS.map(e => `{"expertName": "${e}", "score": <number 80-100>, "feedback": "<2-3 sentences about creative quality, brief adherence, and conversion potential>"}`).join(",\n    ")}
-  ],
-  "overallFeedback": "2-3 sentences summarizing the panel's consensus",
-  "suggestedAdjustments": ["adjustment 1", "adjustment 2"]
-}`;
-
-  const res = await axios.post("https://api.anthropic.com/v1/messages", {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system: "You are simulating a panel of 10 advertising experts reviewing generated static ad creatives.",
-    messages: [{ role: "user", content: prompt }],
-  }, {
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 120000,
-  });
-
-  const responseText = Array.isArray(res.data?.content) ? res.data.content.map((c: any) => c.text || "").join("") : "";
-
-  try {
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const reviews = (parsed.reviews || []).map((r: any) => ({
-        expertName: r.expertName || "Expert",
-        score: Math.min(100, Math.max(0, Number(r.score) || 88)),
-        feedback: r.feedback || "Good creative execution.",
-      }));
-      const avgScore = reviews.reduce((sum: number, r: any) => sum + r.score, 0) / reviews.length;
-      return {
-        reviews,
-        finalScore: Math.round(avgScore * 10) / 10,
-        approved: avgScore >= 85,
-        overallFeedback: parsed.overallFeedback || "",
-        suggestedAdjustments: parsed.suggestedAdjustments || [],
-      };
-    }
-  } catch (e) {
-    console.warn("[Static] Failed to parse creative review");
-  }
-
-  // Fallback
-  const fallbackReviews = EXPERTS.map(name => ({
-    expertName: name,
-    score: 88 + Math.floor(Math.random() * 8),
-    feedback: "The generated creatives demonstrate strong brand alignment and conversion potential.",
-  }));
-  const avgScore = fallbackReviews.reduce((sum, r) => sum + r.score, 0) / fallbackReviews.length;
-  return {
-    reviews: fallbackReviews,
-    finalScore: Math.round(avgScore * 10) / 10,
-    approved: true,
-    overallFeedback: "The creatives effectively translate the brief into compelling visual ads.",
-    suggestedAdjustments: [],
-  };
 }
 
 export type AppRouter = typeof appRouter;
