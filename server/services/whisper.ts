@@ -46,11 +46,12 @@ export async function extractAudio(videoUrl: string): Promise<string> {
 
     // Extract audio with ffmpeg-static binary
     console.log("[Whisper] Extracting audio with ffmpeg at:", FFMPEG_PATH);
-    const cmd = `"${FFMPEG_PATH}" -i "${videoPath}" -vn -acodec libmp3lame -ab 128k -ar 44100 -y "${audioPath}"`;
+    // Lower bitrate (64k) for faster extraction, lower sample rate (22050) to reduce processing time
+    const cmd = `"${FFMPEG_PATH}" -i "${videoPath}" -vn -acodec libmp3lame -ab 64k -ar 22050 -y "${audioPath}"`;
     console.log("[Whisper] Running command:", cmd);
     
     await execAsync(cmd, {
-      timeout: 120000,
+      timeout: 600000, // 10 minutes — long videos at slow speed need time
     });
 
     const audioSize = fs.statSync(audioPath).size;

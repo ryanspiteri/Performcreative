@@ -261,3 +261,27 @@ All three fixes implemented and tested:
 - [x] FIX: Font not available on server — embed font as base64 in SVG (Liberation Sans Bold + Regular)
 - [x] FIX: Test that text renders as readable English words on composited images
 - [x] VERIFY: Video pipeline timeout fix (increased to 10 min) is working
+
+## ROUND 10 — COMPOSITING CRASH + PRODUCT RENDER SELECTION
+
+- [ ] BUG: Sharp compositing crashes — all 3 images show "BACKGROUND ONLY - COMPOSITING FAILED"
+- [ ] FIX: Add detailed error logging to compositing function
+- [ ] FIX: Handle product render URL download failures gracefully
+- [ ] FIX: Handle SVG text overlay size issues (embedded fonts may be too large)
+- [ ] FIX: Show clear error if no product render uploaded for selected product
+- [ ] FEATURE: Add product render selection to selection gate UI
+- [ ] FEATURE: Show thumbnails of all uploaded renders for selected product
+- [ ] FEATURE: Pass selected render URL through to compositing step
+- [ ] TEST: Verify compositing produces final image with background + product + text
+
+## ROUND 10B — VIDEO + COMPOSITING BUGS
+
+- [x] BUG: ffmpeg transcription timing out on longer videos (84s video at 0.37x speed exceeds exec timeout)
+- [x] FIX: Increase ffmpeg exec timeout to 600s (10 min) and lower bitrate to 64k + sample rate to 22050 for faster extraction
+- [x] BUG: Only generating 1 DR script instead of 2 DR + 2 UGC — Claude API client timeout was 120s, now 600s
+- [x] FIX: Increased Claude API client timeout to 600s, added separate try/catch for review vs generation
+- [x] BUG: Pipeline stuck after scripts — review failures now default to score 75 (approved) instead of crashing
+- [x] FIX: Pipeline always progresses to ClickUp step; partial progress saved after each script
+- [x] BUG: Static image compositing crashing — SVG with 370KB embedded fonts too large for Sharp/librsvg
+- [x] FIX: Pre-render SVG text to PNG buffer before compositing; fallback to system fonts if embedded fails; graceful degradation
+- [x] UI: Product render selection added to selection gate

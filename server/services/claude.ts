@@ -10,7 +10,7 @@ const claudeClient = axios.create({
     "anthropic-version": "2023-06-01",
     "Content-Type": "application/json",
   },
-  timeout: 120000,
+  timeout: 600000, // 10 minutes — script generation + review can take a while
 });
 
 async function callClaude(messages: any[], system?: string, maxTokens = 4096): Promise<string> {

@@ -335,6 +335,7 @@ function StaticResults({ run }: { run: any }) {
         <SelectionGate
           runId={run.id}
           options={run.briefOptionsJson as any}
+          product={run.product || ""}
           onSubmitted={() => {}}
         />
       )}

@@ -10,6 +10,7 @@ import {
   CheckCircle,
   PenLine,
   X,
+  Package,
 } from "lucide-react";
 
 interface BriefOptions {
@@ -22,6 +23,7 @@ interface BriefOptions {
 interface SelectionGateProps {
   runId: number;
   options: BriefOptions;
+  product: string;
   onSubmitted: () => void;
 }
 
@@ -29,12 +31,22 @@ interface SelectionGateProps {
  * Selection Gate UI — Stage 3b
  *
  * User picks:
+ * - Product render (from uploaded renders for this product)
  * - 3 headlines (one per image) from 6 options OR writes custom
  * - 3 subheadlines (one per image) from 6 options OR writes custom OR picks NONE
  * - 1 background per image from 3 options
  * - Benefits are shared across all 3 images (editable)
  */
-export default function SelectionGate({ runId, options, onSubmitted }: SelectionGateProps) {
+export default function SelectionGate({ runId, options, product, onSubmitted }: SelectionGateProps) {
+  // Product render selection
+  const [selectedRenderUrl, setSelectedRenderUrl] = useState<string | null>(null);
+
+  // Fetch available renders for this product
+  const rendersQuery = trpc.renders.list.useQuery(
+    product ? { product } : undefined
+  );
+  const renders = rendersQuery.data || [];
+
   // Per-image selections
   const [headlines, setHeadlines] = useState<(string | null)[]>([null, null, null]);
   const [customHeadlines, setCustomHeadlines] = useState<string[]>(["", "", ""]);
@@ -98,7 +110,7 @@ export default function SelectionGate({ runId, options, onSubmitted }: Selection
       return;
     }
 
-    const selections = {
+    const selections: any = {
       images: [0, 1, 2].map(i => ({
         headline: getHeadline(i)!,
         subheadline: getSubheadline(i),
@@ -106,6 +118,11 @@ export default function SelectionGate({ runId, options, onSubmitted }: Selection
       })),
       benefits: finalBenefits,
     };
+
+    // Include product render URL if selected
+    if (selectedRenderUrl) {
+      selections.productRenderUrl = selectedRenderUrl;
+    }
 
     submitMutation.mutate({ runId, selections });
   }
@@ -119,11 +136,67 @@ export default function SelectionGate({ runId, options, onSubmitted }: Selection
           Stage 3b: Select Your Creative Direction
         </h2>
         <p className="text-gray-400 text-sm mt-1">
-          Choose headlines, subheadlines, backgrounds, and benefits for your 3 ad variations. You can also write your own.
+          Choose your product render, headlines, subheadlines, backgrounds, and benefits for your 3 ad variations.
         </p>
       </div>
 
       <div className="p-6 space-y-8">
+        {/* ============================================================ */}
+        {/* SECTION 0: PRODUCT RENDER — select which render to use */}
+        {/* ============================================================ */}
+        <div>
+          <h3 className="text-white font-semibold text-base mb-1 flex items-center gap-2">
+            <Package className="w-4 h-4 text-[#0347ED]" />
+            Product Render <span className="text-gray-500 text-xs font-normal">(used across all 3 images)</span>
+          </h3>
+          <p className="text-gray-500 text-xs mb-4">
+            Select which product render to use in the ad creatives. If none selected, the system will pick one automatically.
+          </p>
+
+          <div className="bg-[#01040A] rounded-lg p-4 border border-white/5">
+            {rendersQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading product renders...
+              </div>
+            ) : renders.length === 0 ? (
+              <div className="text-gray-500 text-sm">
+                No renders uploaded for <span className="text-white font-medium">{product}</span>.
+                The system will use a fallback render. Upload renders in the Product Render Manager for better results.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {renders.map((render: any) => (
+                  <button
+                    key={render.id}
+                    onClick={() => setSelectedRenderUrl(
+                      selectedRenderUrl === render.url ? null : render.url
+                    )}
+                    className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                      selectedRenderUrl === render.url
+                        ? "border-[#0347ED] ring-2 ring-[#0347ED]/30"
+                        : "border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <img
+                      src={render.url}
+                      alt={render.fileName}
+                      className="w-full aspect-square object-contain bg-[#191B1F]"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1.5">
+                      <p className="text-white text-xs truncate">{render.fileName}</p>
+                    </div>
+                    {selectedRenderUrl === render.url && (
+                      <div className="absolute top-2 right-2 bg-[#0347ED] rounded-full p-1">
+                        <CheckCircle className="w-3.5 h-3.5 text-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* ============================================================ */}
         {/* SECTION 1: HEADLINES — one per image */}
         {/* ============================================================ */}
@@ -381,7 +454,7 @@ export default function SelectionGate({ runId, options, onSubmitted }: Selection
             {!useCustomBenefits && (
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex-1 bg-[#191B1F] border border-[#FF3838]/30 rounded-lg px-4 py-3">
-                  <span className="text-white text-sm font-medium">★ {benefits} ★</span>
+                  <span className="text-white text-sm font-medium">{benefits}</span>
                 </div>
                 <button
                   onClick={() => setUseCustomBenefits(true)}
@@ -438,6 +511,10 @@ export default function SelectionGate({ runId, options, onSubmitted }: Selection
                 >
                   <div className="text-xs font-bold text-gray-400 mb-2">{imageLabels[i]}</div>
                   <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-gray-500 text-xs">Product Render:</span>
+                      <p className="text-gray-300">{selectedRenderUrl ? "Selected" : "(auto)"}</p>
+                    </div>
                     <div>
                       <span className="text-gray-500 text-xs">Headline:</span>
                       <p className={`font-semibold ${h ? "text-white" : "text-red-400"}`}>
