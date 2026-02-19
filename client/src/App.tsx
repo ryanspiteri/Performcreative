@@ -11,6 +11,8 @@ import ManualTrigger from "./pages/ManualTrigger";
 import Results from "./pages/Results";
 import Settings from "./pages/Settings";
 import StaticPipeline from "./pages/StaticPipeline";
+import ProductRenders from "./pages/ProductRenders";
+import ProductInfoHub from "./pages/ProductInfoHub";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -21,6 +23,8 @@ function AuthenticatedRoutes() {
         <Route path="/" component={BrowseCreatives} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/browse" component={BrowseCreatives} />
+        <Route path="/renders" component={ProductRenders} />
+        <Route path="/product-info" component={ProductInfoHub} />
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />
         <Route path="/results/:id" component={Results} />

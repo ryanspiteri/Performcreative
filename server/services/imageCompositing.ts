@@ -2,7 +2,8 @@ import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { PRODUCT_RENDERS, LOGOS } from "../config/brandAssets";
+import { LOGOS } from "../config/brandAssets";
+import * as db from "../db";
 
 interface CompositeResult {
   url: string;
@@ -11,9 +12,12 @@ interface CompositeResult {
 
 /**
  * Generate 3 variations of static ads by:
- * 1. Generating 3 different background variations using nano banana image generation
- * 2. Compositing the actual product render from S3 CDN on top of each background using Sharp
- * 3. Adding ONEST branding and logo
+ * 1. Pulling a product render from the Product Render Manager (DB/S3)
+ * 2. Generating 3 different background variations using nano banana image generation
+ * 3. Compositing the actual product render on top of each background using Sharp
+ * 4. Adding ONEST branding and logo
+ *
+ * Falls back to hardcoded CDN URLs if no renders are uploaded for the product.
  */
 export async function generateStaticAdVariations(
   _productRenderPath: string,
@@ -24,12 +28,51 @@ export async function generateStaticAdVariations(
 ): Promise<CompositeResult[]> {
   console.log("[ImageCompositing] Starting static ad generation with 3 variations");
 
-  // Select a random product render from the real S3 CDN URLs
-  const renderKeys = Object.keys(PRODUCT_RENDERS);
-  const randomRenderKey = renderKeys[Math.floor(Math.random() * renderKeys.length)];
-  const productRenderUrl = PRODUCT_RENDERS[randomRenderKey as keyof typeof PRODUCT_RENDERS];
+  // Pull product render from DB (Product Render Manager)
+  let productRenderUrl: string;
+  try {
+    const renders = await db.getProductRendersByProduct(product);
+    if (renders.length > 0) {
+      // Pick a random render from the uploaded ones
+      const chosen = renders[Math.floor(Math.random() * renders.length)];
+      productRenderUrl = chosen.url;
+      console.log(`[ImageCompositing] Using uploaded render for ${product}: ${chosen.fileName}`);
+    } else {
+      // Fallback: try any product's renders
+      const allRenders = await db.listProductRenders();
+      if (allRenders.length > 0) {
+        const chosen = allRenders[Math.floor(Math.random() * allRenders.length)];
+        productRenderUrl = chosen.url;
+        console.log(`[ImageCompositing] No renders for ${product}, using fallback: ${chosen.fileName}`);
+      } else {
+        // Last resort: use a placeholder
+        productRenderUrl = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
+        console.log("[ImageCompositing] No renders uploaded at all, using hardcoded fallback");
+      }
+    }
+  } catch (err: any) {
+    console.warn("[ImageCompositing] Failed to fetch renders from DB:", err.message);
+    productRenderUrl = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
+  }
+
   const logoUrl = LOGOS.wordmark_white;
-  console.log("[ImageCompositing] Using product render:", randomRenderKey);
+
+  // Pull product info from DB for better prompts
+  let productContext = "";
+  try {
+    const info = await db.getProductInfo(product);
+    if (info) {
+      const parts: string[] = [];
+      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
+      if (info.keySellingPoints) parts.push(`Key selling points: ${info.keySellingPoints}`);
+      if (info.targetAudience) parts.push(`Target audience: ${info.targetAudience}`);
+      if (info.claims) parts.push(`Claims: ${info.claims}`);
+      productContext = parts.join(". ");
+      console.log(`[ImageCompositing] Loaded product info for ${product}: ${productContext.slice(0, 100)}...`);
+    }
+  } catch (err: any) {
+    console.warn("[ImageCompositing] Failed to fetch product info:", err.message);
+  }
 
   // Generate 3 background variations using nano banana
   const { generateImage } = await import("../_core/imageGeneration");
@@ -39,12 +82,16 @@ export async function generateStaticAdVariations(
     ? `\n\nIMPORTANT ADJUSTMENTS BASED ON TEAM FEEDBACK:\n${teamFeedback}`
     : "";
 
+  const productClause = productContext
+    ? `\nProduct context: ${product} — ${productContext}`
+    : `\nProduct: ${product} health supplement`;
+
   const backgroundPrompts = [
-    `Premium health supplement advertisement background. Dark modern aesthetic with deep black base. Geometric shapes, subtle gradients, and energy effects in orange and electric blue. Similar style to the competitor reference but unique. Include ample space in center for a product bottle. Professional fitness/health vibe. No text, no product, just background. 1200x1200px.${feedbackClause}`,
+    `Premium health supplement advertisement background. Dark modern aesthetic with deep black base. Geometric shapes, subtle gradients, and energy effects in orange and electric blue. Similar style to the competitor reference but unique. Include ample space in center for a product bottle. Professional fitness/health vibe. No text, no product, just background. 1200x1200px.${productClause}${feedbackClause}`,
 
-    `Dynamic health supplement ad background. Dark background with vibrant energy effects, lightning patterns in warm orange and cool blue tones. Modern, high-energy aesthetic. Product-centric composition with clear breathing room in center. Professional supplement brand look. No text, no product, just background. 1200x1200px.${feedbackClause}`,
+    `Dynamic health supplement ad background. Dark background with vibrant energy effects, lightning patterns in warm orange and cool blue tones. Modern, high-energy aesthetic. Product-centric composition with clear breathing room in center. Professional supplement brand look. No text, no product, just background. 1200x1200px.${productClause}${feedbackClause}`,
 
-    `Minimalist premium supplement ad background. Clean dark aesthetic with subtle textures, soft lighting, and refined composition. Sophisticated health brand feel. Ample space in center for product placement. Accent colors: warm orange and cool blue. Modern, premium, trustworthy vibe. No text, no product, just background. 1200x1200px.${feedbackClause}`,
+    `Minimalist premium supplement ad background. Clean dark aesthetic with subtle textures, soft lighting, and refined composition. Sophisticated health brand feel. Ample space in center for product placement. Accent colors: warm orange and cool blue. Modern, premium, trustworthy vibe. No text, no product, just background. 1200x1200px.${productClause}${feedbackClause}`,
   ];
 
   for (let i = 0; i < 3; i++) {

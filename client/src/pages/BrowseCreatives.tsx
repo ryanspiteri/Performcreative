@@ -15,13 +15,13 @@ type Creative = {
   mediaUrl?: string;
 };
 
-const PRODUCTS = ["HB", "HyperBurn", "SuperGreens", "EAA", "Creatine", "Pre-Workout"];
+const PRODUCTS = ["Hyperburn", "Thermosleep", "Hyperload", "Thermoburn", "Carb Control"];
 const PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
 
 export default function BrowseCreatives() {
   const [filterType, setFilterType] = useState<"All" | "VIDEO" | "STATIC">("All");
   const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
-  const [product, setProduct] = useState("HB");
+  const [product, setProduct] = useState("Hyperburn");
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>("Medium");
   const [, setLocation] = useLocation();
 

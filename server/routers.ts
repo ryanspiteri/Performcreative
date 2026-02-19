@@ -12,6 +12,8 @@ import { createMultipleScriptTasks } from "./services/clickup";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
+import { storagePut } from "./storage";
+import { ACTIVE_PRODUCTS } from "../drizzle/schema";
 
 const VALID_USERNAME = "ONEST";
 const VALID_PASSWORD = "UnlockGrowth";
@@ -145,6 +147,11 @@ export const appRouter = router({
         return { runId, status: "running" };
       }),
 
+    // Get active products list
+    getActiveProducts: publicProcedure.query(() => {
+      return ACTIVE_PRODUCTS;
+    }),
+
     // Team approval endpoint for Stage 6
     teamApprove: publicProcedure
       .input(z.object({
@@ -187,6 +194,86 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // ============================================================
+  // PRODUCT RENDER MANAGER
+  // ============================================================
+  renders: router({
+    list: publicProcedure
+      .input(z.object({ product: z.string().optional() }).optional())
+      .query(async ({ input }) => {
+        return db.listProductRenders(input?.product);
+      }),
+
+    upload: publicProcedure
+      .input(z.object({
+        product: z.string(),
+        fileName: z.string(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        // Decode base64 to buffer
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const fileSize = buffer.length;
+
+        // Upload to S3
+        const suffix = Math.random().toString(36).slice(2, 10);
+        const fileKey = `product-renders/${input.product}/${input.fileName}-${suffix}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+
+        // Save to database
+        const id = await db.createProductRender({
+          product: input.product,
+          fileName: input.fileName,
+          fileKey,
+          url,
+          mimeType: input.mimeType,
+          fileSize,
+        });
+
+        return { id, url, fileKey };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteProductRender(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================================
+  // PRODUCT INFORMATION HUB
+  // ============================================================
+  productInfo: router({
+    list: publicProcedure.query(async () => {
+      return db.listAllProductInfo();
+    }),
+
+    get: publicProcedure
+      .input(z.object({ product: z.string() }))
+      .query(async ({ input }) => {
+        return db.getProductInfo(input.product);
+      }),
+
+    upsert: publicProcedure
+      .input(z.object({
+        product: z.string(),
+        ingredients: z.string().optional(),
+        benefits: z.string().optional(),
+        claims: z.string().optional(),
+        targetAudience: z.string().optional(),
+        keySellingPoints: z.string().optional(),
+        flavourVariants: z.string().optional(),
+        pricing: z.string().optional(),
+        additionalNotes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await db.upsertProductInfo(input);
+        return { id, success: true };
+      }),
+  }),
 });
 
 // ============================================================
@@ -202,6 +289,27 @@ async function runVideoPipeline(runId: number, input: {
   thumbnailUrl?: string;
 }) {
   console.log(`[Pipeline] Starting video pipeline run #${runId} for ad: ${input.foreplayAdTitle}`);
+
+  // Fetch product info from DB for AI context
+  let productInfoContext = "";
+  try {
+    const info = await db.getProductInfo(input.product);
+    if (info) {
+      const parts: string[] = [];
+      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
+      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
+      if (info.claims) parts.push(`Claims: ${info.claims}`);
+      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
+      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
+      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
+      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
+      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
+      productInfoContext = parts.join("\n");
+      console.log(`[Pipeline] Loaded product info for ${input.product}: ${productInfoContext.slice(0, 100)}...`);
+    }
+  } catch (err: any) {
+    console.warn("[Pipeline] Failed to load product info:", err.message);
+  }
 
   // Step 1: Transcribe video (using the SELECTED video, not first from board)
   console.log("[Pipeline] Step 1: Transcribing video from:", input.mediaUrl);
@@ -249,7 +357,7 @@ async function runVideoPipeline(runId: number, input: {
     try {
       console.log(`[Pipeline] Generating ${config.type}${config.num}...`);
       const script = await withTimeout(
-        generateScripts(transcript, visualAnalysis, input.product, config.type, config.num),
+        generateScripts(transcript, visualAnalysis, input.product, config.type, config.num, productInfoContext),
         STEP_TIMEOUT, `Script ${config.type}${config.num}`
       );
       console.log(`[Pipeline] Running expert review for ${config.type}${config.num}...`);
@@ -319,6 +427,27 @@ async function runStaticPipeline(runId: number, input: {
   console.log(`[Pipeline] Starting 7-stage static pipeline run #${runId}`);
   const ad = input.selectedAdImage;
 
+  // Fetch product info from DB for AI context
+  let productInfoContext = "";
+  try {
+    const info = await db.getProductInfo(input.product);
+    if (info) {
+      const parts: string[] = [];
+      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
+      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
+      if (info.claims) parts.push(`Claims: ${info.claims}`);
+      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
+      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
+      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
+      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
+      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
+      productInfoContext = parts.join("\n");
+      console.log(`[Static] Loaded product info for ${input.product}: ${productInfoContext.slice(0, 100)}...`);
+    }
+  } catch (err: any) {
+    console.warn("[Static] Failed to load product info:", err.message);
+  }
+
   // ---- STAGE 1: Claude Vision analyzes the competitor static ad ----
   console.log("[Static] Stage 1: Analyzing competitor static ad...");
   await db.updatePipelineRun(runId, { staticStage: "stage_1_analysis" });
@@ -338,7 +467,7 @@ async function runStaticPipeline(runId: number, input: {
   await db.updatePipelineRun(runId, { staticStage: "stage_2_brief" });
   let brief: string;
   try {
-    brief = await withTimeout(generateCreativeBrief(analysis, input.product, ad.brandName || "Competitor"), STAGE_TIMEOUT, "Stage 2: Brief");
+    brief = await withTimeout(generateCreativeBrief(analysis, input.product, ad.brandName || "Competitor", productInfoContext), STAGE_TIMEOUT, "Stage 2: Brief");
     console.log("[Static] Stage 2 complete, brief length:", brief.length);
   } catch (err: any) {
     console.error("[Static] Stage 2 failed:", err.message);
@@ -491,16 +620,19 @@ async function runStaticRevision(runId: number, run: any, teamNotes: string) {
 async function generateCreativeBrief(
   competitorAnalysis: string,
   product: string,
-  competitorBrand: string
+  competitorBrand: string,
+  productInfoContext?: string
 ): Promise<string> {
   const { default: axios } = await import("axios");
 
   const system = `You are an expert creative director writing a detailed creative brief for ONEST Health, an Australian health supplement brand. You write briefs that are specific, actionable, and designed to produce high-converting static ad creatives.`;
 
+  const productInfoBlock = productInfoContext ? `\n\nPRODUCT INFORMATION FOR ${product}:\n${productInfoContext}\n\nUse this product information to make the brief specific and accurate.` : "";
+
   const prompt = `Based on this competitor analysis, write a detailed creative brief for an ONEST Health ${product} static ad.
 
 COMPETITOR ANALYSIS:
-${competitorAnalysis}
+${competitorAnalysis}${productInfoBlock}
 
 Write a comprehensive creative brief covering:
 

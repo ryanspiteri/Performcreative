@@ -149,3 +149,17 @@ All three fixes implemented and tested:
 - Video pipeline saves partial results after each script (so partial progress is visible)
 - Stale runs from previous server instances marked as failed automatically
 - All 12 tests passing
+
+## ROUND 5 — NEW FEATURES
+
+- [x] FEATURE 1: Product Render Manager — DB schema for product_renders table
+- [x] FEATURE 1: Product Render Manager — S3 upload endpoint via tRPC
+- [x] FEATURE 1: Product Render Manager — Gallery page with upload, view by product, delete
+- [x] FEATURE 1: Product Render Manager — Pipeline pulls renders from DB instead of hardcoded URLs
+- [x] FEATURE 2: Product Information Hub — DB schema for product_info table
+- [x] FEATURE 2: Product Information Hub — CRUD tRPC procedures for product data
+- [x] FEATURE 2: Product Information Hub — UI page with forms for ingredients, benefits, claims, audience, selling points, flavours, pricing
+- [x] FEATURE 2: Product Information Hub — Pipeline pulls product info into briefs and scripts automatically
+- [x] FEATURE 3: Trim product list to 5 active products (Hyperburn, Thermosleep, Hyperload, Thermoburn, Carb Control)
+- [x] NAV: Add Product Renders and Product Info to sidebar navigation
+- [x] TEST: Write tests for new endpoints

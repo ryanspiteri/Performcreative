@@ -96,7 +96,8 @@ export async function generateScripts(
   visualAnalysis: string,
   product: string,
   scriptType: "DR" | "UGC",
-  scriptNumber: number
+  scriptNumber: number,
+  productInfoContext?: string
 ): Promise<{ title: string; hook: string; script: Array<{ timestamp: string; visual: string; dialogue: string }>; visualDirection: string; strategicThesis: string }> {
   const system = `You are an expert direct response copywriter and creative strategist for ONEST Health, an Australian health supplement brand known for transparency, quality ingredients, and authentic marketing. You create compelling video ad scripts that drive conversions.`;
 
@@ -104,13 +105,15 @@ export async function generateScripts(
     ? "Direct Response ad script that uses proven DR frameworks (problem-agitate-solve, before/after, social proof)" 
     : "User-Generated Content (UGC) style script that feels authentic, relatable, and filmed-on-phone";
 
+  const productInfoBlock = productInfoContext ? `\n\nPRODUCT INFORMATION:\n${productInfoContext}` : "";
+
   const prompt = `Based on the following competitor analysis and transcript, create a ${scriptTypeDesc} for ONEST Health's ${product} product.
 
 COMPETITOR TRANSCRIPT:
 ${transcript}
 
 VISUAL ANALYSIS:
-${visualAnalysis}
+${visualAnalysis}${productInfoBlock}
 
 Create script #${scriptNumber} of type ${scriptType}. Make it unique from other scripts.
 

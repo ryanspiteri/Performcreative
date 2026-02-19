@@ -1,9 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Zap, Settings, LogOut, Image } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText } from "lucide-react";
 
 const navItems = [
   { icon: Image, label: "Browse Creatives", path: "/" },
+  { icon: ImagePlus, label: "Product Renders", path: "/renders" },
+  { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
@@ -27,11 +29,61 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-2 space-y-1">
-          {navItems.map((item) => {
-            const isActive = location === item.path || 
-              (item.path === "/" && location === "/browse");
+        {/* Section: Pipeline */}
+        <div className="px-3 pt-4 pb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Pipeline</p>
+        </div>
+        <nav className="px-3 space-y-0.5">
+          {navItems.slice(0, 1).map((item) => {
+            const isActive = location === item.path || (item.path === "/" && location === "/browse");
+            return (
+              <button
+                key={item.path}
+                onClick={() => setLocation(item.path)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? "bg-white/10 text-white"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <item.icon className="w-4 h-4" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Section: Products */}
+        <div className="px-3 pt-5 pb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Products</p>
+        </div>
+        <nav className="px-3 space-y-0.5">
+          {navItems.slice(1, 3).map((item) => {
+            const isActive = location === item.path;
+            return (
+              <button
+                key={item.path}
+                onClick={() => setLocation(item.path)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? "bg-white/10 text-white"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <item.icon className="w-4 h-4" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Section: System */}
+        <div className="px-3 pt-5 pb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
+        </div>
+        <nav className="flex-1 px-3 space-y-0.5">
+          {navItems.slice(3).map((item) => {
+            const isActive = location === item.path;
             return (
               <button
                 key={item.path}

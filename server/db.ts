@@ -1,11 +1,10 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -115,4 +114,75 @@ export async function listPipelineRuns(limit = 50) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.select().from(pipelineRuns).orderBy(desc(pipelineRuns.createdAt)).limit(limit);
+}
+
+// ============================================================
+// Product Render helpers
+// ============================================================
+export async function createProductRender(data: InsertProductRender) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(productRenders).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function listProductRenders(product?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (product) {
+    return db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.createdAt));
+  }
+  return db.select().from(productRenders).orderBy(desc(productRenders.createdAt));
+}
+
+export async function getProductRendersByProduct(product: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.createdAt));
+}
+
+export async function deleteProductRender(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(productRenders).where(eq(productRenders.id, id));
+}
+
+// ============================================================
+// Product Info helpers
+// ============================================================
+export async function getProductInfo(product: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(productInfo).where(eq(productInfo.product, product)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function listAllProductInfo() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(productInfo).orderBy(productInfo.product);
+}
+
+export async function upsertProductInfo(data: InsertProductInfo) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db.select().from(productInfo).where(eq(productInfo.product, data.product)).limit(1);
+
+  if (existing.length > 0) {
+    await db.update(productInfo).set({
+      ingredients: data.ingredients,
+      benefits: data.benefits,
+      claims: data.claims,
+      targetAudience: data.targetAudience,
+      keySellingPoints: data.keySellingPoints,
+      flavourVariants: data.flavourVariants,
+      pricing: data.pricing,
+      additionalNotes: data.additionalNotes,
+    }).where(eq(productInfo.product, data.product));
+    return existing[0].id;
+  } else {
+    const result = await db.insert(productInfo).values(data);
+    return (result as any)[0]?.insertId;
+  }
 }
