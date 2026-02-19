@@ -1,0 +1,50 @@
+{
+  "query": "SELECT id, type, title, thumbnailUrl, imageUrl, mediaUrl FROM foreplay_creatives WHERE type = 'STATIC' ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, type, title, thumbnailUrl, imageUrl, mediaUrl FROM foreplay_creatives WHERE type = 'STATIC' ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "30007",
+      "type": "STATIC",
+      "title": "Inno Supps",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30006",
+      "type": "STATIC",
+      "title": "Inno Supps",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30005",
+      "type": "STATIC",
+      "title": "Happy Mammoth",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30004",
+      "type": "STATIC",
+      "title": "Happy Mammoth",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "26",
+      "type": "STATIC",
+      "title": "🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "https://r2.foreplay.co/419b943031d34cd6308b589101351adb7ab95419ade1b068200882bb76503889.jpg",
+      "mediaUrl": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\ttype\ttitle\tthumbnailUrl\timageUrl\tmediaUrl\n30007\tSTATIC\tInno Supps\tNULL\tNULL\tNULL\n30006\tSTATIC\tInno Supps\tNULL\tNULL\tNULL\n30005\tSTATIC\tHappy Mammoth\tNULL\tNULL\tNULL\n30004\tSTATIC\tHappy Mammoth\tNULL\tNULL\tNULL\n26\tSTATIC\t🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌\tNULL\thttps://r2.foreplay.co/419b943031d34cd6308b589101351adb7ab95419ade1b068200882bb76503889.jpg\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1525
+}

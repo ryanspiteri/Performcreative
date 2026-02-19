@@ -97,7 +97,7 @@ function normalizeAds(ads: any[]): ForeplayAd[] {
       title: ad.headline || ad.name || ad.description?.slice(0, 80) || "Untitled Ad",
       brandName: ad.name || "",
       mediaUrl: ad.video || "",           // video URL
-      thumbnailUrl: ad.thumbnail || "",   // thumbnail image
+      thumbnailUrl: ad.thumbnail || ad.image || "",   // thumbnail image, fallback to image for static ads
       imageUrl: ad.image || "",           // static image URL
       mediaType: (ad.display_format || "").toLowerCase(),
       platform: ad.publisher_platform || "facebook",

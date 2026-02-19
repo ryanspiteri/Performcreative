@@ -159,6 +159,7 @@ export const appRouter = router({
         title: c.title,
         brandName: c.brandName,
         imageUrl: c.imageUrl,
+        thumbnailUrl: c.thumbnailUrl,
         isNew: c.isNew === 1,
       }));
     }),

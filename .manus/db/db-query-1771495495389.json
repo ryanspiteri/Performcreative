@@ -1,0 +1,66 @@
+{
+  "query": "SELECT id, type, title, thumbnailUrl, imageUrl, mediaUrl FROM foreplay_creatives WHERE isNew = 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, type, title, thumbnailUrl, imageUrl, mediaUrl FROM foreplay_creatives WHERE isNew = 1;",
+  "rows": [
+    {
+      "id": "30001",
+      "type": "VIDEO",
+      "title": "Happy Mammoth",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30002",
+      "type": "VIDEO",
+      "title": "Happy Mammoth",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30003",
+      "type": "VIDEO",
+      "title": "Lucent Globe",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30004",
+      "type": "STATIC",
+      "title": "Happy Mammoth",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30005",
+      "type": "STATIC",
+      "title": "Happy Mammoth",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30006",
+      "type": "STATIC",
+      "title": "Inno Supps",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    },
+    {
+      "id": "30007",
+      "type": "STATIC",
+      "title": "Inno Supps",
+      "thumbnailUrl": "NULL",
+      "imageUrl": "NULL",
+      "mediaUrl": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\ttype\ttitle\tthumbnailUrl\timageUrl\tmediaUrl\n30001\tVIDEO\tHappy Mammoth\tNULL\tNULL\tNULL\n30002\tVIDEO\tHappy Mammoth\tNULL\tNULL\tNULL\n30003\tVIDEO\tLucent Globe\tNULL\tNULL\tNULL\n30004\tSTATIC\tHappy Mammoth\tNULL\tNULL\tNULL\n30005\tSTATIC\tHappy Mammoth\tNULL\tNULL\tNULL\n30006\tSTATIC\tInno Supps\tNULL\tNULL\tNULL\n30007\tSTATIC\tInno Supps\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1611
+}

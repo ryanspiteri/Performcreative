@@ -82,6 +82,7 @@ export default function BrowseCreatives() {
       brandName: ad.brandName || "Unknown",
       imageUrl: ad.imageUrl,
       thumbnailUrl: ad.thumbnailUrl,
+      mediaUrl: ad.mediaUrl,
       isNew: ad.isNew,
     }));
 
@@ -262,9 +263,9 @@ export default function BrowseCreatives() {
                               <Play className="w-8 h-8 text-white fill-white" />
                             </div>
                           </>
-                        ) : creative.type === "STATIC" && creative.imageUrl ? (
+                        ) : creative.type === "STATIC" && (creative.imageUrl || creative.thumbnailUrl) ? (
                           <img
-                            src={creative.imageUrl}
+                            src={creative.imageUrl || creative.thumbnailUrl}
                             alt={creative.title}
                             className="w-full h-full object-cover"
                           />
