@@ -1,0 +1,13 @@
+{
+  "query": "SELECT COUNT(*) as count FROM product_renders;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT COUNT(*) as count FROM product_renders;",
+  "rows": [
+    {
+      "count": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "count\n1\n",
+  "stderr": "",
+  "execution_time_ms": 1598
+}

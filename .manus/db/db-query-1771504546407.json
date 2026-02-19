@@ -1,0 +1,15 @@
+{
+  "query": "SELECT id, title, type FROM foreplay_creatives WHERE type = 'STATIC' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, title, type FROM foreplay_creatives WHERE type = 'STATIC' LIMIT 1;",
+  "rows": [
+    {
+      "id": "120008",
+      "title": "Happy Mammoth",
+      "type": "STATIC"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\ttitle\ttype\n120008\tHappy Mammoth\tSTATIC\n",
+  "stderr": "",
+  "execution_time_ms": 1522
+}

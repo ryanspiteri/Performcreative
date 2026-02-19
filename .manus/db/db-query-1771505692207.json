@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, product, fileName, url FROM product_renders;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, product, fileName, url FROM product_renders;",
+  "rows": [
+    {
+      "id": "1",
+      "product": "Hyperburn",
+      "fileName": "2025_NEW_HB_RENDER-GRAPE.png",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tproduct\tfileName\turl\n1\tHyperburn\t2025_NEW_HB_RENDER-GRAPE.png\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm\n",
+  "stderr": "",
+  "execution_time_ms": 1602
+}

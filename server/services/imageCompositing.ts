@@ -225,7 +225,8 @@ function buildAdHtml(
     }
 
     .product-container img {
-      max-width: ${productWidth}px;
+      width: ${productWidth}px;
+      height: auto;
       max-height: ${Math.floor(height * 0.40)}px;
       object-fit: contain;
       filter: drop-shadow(0 8px 30px rgba(255, 56, 56, 0.25)) drop-shadow(0 4px 15px rgba(0,0,0,0.5));
