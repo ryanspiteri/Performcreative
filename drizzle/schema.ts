@@ -98,3 +98,33 @@ export const productInfo = mysqlTable("product_info", {
 
 export type ProductInfo = typeof productInfo.$inferSelect;
 export type InsertProductInfo = typeof productInfo.$inferInsert;
+
+/**
+ * Locally cached Foreplay creatives.
+ * Auto-synced hourly and on manual trigger.
+ * foreplayAdId is unique to prevent duplicates.
+ */
+export const foreplayCreatives = mysqlTable("foreplay_creatives", {
+  id: int("id").autoincrement().primaryKey(),
+  foreplayAdId: varchar("foreplayAdId", { length: 256 }).notNull().unique(),
+  type: mysqlEnum("type", ["VIDEO", "STATIC"]).notNull(),
+  board: varchar("board", { length: 64 }).notNull(), // "inspo" or "static_inspo"
+  title: text("title"),
+  brandName: varchar("brandName", { length: 256 }),
+  thumbnailUrl: text("thumbnailUrl"),
+  imageUrl: text("imageUrl"),
+  mediaUrl: text("mediaUrl"),
+  mediaType: varchar("mediaType", { length: 64 }),
+  platform: varchar("platform", { length: 64 }),
+  description: text("description"),
+  headline: text("headline"),
+  displayFormat: varchar("displayFormat", { length: 64 }),
+  transcription: text("transcription"),
+  foreplayCreatedAt: varchar("foreplayCreatedAt", { length: 128 }),
+  isNew: int("isNew").default(1).notNull(), // 1 = new, 0 = seen
+  syncedAt: timestamp("syncedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ForeplayCreative = typeof foreplayCreatives.$inferSelect;
+export type InsertForeplayCreative = typeof foreplayCreatives.$inferInsert;

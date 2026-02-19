@@ -1,0 +1,23 @@
+CREATE TABLE `foreplay_creatives` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`foreplayAdId` varchar(256) NOT NULL,
+	`type` enum('VIDEO','STATIC') NOT NULL,
+	`board` varchar(64) NOT NULL,
+	`title` text,
+	`brandName` varchar(256),
+	`thumbnailUrl` text,
+	`imageUrl` text,
+	`mediaUrl` text,
+	`mediaType` varchar(64),
+	`platform` varchar(64),
+	`description` text,
+	`headline` text,
+	`displayFormat` varchar(64),
+	`transcription` text,
+	`foreplayCreatedAt` varchar(128),
+	`isNew` int NOT NULL DEFAULT 1,
+	`syncedAt` timestamp NOT NULL DEFAULT (now()),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `foreplay_creatives_id` PRIMARY KEY(`id`),
+	CONSTRAINT `foreplay_creatives_foreplayAdId_unique` UNIQUE(`foreplayAdId`)
+);

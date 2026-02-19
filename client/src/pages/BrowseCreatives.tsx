@@ -13,6 +13,7 @@ type Creative = {
   thumbnailUrl?: string;
   imageUrl?: string;
   mediaUrl?: string;
+  isNew?: boolean;
 };
 
 const PRODUCTS = ["Hyperburn", "Thermosleep", "Hyperload", "Thermoburn", "Carb Control"];
@@ -28,6 +29,16 @@ export default function BrowseCreatives() {
   // Fetch both video and static ads
   const videosQuery = trpc.pipeline.fetchForeplayVideos.useQuery();
   const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery();
+  const syncMutation = trpc.pipeline.syncForeplayNow.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      videosQuery.refetch();
+      staticsQuery.refetch();
+    },
+    onError: (err) => {
+      toast.error("Sync failed: " + err.message);
+    },
+  });
 
   // FEATURE 2: Fetch pipeline history to show badges
   const pipelineHistory = trpc.pipeline.list.useQuery();
@@ -127,15 +138,32 @@ export default function BrowseCreatives() {
 
   const isLoading = videosQuery.isLoading || staticsQuery.isLoading;
   const isPending = triggerVideoMutation.isPending || triggerStaticMutation.isPending;
+  const isSyncing = syncMutation.isPending;
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Browse Creatives</h1>
-        <p className="text-gray-400 text-sm">
-          Select a video or static ad from Foreplay to use as reference for your pipeline
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Browse Creatives</h1>
+          <p className="text-gray-400 text-sm">
+            Select a video or static ad from Foreplay to use as reference for your pipeline
+          </p>
+        </div>
+        <Button
+          onClick={() => syncMutation.mutate()}
+          disabled={isSyncing}
+          className="bg-[#0347ED] hover:bg-[#0347ED]/90 text-white h-10 text-sm whitespace-nowrap"
+        >
+          {isSyncing ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Syncing...
+            </>
+          ) : (
+            "Sync from Foreplay"
+          )}
+        </Button>
       </div>
 
       {/* Filter Tabs */}
@@ -182,7 +210,14 @@ export default function BrowseCreatives() {
                           : "border-white/10 hover:border-white/20"
                       }`}
                     >
-                      {/* FEATURE 2: Pipeline History Badge */}
+                      {/* NEW badge */}
+                      {creative.isNew && (
+                        <div className="absolute top-2 right-2 z-10 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          NEW
+                        </div>
+                      )}
+
+                      {/* Pipeline History Badge */}
                       {pipelineStatus && (
                         <div className="absolute top-2 left-2 z-10">
                           <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold backdrop-blur-sm ${

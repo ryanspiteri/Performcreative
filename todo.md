@@ -285,3 +285,19 @@ All three fixes implemented and tested:
 - [x] BUG: Static image compositing crashing — SVG with 370KB embedded fonts too large for Sharp/librsvg
 - [x] FIX: Pre-render SVG text to PNG buffer before compositing; fallback to system fonts if embedded fails; graceful degradation
 - [x] UI: Product render selection added to selection gate
+
+## ROUND 11 — AUTO-SYNC FROM FOREPLAY
+
+- [x] DB: Add `foreplay_creatives` table with foreplay_ad_id, type, thumbnail, video_url, brand, title, board, metadata, synced_at, is_new
+- [x] DB: Deduplication by foreplay_ad_id (unique constraint)
+- [x] BACKEND: Sync service that fetches from Foreplay API and upserts into local DB
+- [x] BACKEND: Hourly background job (setInterval) that auto-syncs
+- [x] BACKEND: tRPC endpoint for manual sync trigger with count of new imports
+- [x] BACKEND: tRPC endpoint for listing local creatives (replaces direct Foreplay API calls)
+- [x] BACKEND: Mark newly synced creatives as is_new=true, clear after user views them
+- [x] UI: "Sync from Foreplay" button on Browse Creatives page with loading state
+- [x] UI: Show import count feedback ("Imported 12 new creatives")
+- [x] UI: "NEW" badge on recently synced creatives
+- [x] UI: Browse Creatives reads from local DB instead of Foreplay API directly
+- [x] TEST: Verify deduplication works (same ad ID not inserted twice)
+- [x] TEST: Verify sync endpoint returns correct count

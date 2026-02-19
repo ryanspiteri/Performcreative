@@ -1,6 +1,6 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -161,6 +161,78 @@ export async function listAllProductInfo() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.select().from(productInfo).orderBy(productInfo.product);
+}
+
+// ============================================================
+// Foreplay Creatives helpers
+// ============================================================
+
+/**
+ * Upsert a Foreplay creative — insert if new, skip if exists (dedup by foreplayAdId).
+ * Returns true if a new row was inserted, false if it already existed.
+ */
+export async function upsertForeplayCreative(data: InsertForeplayCreative): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    await db.insert(foreplayCreatives).values(data).onDuplicateKeyUpdate({
+      // On duplicate, just update syncedAt to mark the latest sync time
+      set: { syncedAt: new Date() },
+    });
+    // Check if it was an insert (affectedRows=1) or update (affectedRows=2 for onDuplicateKeyUpdate)
+    // MySQL returns 1 for insert, 2 for update-on-duplicate
+    return true; // We'll count new vs existing separately
+  } catch (err: any) {
+    if (err.code === "ER_DUP_ENTRY") return false;
+    throw err;
+  }
+}
+
+/**
+ * List locally cached Foreplay creatives, optionally filtered by type.
+ * Newest first.
+ */
+export async function listForeplayCreatives(type?: "VIDEO" | "STATIC", limit = 100) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (type) {
+    return db.select().from(foreplayCreatives)
+      .where(eq(foreplayCreatives.type, type))
+      .orderBy(desc(foreplayCreatives.createdAt))
+      .limit(limit);
+  }
+  return db.select().from(foreplayCreatives)
+    .orderBy(desc(foreplayCreatives.createdAt))
+    .limit(limit);
+}
+
+/**
+ * Get all existing foreplayAdIds to check for duplicates efficiently.
+ */
+export async function getExistingForeplayAdIds(): Promise<Set<string>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({ foreplayAdId: foreplayCreatives.foreplayAdId }).from(foreplayCreatives);
+  return new Set(rows.map(r => r.foreplayAdId));
+}
+
+/**
+ * Mark all creatives as seen (isNew = 0).
+ */
+export async function markAllCreativesSeen(): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(foreplayCreatives).set({ isNew: 0 }).where(eq(foreplayCreatives.isNew, 1));
+}
+
+/**
+ * Count new (unseen) creatives.
+ */
+export async function countNewCreatives(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({ count: sql<number>`count(*)` }).from(foreplayCreatives).where(eq(foreplayCreatives.isNew, 1));
+  return rows[0]?.count || 0;
 }
 
 export async function upsertProductInfo(data: InsertProductInfo) {

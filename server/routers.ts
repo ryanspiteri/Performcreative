@@ -5,6 +5,7 @@ import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
+import { syncFromForeplay, startAutoSync, getSyncStatus } from "./services/foreplaySync";
 import { analyzeVideoFrames, generateScripts, reviewScript } from "./services/claude";
 import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
@@ -109,8 +110,45 @@ export const appRouter = router({
         return { runId, status: "running" };
       }),
 
-    fetchForeplayVideos: publicProcedure.query(async () => fetchVideoAds(10)),
-    fetchForeplayStatics: publicProcedure.query(async () => fetchStaticAds(30)),
+    fetchForeplayVideos: publicProcedure.query(async () => {
+      const creatives = await db.listForeplayCreatives("VIDEO", 50);
+      return creatives.map(c => ({
+        id: c.foreplayAdId,
+        type: "VIDEO",
+        title: c.title,
+        brandName: c.brandName,
+        thumbnailUrl: c.thumbnailUrl,
+        mediaUrl: c.mediaUrl,
+        isNew: c.isNew === 1,
+      }));
+    }),
+
+    fetchForeplayStatics: publicProcedure.query(async () => {
+      const creatives = await db.listForeplayCreatives("STATIC", 50);
+      return creatives.map(c => ({
+        id: c.foreplayAdId,
+        type: "STATIC",
+        title: c.title,
+        brandName: c.brandName,
+        imageUrl: c.imageUrl,
+        isNew: c.isNew === 1,
+      }));
+    }),
+
+    syncForeplayNow: publicProcedure.mutation(async () => {
+      const result = await syncFromForeplay();
+      if (result.error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
+      }
+      return {
+        newCount: result.newCount,
+        totalFetched: result.totalFetched,
+        message: `Imported ${result.newCount} new creatives from Foreplay`,
+      };
+    }),
+
+    getSyncStatus: publicProcedure.query(async () => getSyncStatus()),
+
     listBoards: publicProcedure.query(async () => listBoards()),
 
     // Static pipeline trigger (Stages 1-3 + pause at 3b for selection)
