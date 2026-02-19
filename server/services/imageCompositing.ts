@@ -417,9 +417,29 @@ async function compositeAdCreative(
   }
 }
 
+// Cache embedded font data so we only read from disk once
+let _fontBoldBase64: string | null = null;
+let _fontRegularBase64: string | null = null;
+
+function getFontBase64(variant: "bold" | "regular"): string {
+  if (variant === "bold") {
+    if (!_fontBoldBase64) {
+      const fontPath = path.join(__dirname, "..", "assets", "fonts", "LiberationSans-Bold.ttf");
+      _fontBoldBase64 = fs.readFileSync(fontPath).toString("base64");
+    }
+    return _fontBoldBase64;
+  }
+  if (!_fontRegularBase64) {
+    const fontPath = path.join(__dirname, "..", "assets", "fonts", "LiberationSans-Regular.ttf");
+    _fontRegularBase64 = fs.readFileSync(fontPath).toString("base64");
+  }
+  return _fontRegularBase64;
+}
+
 /**
- * Build SVG text overlay with headline, subheadline, benefits, and CTA
- * Uses Liberation Sans (available on system) for clean, professional text
+ * Build SVG text overlay with headline, subheadline, benefits, and CTA.
+ * Embeds Liberation Sans as base64 @font-face so text renders correctly
+ * on ANY server, even without the font installed system-wide.
  */
 function buildTextOverlaySvg(
   width: number,
@@ -435,6 +455,28 @@ function buildTextOverlaySvg(
   productBottom: number
 ): string {
   const escXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  // Embed fonts as base64 in the SVG
+  const boldFontB64 = getFontBase64("bold");
+  const regularFontB64 = getFontBase64("regular");
+
+  const fontDefs = `
+    <defs>
+      <style type="text/css">
+        @font-face {
+          font-family: 'AdFont';
+          font-weight: bold;
+          src: url('data:font/truetype;base64,${boldFontB64}') format('truetype');
+        }
+        @font-face {
+          font-family: 'AdFont';
+          font-weight: normal;
+          src: url('data:font/truetype;base64,${regularFontB64}') format('truetype');
+        }
+      </style>
+    </defs>`;
+
+  const FONT = "AdFont, Liberation Sans, Arial, Helvetica, sans-serif";
 
   // Font sizes relative to canvas width
   const headlineFontSize = Math.floor(width * 0.055); // ~66px at 1200w
@@ -455,7 +497,7 @@ function buildTextOverlaySvg(
     const lineY = headlineY + (i * (headlineFontSize + 8));
     svgParts.push(`
       <text x="${width / 2}" y="${lineY}" text-anchor="middle"
-        font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+        font-family="${FONT}"
         font-size="${headlineFontSize}" font-weight="bold" fill="white"
         letter-spacing="2">${escXml(line)}</text>
     `);
@@ -473,7 +515,7 @@ function buildTextOverlaySvg(
     const subY = accentLineY + 30;
     svgParts.push(`
       <text x="${width / 2}" y="${subY}" text-anchor="middle"
-        font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+        font-family="${FONT}"
         font-size="${subheadlineFontSize}" font-weight="normal" fill="#E0E0E0"
         letter-spacing="1">${escXml(copy.subheadline)}</text>
     `);
@@ -483,9 +525,9 @@ function buildTextOverlaySvg(
   const benefitY = Math.min(productBottom + Math.floor(height * 0.06), Math.floor(height * 0.82));
   svgParts.push(`
     <text x="${width / 2}" y="${benefitY}" text-anchor="middle"
-      font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+      font-family="${FONT}"
       font-size="${benefitFontSize}" font-weight="bold" fill="#FF3838"
-      letter-spacing="1.5">★ ${escXml(copy.benefits.toUpperCase())} ★</text>
+      letter-spacing="1.5">${escXml(copy.benefits.toUpperCase())}</text>
   `);
 
   // CTA BUTTON — bottom area, red pill-shaped button
@@ -499,12 +541,13 @@ function buildTextOverlaySvg(
   svgParts.push(`
     <rect x="${ctaBoxX}" y="${ctaBoxY}" width="${ctaBoxWidth}" height="${ctaBoxHeight}" rx="${ctaBoxHeight / 2}" fill="#FF3838"/>
     <text x="${width / 2}" y="${ctaBoxY + ctaBoxHeight / 2 + ctaFontSize / 3}" text-anchor="middle"
-      font-family="Liberation Sans, Arial, Helvetica, sans-serif"
+      font-family="${FONT}"
       font-size="${ctaFontSize}" font-weight="bold" fill="white"
       letter-spacing="3">${escXml(ctaText)}</text>
   `);
 
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    ${fontDefs}
     ${svgParts.join("\n")}
   </svg>`;
 }

@@ -234,3 +234,30 @@ All three fixes implemented and tested:
 - [x] OUTPUT: Image 1 (Control) = Headline 1 + optional Sub 1 + shared benefits + Background 1 (closest to inspo)
 - [x] OUTPUT: Image 2 (Variation) = Headline 2 + optional Sub 2 + shared benefits + Background 2
 - [x] OUTPUT: Image 3 (Variation) = Headline 3 + optional Sub 3 + shared benefits + Background 3
+
+## ROUND 9 — VIDEO PIPELINE BROKEN
+
+- [ ] BUG: Script generation failing — DR1 shows "Generation Failed" with score 0
+- [x] BUG: Expert review timing out at 180s — timeout increased to 10 minutes
+- [ ] BUG: Only 2 scripts (DR1, DR2) instead of 4 (DR1, DR2, UGC1, UGC2)
+- [ ] FIX: Increase timeouts to 300-600s for script generation and expert review
+- [ ] FIX: Ensure all 4 scripts are generated (2 DR + 2 UGC)
+- [ ] FIX: Verify Claude API calls complete successfully
+- [ ] TEST: End-to-end video pipeline produces 4 scripts with expert reviews
+
+## ROUND 9 — VIDEO PIPELINE BROKEN
+
+- [ ] BUG: Script generation failing — DR1 shows "Generation Failed" with score 0
+- [x] BUG: Expert review timing out at 180s — timeout increased to 10 minutes
+- [ ] BUG: Only 2 scripts (DR1, DR2) instead of 4 (DR1, DR2, UGC1, UGC2)
+- [x] FIX: Increase timeouts to 10 minutes for script generation and expert review
+- [ ] FIX: Ensure all 4 scripts are generated (2 DR + 2 UGC)
+- [ ] FIX: Verify Claude API calls complete successfully
+- [ ] TEST: End-to-end video pipeline produces 4 scripts with expert reviews
+
+## ROUND 9B — GARBLED TEXT ON STATIC IMAGES
+
+- [x] BUG: SVG text overlay renders as garbled squares/boxes instead of readable text
+- [x] FIX: Font not available on server — embed font as base64 in SVG (Liberation Sans Bold + Regular)
+- [x] FIX: Test that text renders as readable English words on composited images
+- [x] VERIFY: Video pipeline timeout fix (increased to 10 min) is working

@@ -28,7 +28,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-const STEP_TIMEOUT = 3 * 60 * 1000; // 3 minutes per step
+const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
 
 export const appRouter = router({
   system: systemRouter,

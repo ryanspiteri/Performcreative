@@ -5,8 +5,8 @@ import { createScriptTask } from "./clickup";
 import axios from "axios";
 import { ENV } from "../_core/env";
 
-const STAGE_TIMEOUT = 5 * 60 * 1000; // 5 minutes per stage
-const STEP_TIMEOUT = 3 * 60 * 1000; // 3 minutes per step
+const STAGE_TIMEOUT = 10 * 60 * 1000; // 10 minutes per stage (Claude API calls can be slow)
+const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
