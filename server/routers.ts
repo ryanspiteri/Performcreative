@@ -112,6 +112,20 @@ export const appRouter = router({
 
     fetchForeplayVideos: publicProcedure.query(async () => {
       const creatives = await db.listForeplayCreatives("VIDEO", 50);
+      // Fallback to live Foreplay API if cache is empty
+      if (creatives.length === 0) {
+        console.log("[Pipeline] Local cache empty, fetching from Foreplay API");
+        const liveAds = await fetchVideoAds(10);
+        return liveAds.map(ad => ({
+          id: ad.id,
+          type: "VIDEO" as const,
+          title: ad.title,
+          brandName: ad.brandName,
+          thumbnailUrl: ad.thumbnailUrl,
+          mediaUrl: ad.mediaUrl,
+          isNew: false,
+        }));
+      }
       return creatives.map(c => ({
         id: c.foreplayAdId,
         type: "VIDEO",
@@ -125,6 +139,20 @@ export const appRouter = router({
 
     fetchForeplayStatics: publicProcedure.query(async () => {
       const creatives = await db.listForeplayCreatives("STATIC", 50);
+      // Fallback to live Foreplay API if cache is empty
+      if (creatives.length === 0) {
+        console.log("[Pipeline] Local cache empty, fetching from Foreplay API");
+        const liveAds = await fetchStaticAds(30);
+        return liveAds.map(ad => ({
+          id: ad.id,
+          type: "STATIC" as const,
+          title: ad.title,
+          brandName: ad.brandName,
+          imageUrl: ad.imageUrl,
+          thumbnailUrl: ad.thumbnailUrl,
+          isNew: false,
+        }));
+      }
       return creatives.map(c => ({
         id: c.foreplayAdId,
         type: "STATIC",

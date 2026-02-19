@@ -117,12 +117,12 @@ export function startAutoSync(): void {
 
   console.log("[ForeplaySync] Starting auto-sync (every 1 hour)");
 
-  // Run initial sync after a short delay (let server fully start)
-  setTimeout(async () => {
+  // Run initial sync immediately
+  (async () => {
     console.log("[ForeplaySync] Running initial sync...");
     const result = await syncFromForeplay();
     console.log(`[ForeplaySync] Initial sync: ${result.newCount} new creatives`);
-  }, 10000); // 10 second delay after server start
+  })();
 
   // Set up hourly interval
   _syncTimer = setInterval(async () => {

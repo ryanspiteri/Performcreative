@@ -301,3 +301,10 @@ All three fixes implemented and tested:
 - [x] UI: Browse Creatives reads from local DB instead of Foreplay API directly
 - [x] TEST: Verify deduplication works (same ad ID not inserted twice)
 - [x] TEST: Verify sync endpoint returns correct count
+
+## ROUND 11B — EMPTY GALLERY FIX
+
+- [x] BUG: Browse Creatives shows empty gallery because local cache is empty on first load
+- [x] FIX: Run initial sync immediately (not after 10s delay) so cache populates on server start
+- [x] FIX: Add Foreplay API fallback to fetchForeplayVideos/Statics when local cache is empty
+- [x] FIX: Ensure gallery always shows creatives (never empty)

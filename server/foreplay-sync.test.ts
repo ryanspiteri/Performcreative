@@ -7,7 +7,7 @@ describe("Foreplay Sync", () => {
   describe("DB helpers", () => {
     it("should upsert a Foreplay creative", async () => {
       const creative: InsertForeplayCreative = {
-        foreplayAdId: "test-ad-123",
+        foreplayAdId: `test-ad-${Date.now()}-1`,
         type: "VIDEO",
         board: "inspo",
         title: "Test Video",
@@ -21,12 +21,13 @@ describe("Foreplay Sync", () => {
 
       const creatives = await db.listForeplayCreatives("VIDEO");
       expect(creatives.length).toBeGreaterThan(0);
-      expect(creatives.some(c => c.foreplayAdId === "test-ad-123")).toBe(true);
+      expect(creatives.some(c => c.foreplayAdId === creative.foreplayAdId)).toBe(true);
     });
 
     it("should deduplicate by foreplayAdId", async () => {
+      const id = `test-ad-dedup-${Date.now()}`;
       const creative: InsertForeplayCreative = {
-        foreplayAdId: "test-ad-dedup",
+        foreplayAdId: id,
         type: "STATIC",
         board: "static_inspo",
         title: "Test Static",
@@ -35,19 +36,18 @@ describe("Foreplay Sync", () => {
         isNew: 1,
       };
 
-      // Insert twice with same ID
       await db.upsertForeplayCreative(creative);
       await db.upsertForeplayCreative(creative);
 
-      // Should only have one entry
       const existingIds = await db.getExistingForeplayAdIds();
-      const count = Array.from(existingIds).filter(id => id === "test-ad-dedup").length;
+      const count = Array.from(existingIds).filter(existId => existId === id).length;
       expect(count).toBe(1);
     });
 
     it("should list creatives by type", async () => {
+      const timestamp = Date.now();
       const videoCreative: InsertForeplayCreative = {
-        foreplayAdId: "video-test-456",
+        foreplayAdId: `video-test-${timestamp}`,
         type: "VIDEO",
         board: "inspo",
         title: "Video",
@@ -55,7 +55,7 @@ describe("Foreplay Sync", () => {
       };
 
       const staticCreative: InsertForeplayCreative = {
-        foreplayAdId: "static-test-456",
+        foreplayAdId: `static-test-${timestamp}`,
         type: "STATIC",
         board: "static_inspo",
         title: "Static",
@@ -68,13 +68,13 @@ describe("Foreplay Sync", () => {
       const videos = await db.listForeplayCreatives("VIDEO");
       const statics = await db.listForeplayCreatives("STATIC");
 
-      expect(videos.some(c => c.foreplayAdId === "video-test-456")).toBe(true);
-      expect(statics.some(c => c.foreplayAdId === "static-test-456")).toBe(true);
+      expect(videos.some(c => c.foreplayAdId === videoCreative.foreplayAdId)).toBe(true);
+      expect(statics.some(c => c.foreplayAdId === staticCreative.foreplayAdId)).toBe(true);
     });
 
     it("should count new creatives", async () => {
       const newCreative: InsertForeplayCreative = {
-        foreplayAdId: "new-creative-789",
+        foreplayAdId: `new-creative-${Date.now()}`,
         type: "VIDEO",
         board: "inspo",
         title: "New Creative",
@@ -89,7 +89,7 @@ describe("Foreplay Sync", () => {
 
     it("should mark all creatives as seen", async () => {
       const creative: InsertForeplayCreative = {
-        foreplayAdId: "mark-seen-test",
+        foreplayAdId: `mark-seen-${Date.now()}`,
         type: "STATIC",
         board: "static_inspo",
         title: "Mark Seen Test",
