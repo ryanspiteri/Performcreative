@@ -346,20 +346,55 @@ Write in an authoritative, analytical tone. Mention strengths across expert doma
   return callClaude([{ role: "user", content: prompt }], system, 500);
 }
 
-// Analyze static ad image
+// Analyze static ad image — downloads image and sends as base64 (Claude can't access Foreplay R2 URLs directly)
 export async function analyzeStaticAd(imageUrl: string, brandName: string): Promise<string> {
   const system = `You are an expert creative strategist analyzing competitor static advertisements for ONEST Health.`;
 
   const content: any[] = [];
   
-  if (imageUrl && (imageUrl.startsWith("http") || imageUrl.startsWith("data:"))) {
-    content.push({
-      type: "image",
-      source: {
-        type: "url",
-        url: imageUrl,
-      },
-    });
+  if (imageUrl && imageUrl.startsWith("http")) {
+    try {
+      console.log(`[Claude] Downloading image for analysis: ${imageUrl.substring(0, 100)}...`);
+      const imgRes = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+        timeout: 30000,
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" },
+      });
+      const base64 = Buffer.from(imgRes.data).toString("base64");
+      let mediaType = imgRes.headers["content-type"] || "image/jpeg";
+      if (mediaType.includes(";")) mediaType = mediaType.split(";")[0].trim();
+      if (!mediaType.startsWith("image/")) mediaType = "image/jpeg";
+      
+      console.log(`[Claude] Image downloaded: ${imgRes.data.length} bytes, type: ${mediaType}`);
+      content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: base64,
+        },
+      });
+    } catch (imgErr: any) {
+      console.error(`[Claude] Failed to download image for analysis: ${imgErr.message}`);
+      // Fall back to mentioning the URL in text
+      content.push({
+        type: "text",
+        text: `[Note: The image at ${imageUrl} could not be downloaded for visual analysis. Please analyze based on the brand context below.]`,
+      });
+    }
+  } else if (imageUrl && imageUrl.startsWith("data:")) {
+    // Handle data URLs (base64 already embedded)
+    const match = imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+    if (match) {
+      content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: match[1],
+          data: match[2],
+        },
+      });
+    }
   }
 
   content.push({

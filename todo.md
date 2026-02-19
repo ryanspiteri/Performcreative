@@ -163,3 +163,11 @@ All three fixes implemented and tested:
 - [x] FEATURE 3: Trim product list to 5 active products (Hyperburn, Thermosleep, Hyperload, Thermoburn, Carb Control)
 - [x] NAV: Add Product Renders and Product Info to sidebar navigation
 - [x] TEST: Write tests for new endpoints
+
+## ROUND 6 — DEPLOYMENT BUGS
+
+- [x] BUG 1: ffmpeg not found on deployed server — installed ffmpeg-static npm package, whisper.ts uses bundled binary
+- [x] BUG 2: Claude Vision API 400 error at Stage 1 — Claude can't access Foreplay R2 URLs, now downloads image and sends as base64
+- [x] BUG 2: Root cause 1: Anthropic credits were depleted (now topped up by Ryan)
+- [x] BUG 2: Root cause 2: Claude API returns "Unable to download the file" for Foreplay URLs — fixed by downloading and encoding as base64
+- [x] TEST: All 19 tests passing, Claude Vision base64 confirmed working with Foreplay images
