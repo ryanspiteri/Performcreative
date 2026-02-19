@@ -1,7 +1,7 @@
 import axios from "axios";
-import * as fs from "fs";
-import * as path from "path";
 import * as os from "os";
+import * as path from "path";
+import * as fs from "fs";
 import { LOGOS } from "../config/brandAssets";
 import * as db from "../db";
 
@@ -25,13 +25,324 @@ export interface ImageSelections {
   productRenderUrl?: string; // user-selected product render URL
 }
 
+// ============================================================
+// PUPPETEER BROWSER POOL — reuse browser instance for performance
+// ============================================================
+let _browserInstance: any = null;
+
+async function getBrowser() {
+  if (_browserInstance && _browserInstance.isConnected()) {
+    return _browserInstance;
+  }
+  const puppeteer = await import("puppeteer");
+  _browserInstance = await puppeteer.default.launch({
+    executablePath: "/usr/bin/chromium-browser",
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+      "--font-render-hinting=none",
+    ],
+  });
+  console.log("[Puppeteer] Browser launched");
+  return _browserInstance;
+}
+
+/**
+ * Render an HTML ad creative template to a PNG buffer using Puppeteer.
+ * This gives pixel-perfect text rendering with web fonts (Google Fonts).
+ */
+async function renderHtmlToPng(
+  html: string,
+  width: number,
+  height: number
+): Promise<Buffer> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+
+  try {
+    await page.setViewport({ width, height, deviceScaleFactor: 2 });
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+    // Wait a bit for fonts to load
+    await page.evaluate(() => document.fonts.ready);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const screenshot = await page.screenshot({
+      type: "png",
+      clip: { x: 0, y: 0, width, height },
+    });
+    return Buffer.from(screenshot);
+  } finally {
+    await page.close();
+  }
+}
+
+/**
+ * Build the HTML template for an ad creative.
+ * Uses Google Fonts (Montserrat) for bold, readable text.
+ * Layout: ONEST logo top-left, headline near top, subheadline below,
+ * product render centered, benefit callout, red CTA button at bottom.
+ */
+function buildAdHtml(
+  backgroundUrl: string,
+  productRenderUrl: string,
+  logoUrl: string,
+  copy: {
+    headline: string;
+    subheadline: string | null;
+    benefits: string;
+    cta: string;
+    product: string;
+  },
+  width: number,
+  height: number
+): string {
+  const escHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  // Scale font sizes relative to canvas
+  const headlineFontSize = Math.floor(width * 0.052);
+  const subheadlineFontSize = Math.floor(width * 0.026);
+  const benefitFontSize = Math.floor(width * 0.022);
+  const ctaFontSize = Math.floor(width * 0.02);
+  const logoHeight = Math.floor(height * 0.04);
+  const productWidth = Math.floor(width * 0.42);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      width: ${width}px;
+      height: ${height}px;
+      overflow: hidden;
+      font-family: 'Montserrat', 'Arial Black', 'Impact', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .ad-container {
+      position: relative;
+      width: ${width}px;
+      height: ${height}px;
+      background: #01040A;
+    }
+
+    .background-image {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* Dark gradient overlay for text readability */
+    .gradient-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(
+        to bottom,
+        rgba(1, 4, 10, 0.88) 0%,
+        rgba(1, 4, 10, 0.35) 30%,
+        rgba(1, 4, 10, 0.12) 50%,
+        rgba(1, 4, 10, 0.35) 70%,
+        rgba(1, 4, 10, 0.92) 100%
+      );
+    }
+
+    .content-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: ${Math.floor(height * 0.03)}px ${Math.floor(width * 0.06)}px;
+    }
+
+    /* ONEST Logo — top left */
+    .logo-container {
+      position: absolute;
+      top: ${Math.floor(height * 0.03)}px;
+      left: ${Math.floor(width * 0.04)}px;
+    }
+
+    .logo-container img {
+      height: ${logoHeight}px;
+      width: auto;
+      filter: brightness(1.1);
+    }
+
+    /* Headline — large, bold, white, centered near top */
+    .headline {
+      margin-top: ${Math.floor(height * 0.09)}px;
+      font-size: ${headlineFontSize}px;
+      font-weight: 900;
+      color: #FFFFFF;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: ${Math.floor(headlineFontSize * 0.06)}px;
+      line-height: 1.15;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.4);
+      max-width: 90%;
+    }
+
+    /* Red accent bar under headline */
+    .accent-bar {
+      width: ${Math.floor(width * 0.12)}px;
+      height: 4px;
+      background: #FF3838;
+      border-radius: 2px;
+      margin-top: ${Math.floor(height * 0.012)}px;
+    }
+
+    /* Subheadline — lighter, smaller */
+    .subheadline {
+      margin-top: ${Math.floor(height * 0.01)}px;
+      font-size: ${subheadlineFontSize}px;
+      font-weight: 600;
+      color: #E0E0E0;
+      text-align: center;
+      letter-spacing: ${Math.floor(subheadlineFontSize * 0.04)}px;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+      max-width: 85%;
+    }
+
+    /* Product render — centered */
+    .product-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+
+    .product-container img {
+      max-width: ${productWidth}px;
+      max-height: ${Math.floor(height * 0.40)}px;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 30px rgba(255, 56, 56, 0.25)) drop-shadow(0 4px 15px rgba(0,0,0,0.5));
+    }
+
+    /* Benefit callout — red text */
+    .benefit-callout {
+      font-size: ${benefitFontSize}px;
+      font-weight: 800;
+      color: #FF3838;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: ${Math.floor(benefitFontSize * 0.08)}px;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+      margin-bottom: ${Math.floor(height * 0.015)}px;
+    }
+
+    /* CTA Button — red pill shape */
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #FF3838;
+      color: #FFFFFF;
+      font-size: ${ctaFontSize}px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: ${Math.floor(ctaFontSize * 0.15)}px;
+      padding: ${Math.floor(height * 0.015)}px ${Math.floor(width * 0.08)}px;
+      border-radius: ${Math.floor(height * 0.03)}px;
+      box-shadow: 0 4px 20px rgba(255, 56, 56, 0.4), 0 2px 8px rgba(0,0,0,0.3);
+      margin-bottom: ${Math.floor(height * 0.035)}px;
+    }
+  </style>
+</head>
+<body>
+  <div class="ad-container">
+    <img class="background-image" src="${escHtml(backgroundUrl)}" alt="background" crossorigin="anonymous" />
+    <div class="gradient-overlay"></div>
+    <div class="content-layer">
+      <div class="logo-container">
+        <img src="${escHtml(logoUrl)}" alt="ONEST" crossorigin="anonymous" />
+      </div>
+      <div class="headline">${escHtml(copy.headline)}</div>
+      <div class="accent-bar"></div>
+      ${copy.subheadline ? `<div class="subheadline">${escHtml(copy.subheadline)}</div>` : ""}
+      <div class="product-container">
+        <img src="${escHtml(productRenderUrl)}" alt="${escHtml(copy.product)}" crossorigin="anonymous" />
+      </div>
+      <div class="benefit-callout">${escHtml(copy.benefits)}</div>
+      <div class="cta-button">${escHtml(copy.cta)}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Composite a full ad creative using Puppeteer HTML/CSS rendering.
+ * Downloads background + product render + logo, builds HTML template,
+ * screenshots it to PNG, uploads to S3.
+ */
+async function compositeAdCreative(
+  backgroundUrl: string,
+  productRenderUrl: string,
+  logoUrl: string,
+  copy: {
+    headline: string;
+    subheadline: string | null;
+    benefits: string;
+    cta: string;
+    product: string;
+  },
+  variationName: string
+): Promise<string> {
+  const W = 1200;
+  const H = 1200;
+
+  console.log(`[Composite:${variationName}] Building HTML ad creative...`);
+  console.log(`[Composite:${variationName}] Headline: "${copy.headline}"`);
+  console.log(`[Composite:${variationName}] Background: ${backgroundUrl.substring(0, 80)}...`);
+
+  try {
+    // Build the HTML template
+    const html = buildAdHtml(backgroundUrl, productRenderUrl, logoUrl, copy, W, H);
+
+    // Render to PNG via Puppeteer
+    console.log(`[Composite:${variationName}] Rendering HTML to PNG via Puppeteer...`);
+    const pngBuffer = await renderHtmlToPng(html, W, H);
+    console.log(`[Composite:${variationName}] PNG rendered: ${pngBuffer.length} bytes`);
+
+    // Upload to S3
+    console.log(`[Composite:${variationName}] Uploading to S3...`);
+    const { storagePut } = await import("../storage");
+    const fileKey = `static-ads/${variationName}-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+    const { url } = await storagePut(fileKey, pngBuffer, "image/png");
+
+    console.log(`[Composite:${variationName}] SUCCESS! Uploaded to: ${url}`);
+    return url;
+  } catch (err: any) {
+    console.error(`[Composite:${variationName}] FATAL ERROR: ${err.message}`);
+    console.error(`[Composite:${variationName}] Stack: ${err.stack}`);
+    throw err;
+  }
+}
+
+// ============================================================
+// MAIN ENTRY POINT
+// ============================================================
+
 /**
  * Generate 3 ad creative variations by:
  * 1. Pulling a product render from the Product Render Manager (DB/S3)
  * 2. Downloading the competitor reference image for style transfer on Image 1
  * 3. Generating BACKGROUND-ONLY images via nano banana (no text, no product)
- * 4. Compositing the real product render onto each background using Sharp
- * 5. Overlaying crisp TEXT via SVG: headline, subheadline, benefits, CTA, logo
+ * 4. Building HTML ad template with background + product + text
+ * 5. Rendering HTML to PNG via Puppeteer (pixel-perfect text)
  * 6. Uploading final composites to S3
  */
 export async function generateStaticAdVariations(
@@ -113,7 +424,7 @@ export async function generateStaticAdVariations(
     try {
       console.log(`[ImageCompositing] === Image ${i + 1}/3: ${variationLabel} ===`);
       console.log(`[ImageCompositing] Headline: "${config.headline}"`);
-      console.log(`[ImageCompositing] Subheadline: "${config.subheadline || 'NONE'}"`);
+      console.log(`[ImageCompositing] Subheadline: "${config.subheadline || "NONE"}"`);
       console.log(`[ImageCompositing] Benefits: "${config.benefits}"`);
 
       // Step 1: Generate BACKGROUND ONLY via nano banana (no text, no product)
@@ -134,7 +445,7 @@ export async function generateStaticAdVariations(
       const bgUrl = bgResult.url as string;
       console.log(`[ImageCompositing] Background ${i + 1} generated: ${bgUrl}`);
 
-      // Step 2: Composite product render + text overlays onto background
+      // Step 2: Composite via Puppeteer HTML/CSS rendering
       const compositeUrl = await compositeAdCreative(
         bgUrl,
         productRenderUrl,
@@ -174,6 +485,10 @@ export async function generateStaticAdVariations(
   return results;
 }
 
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
 /**
  * Build per-image configs from user selections or fallback to brief extraction
  */
@@ -184,7 +499,7 @@ function buildImageConfigs(
   teamFeedback?: string
 ): Array<{ headline: string; subheadline: string | null; benefits: string; backgroundPrompt: string }> {
   if (selections && selections.images && selections.images.length >= 3) {
-    return selections.images.map((img, i) => ({
+    return selections.images.map((img) => ({
       headline: img.headline,
       subheadline: img.subheadline,
       benefits: selections.benefits,
@@ -268,436 +583,4 @@ function extractVariationPrompts(brief: string, product: string, teamFeedback?: 
   }
 
   return prompts.slice(0, 3);
-}
-
-/**
- * Composite a full ad creative: background + product render + text overlays
- * Uses Sharp for image compositing and SVG for crisp text rendering.
- * Each step has detailed error logging to diagnose production failures.
- */
-async function compositeAdCreative(
-  backgroundUrl: string,
-  productRenderUrl: string,
-  logoUrl: string,
-  copy: {
-    headline: string;
-    subheadline: string | null;
-    benefits: string;
-    cta: string;
-    product: string;
-  },
-  variationName: string
-): Promise<string> {
-  const sharp = (await import("sharp")).default;
-  const tmpDir = os.tmpdir();
-  const tmpFiles: string[] = [];
-
-  try {
-    // ---- STEP 1: Download background ----
-    console.log(`[Composite:${variationName}] Step 1: Downloading background from ${backgroundUrl.substring(0, 80)}...`);
-    let bgBuffer: Buffer;
-    try {
-      const bgResponse = await axios.get(backgroundUrl, { responseType: "arraybuffer", timeout: 60000, headers: { "User-Agent": "Mozilla/5.0" } });
-      bgBuffer = Buffer.from(bgResponse.data);
-      console.log(`[Composite:${variationName}] Background downloaded: ${bgBuffer.length} bytes`);
-    } catch (err: any) {
-      throw new Error(`Failed to download background: ${err.message}`);
-    }
-
-    // ---- STEP 2: Download product render ----
-    console.log(`[Composite:${variationName}] Step 2: Downloading product render from ${productRenderUrl.substring(0, 80)}...`);
-    let productBuffer: Buffer;
-    try {
-      const productResponse = await axios.get(productRenderUrl, { responseType: "arraybuffer", timeout: 60000, headers: { "User-Agent": "Mozilla/5.0" } });
-      productBuffer = Buffer.from(productResponse.data);
-      console.log(`[Composite:${variationName}] Product render downloaded: ${productBuffer.length} bytes`);
-    } catch (err: any) {
-      throw new Error(`Failed to download product render (${productRenderUrl}): ${err.message}`);
-    }
-
-    // ---- STEP 3: Download logo ----
-    console.log(`[Composite:${variationName}] Step 3: Downloading logo...`);
-    let logoBuffer: Buffer;
-    try {
-      const logoResponse = await axios.get(logoUrl, { responseType: "arraybuffer", timeout: 30000, headers: { "User-Agent": "Mozilla/5.0" } });
-      logoBuffer = Buffer.from(logoResponse.data);
-      console.log(`[Composite:${variationName}] Logo downloaded: ${logoBuffer.length} bytes`);
-    } catch (err: any) {
-      console.warn(`[Composite:${variationName}] Logo download failed (non-fatal): ${err.message}`);
-      logoBuffer = Buffer.alloc(0); // Will skip logo layer
-    }
-
-    // ---- STEP 4: Get metadata ----
-    console.log(`[Composite:${variationName}] Step 4: Reading image metadata...`);
-    const bgMeta = await sharp(bgBuffer).metadata();
-    const productMeta = await sharp(productBuffer).metadata();
-    console.log(`[Composite:${variationName}] BG: ${bgMeta.width}x${bgMeta.height} ${bgMeta.format}, Product: ${productMeta.width}x${productMeta.height} ${productMeta.format}`);
-
-    const W = bgMeta.width || 1200;
-    const H = bgMeta.height || 1200;
-
-    // ---- STEP 5: Calculate layout ----
-    const productWidth = Math.floor(W * 0.45);
-    const productRatio = (productMeta.height || 1) / (productMeta.width || 1);
-    const productHeight = Math.floor(productWidth * productRatio);
-    const productX = Math.floor((W - productWidth) / 2);
-    const productY = Math.floor(H * 0.32);
-
-    console.log(`[Composite:${variationName}] Layout: ${W}x${H}, Product: ${productWidth}x${productHeight} at (${productX},${productY})`);
-
-    // ---- STEP 6: Build composite layers ----
-    const compositeInputs: any[] = [];
-
-    // Layer 1: Dark gradient overlay for text readability
-    console.log(`[Composite:${variationName}] Step 6a: Building gradient overlay...`);
-    const gradientSvg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="topGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#01040A" stop-opacity="0.85"/>
-          <stop offset="35%" stop-color="#01040A" stop-opacity="0.3"/>
-          <stop offset="55%" stop-color="#01040A" stop-opacity="0.1"/>
-          <stop offset="75%" stop-color="#01040A" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="#01040A" stop-opacity="0.9"/>
-        </linearGradient>
-      </defs>
-      <rect width="${W}" height="${H}" fill="url(#topGrad)"/>
-    </svg>`;
-    compositeInputs.push({ input: Buffer.from(gradientSvg), top: 0, left: 0 });
-
-    // Layer 2: Product render (resized)
-    console.log(`[Composite:${variationName}] Step 6b: Resizing product render to ${productWidth}x${productHeight}...`);
-    try {
-      const resizedProduct = await sharp(productBuffer)
-        .resize(productWidth, productHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .png()
-        .toBuffer();
-      compositeInputs.push({ input: resizedProduct, left: productX, top: productY });
-      console.log(`[Composite:${variationName}] Product resized: ${resizedProduct.length} bytes`);
-    } catch (err: any) {
-      console.error(`[Composite:${variationName}] Product resize failed: ${err.message}`);
-      throw new Error(`Product render resize failed: ${err.message}`);
-    }
-
-    // Layer 3: Logo (if downloaded successfully)
-    if (logoBuffer.length > 0) {
-      console.log(`[Composite:${variationName}] Step 6c: Resizing logo...`);
-      try {
-        const logoMeta = await sharp(logoBuffer).metadata();
-        const logoWidth = Math.floor(W * 0.15);
-        const logoRatio = (logoMeta.height || 1) / (logoMeta.width || 1);
-        const logoHeight = Math.floor(logoWidth * logoRatio);
-        const resizedLogo = await sharp(logoBuffer)
-          .resize(logoWidth, logoHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-          .png()
-          .toBuffer();
-        compositeInputs.push({ input: resizedLogo, left: 40, top: 35 });
-      } catch (err: any) {
-        console.warn(`[Composite:${variationName}] Logo resize failed (non-fatal): ${err.message}`);
-      }
-    }
-
-    // Layer 4: Text overlay (headline, subheadline, benefits, CTA)
-    // Pre-render the SVG to a PNG buffer to avoid Sharp struggling with large embedded-font SVGs
-    console.log(`[Composite:${variationName}] Step 6d: Building text overlay...`);
-    try {
-      const textSvg = buildTextOverlaySvg(W, H, copy, productY, productY + productHeight);
-      const svgSizeKB = Math.round(textSvg.length / 1024);
-      console.log(`[Composite:${variationName}] Text SVG size: ${textSvg.length} bytes (${svgSizeKB}KB)`);
-
-      // Pre-render SVG to PNG to avoid librsvg issues with large base64 fonts
-      const textPng = await sharp(Buffer.from(textSvg))
-        .resize(W, H)
-        .png()
-        .toBuffer();
-      console.log(`[Composite:${variationName}] Text overlay rendered to PNG: ${textPng.length} bytes`);
-      compositeInputs.push({ input: textPng, top: 0, left: 0 });
-    } catch (err: any) {
-      console.error(`[Composite:${variationName}] Text overlay failed: ${err.message}`);
-      // Fallback: try without embedded fonts
-      console.log(`[Composite:${variationName}] Retrying text overlay without embedded fonts...`);
-      try {
-        const fallbackSvg = buildTextOverlaySvgSystemFonts(W, H, copy, productY, productY + productHeight);
-        const fallbackPng = await sharp(Buffer.from(fallbackSvg))
-          .resize(W, H)
-          .png()
-          .toBuffer();
-        compositeInputs.push({ input: fallbackPng, top: 0, left: 0 });
-        console.log(`[Composite:${variationName}] Fallback text overlay succeeded`);
-      } catch (fallbackErr: any) {
-        console.error(`[Composite:${variationName}] Fallback text also failed: ${fallbackErr.message}`);
-        // Continue without text overlay rather than crashing entirely
-        console.warn(`[Composite:${variationName}] Proceeding without text overlay`);
-      }
-    }
-
-    // ---- STEP 7: Composite all layers ----
-    console.log(`[Composite:${variationName}] Step 7: Compositing ${compositeInputs.length} layers...`);
-    let compositeBuffer: Buffer;
-    try {
-      compositeBuffer = await sharp(bgBuffer)
-        .resize(W, H, { fit: "cover" })
-        .composite(compositeInputs)
-        .png()
-        .toBuffer();
-      console.log(`[Composite:${variationName}] Composite complete: ${compositeBuffer.length} bytes`);
-    } catch (err: any) {
-      console.error(`[Composite:${variationName}] Sharp composite failed: ${err.message}`);
-      console.error(`[Composite:${variationName}] Stack: ${err.stack}`);
-      throw new Error(`Sharp composite failed: ${err.message}`);
-    }
-
-    // ---- STEP 8: Upload to S3 ----
-    console.log(`[Composite:${variationName}] Step 8: Uploading to S3...`);
-    const { storagePut } = await import("../storage");
-    const fileKey = `static-ads/${variationName}-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-    const { url } = await storagePut(fileKey, compositeBuffer, "image/png");
-
-    console.log(`[Composite:${variationName}] SUCCESS! Uploaded to: ${url}`);
-    return url;
-  } catch (err: any) {
-    console.error(`[Composite:${variationName}] FATAL ERROR: ${err.message}`);
-    console.error(`[Composite:${variationName}] Stack: ${err.stack}`);
-    throw err;
-  }
-}
-
-// ============================================================
-// FONT HANDLING: Try embedded base64 first, fall back to system fonts
-// ============================================================
-let _fontBoldBase64: string | null = null;
-let _fontRegularBase64: string | null = null;
-let _fontsAvailable = false;
-
-function tryLoadFonts(): boolean {
-  if (_fontsAvailable) return true;
-  try {
-    // Try multiple possible paths for the font files
-    const possibleDirs = [
-      path.join(__dirname, "..", "assets", "fonts"),
-      path.join(process.cwd(), "server", "assets", "fonts"),
-      "/home/ubuntu/onest-creative-pipeline/server/assets/fonts",
-    ];
-    for (const dir of possibleDirs) {
-      const boldPath = path.join(dir, "LiberationSans-Bold.ttf");
-      const regPath = path.join(dir, "LiberationSans-Regular.ttf");
-      if (fs.existsSync(boldPath) && fs.existsSync(regPath)) {
-        _fontBoldBase64 = fs.readFileSync(boldPath).toString("base64");
-        _fontRegularBase64 = fs.readFileSync(regPath).toString("base64");
-        _fontsAvailable = true;
-        console.log(`[Fonts] Loaded embedded fonts from ${dir}`);
-        return true;
-      }
-    }
-    console.warn("[Fonts] Font files not found in any expected location, using system font fallback");
-    return false;
-  } catch (err: any) {
-    console.warn(`[Fonts] Failed to load font files: ${err.message}, using system font fallback`);
-    return false;
-  }
-}
-
-/**
- * Build SVG text overlay with headline, subheadline, benefits, and CTA.
- * Tries to embed Liberation Sans as base64 @font-face for reliable rendering.
- * Falls back to system fonts (Liberation Sans, DejaVu Sans, Arial, sans-serif)
- * if the font files aren't available.
- */
-function buildTextOverlaySvg(
-  width: number,
-  height: number,
-  copy: {
-    headline: string;
-    subheadline: string | null;
-    benefits: string;
-    cta: string;
-    product: string;
-  },
-  productTop: number,
-  productBottom: number
-): string {
-  const escXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-  // Try to load and embed fonts; if unavailable, use system font fallback
-  const hasEmbeddedFonts = tryLoadFonts();
-
-  let fontDefs = "";
-  let FONT: string;
-
-  if (hasEmbeddedFonts && _fontBoldBase64 && _fontRegularBase64) {
-    fontDefs = `
-    <defs>
-      <style type="text/css">
-        @font-face {
-          font-family: 'AdFont';
-          font-weight: bold;
-          src: url('data:font/truetype;base64,${_fontBoldBase64}') format('truetype');
-        }
-        @font-face {
-          font-family: 'AdFont';
-          font-weight: normal;
-          src: url('data:font/truetype;base64,${_fontRegularBase64}') format('truetype');
-        }
-      </style>
-    </defs>`;
-    FONT = "AdFont, Liberation Sans, Arial, Helvetica, sans-serif";
-  } else {
-    // System font fallback — these are widely available on Linux servers
-    FONT = "Liberation Sans, DejaVu Sans, Noto Sans, Arial, Helvetica, sans-serif";
-    fontDefs = ""; // No embedded fonts needed
-  }
-
-  // Font sizes relative to canvas width
-  const headlineFontSize = Math.floor(width * 0.055); // ~66px at 1200w
-  const subheadlineFontSize = Math.floor(width * 0.028); // ~34px
-  const benefitFontSize = Math.floor(width * 0.024); // ~29px
-  const ctaFontSize = Math.floor(width * 0.022); // ~26px
-
-  // Headline positioning: above the product
-  const headlineY = Math.floor(height * 0.14);
-
-  // Word-wrap headline if too long
-  const headlineLines = wrapText(copy.headline.toUpperCase(), 22);
-
-  let svgParts: string[] = [];
-
-  // HEADLINE — large, bold, white with red accent underline
-  headlineLines.forEach((line, i) => {
-    const lineY = headlineY + (i * (headlineFontSize + 8));
-    svgParts.push(`
-      <text x="${width / 2}" y="${lineY}" text-anchor="middle"
-        font-family="${FONT}"
-        font-size="${headlineFontSize}" font-weight="bold" fill="white"
-        letter-spacing="2">${escXml(line)}</text>
-    `);
-  });
-
-  // Red accent line under headline
-  const accentLineY = headlineY + (headlineLines.length * (headlineFontSize + 8)) + 5;
-  const accentWidth = Math.floor(width * 0.15);
-  svgParts.push(`
-    <rect x="${(width - accentWidth) / 2}" y="${accentLineY}" width="${accentWidth}" height="4" rx="2" fill="#FF3838"/>
-  `);
-
-  // SUBHEADLINE — below headline accent, lighter weight
-  if (copy.subheadline) {
-    const subY = accentLineY + 30;
-    svgParts.push(`
-      <text x="${width / 2}" y="${subY}" text-anchor="middle"
-        font-family="${FONT}"
-        font-size="${subheadlineFontSize}" font-weight="normal" fill="#E0E0E0"
-        letter-spacing="1">${escXml(copy.subheadline)}</text>
-    `);
-  }
-
-  // BENEFIT CALLOUT — below product area
-  const benefitY = Math.min(productBottom + Math.floor(height * 0.06), Math.floor(height * 0.82));
-  svgParts.push(`
-    <text x="${width / 2}" y="${benefitY}" text-anchor="middle"
-      font-family="${FONT}"
-      font-size="${benefitFontSize}" font-weight="bold" fill="#FF3838"
-      letter-spacing="1.5">${escXml(copy.benefits.toUpperCase())}</text>
-  `);
-
-  // CTA BUTTON — bottom area, red pill-shaped button
-  const ctaY = Math.min(benefitY + Math.floor(height * 0.06), Math.floor(height * 0.90));
-  const ctaText = copy.cta.toUpperCase();
-  const ctaBoxWidth = Math.floor(width * 0.35);
-  const ctaBoxHeight = Math.floor(height * 0.055);
-  const ctaBoxX = (width - ctaBoxWidth) / 2;
-  const ctaBoxY = ctaY - ctaBoxHeight / 2;
-
-  svgParts.push(`
-    <rect x="${ctaBoxX}" y="${ctaBoxY}" width="${ctaBoxWidth}" height="${ctaBoxHeight}" rx="${ctaBoxHeight / 2}" fill="#FF3838"/>
-    <text x="${width / 2}" y="${ctaBoxY + ctaBoxHeight / 2 + ctaFontSize / 3}" text-anchor="middle"
-      font-family="${FONT}"
-      font-size="${ctaFontSize}" font-weight="bold" fill="white"
-      letter-spacing="3">${escXml(ctaText)}</text>
-  `);
-
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    ${fontDefs}
-    ${svgParts.join("\n")}
-  </svg>`;
-}
-
-/**
- * Fallback SVG text overlay using ONLY system fonts (no embedded base64).
- * Used when the embedded font version fails in production.
- */
-function buildTextOverlaySvgSystemFonts(
-  width: number,
-  height: number,
-  copy: {
-    headline: string;
-    subheadline: string | null;
-    benefits: string;
-    cta: string;
-    product: string;
-  },
-  productTop: number,
-  productBottom: number
-): string {
-  const escXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const FONT = "Liberation Sans, DejaVu Sans, Noto Sans, Arial, Helvetica, sans-serif";
-
-  const headlineFontSize = Math.floor(width * 0.055);
-  const subheadlineFontSize = Math.floor(width * 0.028);
-  const benefitFontSize = Math.floor(width * 0.024);
-  const ctaFontSize = Math.floor(width * 0.022);
-  const headlineY = Math.floor(height * 0.14);
-  const headlineLines = wrapText(copy.headline.toUpperCase(), 22);
-
-  let svgParts: string[] = [];
-
-  headlineLines.forEach((line, i) => {
-    const lineY = headlineY + (i * (headlineFontSize + 8));
-    svgParts.push(`<text x="${width / 2}" y="${lineY}" text-anchor="middle" font-family="${FONT}" font-size="${headlineFontSize}" font-weight="bold" fill="white" letter-spacing="2">${escXml(line)}</text>`);
-  });
-
-  const accentLineY = headlineY + (headlineLines.length * (headlineFontSize + 8)) + 5;
-  const accentWidth = Math.floor(width * 0.15);
-  svgParts.push(`<rect x="${(width - accentWidth) / 2}" y="${accentLineY}" width="${accentWidth}" height="4" rx="2" fill="#FF3838"/>`);
-
-  if (copy.subheadline) {
-    const subY = accentLineY + 30;
-    svgParts.push(`<text x="${width / 2}" y="${subY}" text-anchor="middle" font-family="${FONT}" font-size="${subheadlineFontSize}" font-weight="normal" fill="#E0E0E0" letter-spacing="1">${escXml(copy.subheadline)}</text>`);
-  }
-
-  const benefitY = Math.min(productBottom + Math.floor(height * 0.06), Math.floor(height * 0.82));
-  svgParts.push(`<text x="${width / 2}" y="${benefitY}" text-anchor="middle" font-family="${FONT}" font-size="${benefitFontSize}" font-weight="bold" fill="#FF3838" letter-spacing="1.5">${escXml(copy.benefits.toUpperCase())}</text>`);
-
-  const ctaY = Math.min(benefitY + Math.floor(height * 0.06), Math.floor(height * 0.90));
-  const ctaText = copy.cta.toUpperCase();
-  const ctaBoxWidth = Math.floor(width * 0.35);
-  const ctaBoxHeight = Math.floor(height * 0.055);
-  const ctaBoxX = (width - ctaBoxWidth) / 2;
-  const ctaBoxY = ctaY - ctaBoxHeight / 2;
-
-  svgParts.push(`<rect x="${ctaBoxX}" y="${ctaBoxY}" width="${ctaBoxWidth}" height="${ctaBoxHeight}" rx="${ctaBoxHeight / 2}" fill="#FF3838"/>`);
-  svgParts.push(`<text x="${width / 2}" y="${ctaBoxY + ctaBoxHeight / 2 + ctaFontSize / 3}" text-anchor="middle" font-family="${FONT}" font-size="${ctaFontSize}" font-weight="bold" fill="white" letter-spacing="3">${escXml(ctaText)}</text>`);
-
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${svgParts.join("\n")}</svg>`;
-}
-
-/**
- * Simple word-wrap for headline text
- */
-function wrapText(text: string, maxCharsPerLine: number): string[] {
-  if (text.length <= maxCharsPerLine) return [text];
-
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
-      lines.push(currentLine.trim());
-      currentLine = word;
-    } else {
-      currentLine += (currentLine ? " " : "") + word;
-    }
-  }
-  if (currentLine) lines.push(currentLine.trim());
-
-  return lines.slice(0, 3); // Max 3 lines
 }

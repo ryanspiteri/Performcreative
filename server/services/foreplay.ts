@@ -38,18 +38,38 @@ export interface ForeplayAd {
  * Fetch ads from a Foreplay board by board_id.
  * Uses the correct endpoint: GET /api/board/ads?board_id=XXX
  */
-export async function fetchBoardAds(boardId: string, limit = 20): Promise<ForeplayAd[]> {
-  try {
-    console.log(`[Foreplay] Fetching ads from board ${boardId}, limit=${limit}`);
-    const res = await foreplayClient.get("/api/board/ads", {
-      params: { board_id: boardId, limit },
-    });
+export async function fetchBoardAds(boardId: string, limit = 100): Promise<ForeplayAd[]> {
+  const allAds: any[] = [];
+  let offset = 0;
+  const pageSize = Math.min(limit, 100); // Fetch in pages of up to 100
+  const maxPages = 10; // Safety limit: max 1000 ads
 
-    const data = res.data?.data || [];
-    console.log(`[Foreplay] Got ${data.length} ads from board ${boardId}`);
-    return normalizeAds(data);
+  try {
+    console.log(`[Foreplay] Fetching ads from board ${boardId}, limit=${limit} (paginated)`);
+
+    for (let page = 0; page < maxPages; page++) {
+      const res = await foreplayClient.get("/api/board/ads", {
+        params: { board_id: boardId, limit: pageSize, offset },
+      });
+
+      const data = res.data?.data || [];
+      console.log(`[Foreplay] Page ${page + 1}: got ${data.length} ads (offset=${offset})`);
+      allAds.push(...data);
+
+      // Stop if we got fewer than requested (no more pages) or hit our limit
+      if (data.length < pageSize || allAds.length >= limit) break;
+      offset += data.length;
+    }
+
+    console.log(`[Foreplay] Total: ${allAds.length} ads from board ${boardId}`);
+    return normalizeAds(allAds.slice(0, limit));
   } catch (error: any) {
     console.error("[Foreplay] Error fetching board ads:", error?.response?.status, error?.response?.data || error.message);
+    // Return whatever we got before the error
+    if (allAds.length > 0) {
+      console.log(`[Foreplay] Returning ${allAds.length} ads fetched before error`);
+      return normalizeAds(allAds);
+    }
     return [];
   }
 }

@@ -27,8 +27,8 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
 
     // Fetch from both boards
     const [videoAds, staticAds] = await Promise.all([
-      fetchVideoAds(50),
-      fetchStaticAds(50),
+      fetchVideoAds(200),
+      fetchStaticAds(200),
     ]);
 
     const totalFetched = videoAds.length + staticAds.length;

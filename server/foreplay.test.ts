@@ -82,7 +82,7 @@ describe("Foreplay Service", () => {
 
     // Should call the correct endpoint with the inspo board ID
     expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/board/ads", {
-      params: { board_id: "6nEqpgBrTtip6dD98R3X", limit: 5 },
+      params: { board_id: "6nEqpgBrTtip6dD98R3X", limit: 5, offset: 0 },
     });
 
     expect(ads.length).toBe(2);
@@ -113,7 +113,7 @@ describe("Foreplay Service", () => {
 
     // Should call the correct endpoint with the static_inspo board ID
     expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/board/ads", {
-      params: { board_id: "K2LrL6uQapf8EBT1ZbUN", limit: 20 },
+      params: { board_id: "K2LrL6uQapf8EBT1ZbUN", limit: 20, offset: 0 },
     });
 
     expect(ads.length).toBe(1);

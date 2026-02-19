@@ -251,6 +251,131 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // Generate headline-matched background concepts
+    generateBackgrounds: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        headlines: z.array(z.string()).length(3),
+        product: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import("./_core/llm");
+
+        // Get product info for context
+        let productContext = "";
+        try {
+          const info = await db.getProductInfo(input.product);
+          if (info) {
+            const parts: string[] = [];
+            if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
+            if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
+            if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
+            productContext = parts.join("\n");
+          }
+        } catch { /* ignore */ }
+
+        // Get the competitor ad analysis from the pipeline run for style context
+        let styleContext = "";
+        try {
+          const run = await db.getPipelineRun(input.runId);
+          if (run?.briefOptionsJson) {
+            const briefSnippet = typeof run.briefOptionsJson === 'string' ? run.briefOptionsJson.substring(0, 500) : JSON.stringify(run.briefOptionsJson).substring(0, 500);
+            styleContext = `\nCompetitor ad analysis context: ${briefSnippet}`;
+          }
+        } catch { /* ignore */ }
+
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert creative director for DTC supplement advertising. Generate background scene concepts for ad creatives that MATCH the emotional tone and theme of each headline.
+
+Rules:
+- Each background must be a SCENE/ENVIRONMENT description (no text, no products, no logos)
+- Backgrounds should evoke the feeling of the headline
+- Use dramatic lighting, premium aesthetics, brand colors (#FF3838 red, #0347ED blue, #01040A black)
+- Think about what visual environment would make someone stop scrolling
+- Be specific and vivid — describe lighting, colors, textures, mood
+- Each headline gets 3 different background options
+
+Return ONLY valid JSON, no markdown.`,
+            },
+            {
+              role: "user",
+              content: `Product: ${input.product}
+${productContext ? `Product Info:\n${productContext}` : ""}
+${styleContext}
+
+Generate 3 background concepts for EACH of these 3 headlines:
+
+Headline 1: "${input.headlines[0]}"
+Headline 2: "${input.headlines[1]}"
+Headline 3: "${input.headlines[2]}"
+
+Return JSON in this exact format:
+{
+  "images": [
+    {
+      "headline": "exact headline text",
+      "backgrounds": [
+        { "title": "Short Title", "description": "2-3 sentence visual description", "prompt": "Detailed image generation prompt for this background scene" },
+        { "title": "Short Title", "description": "2-3 sentence visual description", "prompt": "Detailed image generation prompt" },
+        { "title": "Short Title", "description": "2-3 sentence visual description", "prompt": "Detailed image generation prompt" }
+      ]
+    },
+    { ... },
+    { ... }
+  ]
+}`,
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "background_concepts",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  images: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        headline: { type: "string" },
+                        backgrounds: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              title: { type: "string" },
+                              description: { type: "string" },
+                              prompt: { type: "string" },
+                            },
+                            required: ["title", "description", "prompt"],
+                            additionalProperties: false,
+                          },
+                        },
+                      },
+                      required: ["headline", "backgrounds"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["images"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const content = response.choices?.[0]?.message?.content;
+        if (!content) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No response from AI" });
+
+        const parsed = JSON.parse(typeof content === 'string' ? content : JSON.stringify(content));
+        return parsed as { images: Array<{ headline: string; backgrounds: Array<{ title: string; description: string; prompt: string }> }> };
+      }),
+
     // Get active products list
     getActiveProducts: publicProcedure.query(() => {
       return ACTIVE_PRODUCTS;

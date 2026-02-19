@@ -317,3 +317,30 @@ All three fixes implemented and tested:
 - [x] FIX: Thumbnail URLs stored and served correctly (r2.foreplay.co URLs verified)
 - [x] FIX: Frontend reads correct field names + isNew badge mapped
 - [x] FIX: Test data pollution fixed — tests use unique prefix and afterAll cleanup
+
+## ROUND 12 — PUPPETEER TEXT RENDERING + HEADLINE-MATCHED BACKGROUNDS + FOREPLAY SYNC FIX
+
+### Feature 1: Puppeteer HTML/CSS Text Rendering
+- [x] INSTALL: Add puppeteer as dependency
+- [x] COMPOSITING: Abandon Sharp SVG text overlay entirely
+- [x] COMPOSITING: Build HTML template for ad creative with web fonts (Montserrat bold sans-serif)
+- [x] COMPOSITING: Template includes: headline (large, bold, white), subheadline (smaller, lighter), benefit callouts, red CTA button, ONEST logo
+- [x] COMPOSITING: Use Puppeteer headless browser to screenshot HTML to PNG
+- [x] COMPOSITING: HTML template composites: AI background + product render + all text with proper typography
+- [x] LAYOUT: ONEST logo top-left, bold headline near top, subheadline below, product render centered, benefit callout with red accent, red CTA button at bottom
+- [x] TEST: Verified text renders as crisp, readable English in final composited images
+
+### Feature 2: Headline-Matched Background Concepts
+- [x] BACKEND: After user selects headlines, AI generates 3 background concepts per headline
+- [x] BACKEND: Background concepts match headline theme (e.g., "Fire Up Your Metabolism" → flames/embers)
+- [x] BACKEND: New tRPC endpoint generateBackgrounds for background concept generation
+- [x] UI: Two-step selection gate — Step 1: copy/benefits, Step 2: headline-matched backgrounds
+- [x] UI: User can pick one, edit the suggestion, or write custom background prompt
+- [x] UI: Each of 3 output images gets its own background prompt tied to its headline
+
+### Fix 3: Foreplay Sync Not Pulling Latest
+- [x] DEBUG: Added detailed logging to sync service
+- [x] FIX: Sync fetches from both #inspo and #static_inspo boards
+- [x] FIX: Added pagination to fetchBoardAds (offset-based, 100 per page, up to 200 total)
+- [x] FIX: Increased sync limits from 50 to 200 per board
+- [x] FIX: Most recently saved creatives are fetched with full pagination
