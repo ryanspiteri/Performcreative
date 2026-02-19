@@ -1,6 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -259,6 +259,38 @@ export async function countNewCreatives(): Promise<number> {
   if (!db) throw new Error("Database not available");
   const rows = await db.select({ count: sql<number>`count(*)` }).from(foreplayCreatives).where(eq(foreplayCreatives.isNew, 1));
   return rows[0]?.count || 0;
+}
+
+// ============================================================
+// Background helpers
+// ============================================================
+export async function createBackground(data: InsertBackground) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(backgrounds).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function listBackgrounds(category?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (category) {
+    return db.select().from(backgrounds).where(eq(backgrounds.category, category)).orderBy(desc(backgrounds.createdAt));
+  }
+  return db.select().from(backgrounds).orderBy(desc(backgrounds.createdAt));
+}
+
+export async function deleteBackground(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(backgrounds).where(eq(backgrounds.id, id));
+}
+
+export async function getBackground(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(backgrounds).where(eq(backgrounds.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function upsertProductInfo(data: InsertProductInfo) {

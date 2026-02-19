@@ -1,10 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette } from "lucide-react";
 
 const navItems = [
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },
+  { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
   { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -53,12 +54,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Section: Products */}
+        {/* Section: Assets */}
         <div className="px-3 pt-5 pb-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Products</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Assets</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(1, 3).map((item) => {
+          {navItems.slice(1, 4).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -82,7 +83,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.slice(3).map((item) => {
+          {navItems.slice(4).map((item) => {
             const isActive = location === item.path;
             return (
               <button

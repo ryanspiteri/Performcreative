@@ -128,3 +128,21 @@ export const foreplayCreatives = mysqlTable("foreplay_creatives", {
 
 export type ForeplayCreative = typeof foreplayCreatives.$inferSelect;
 export type InsertForeplayCreative = typeof foreplayCreatives.$inferInsert;
+
+/**
+ * Background images uploaded by the team for static ad compositing.
+ * Used instead of AI-generated backgrounds for consistent quality.
+ */
+export const backgrounds = mysqlTable("backgrounds", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  category: varchar("category", { length: 64 }).notNull(), // e.g. "Dark", "Gradient", "Studio", "Colourful", "Abstract"
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  url: text("url").notNull(),
+  mimeType: varchar("mimeType", { length: 64 }).default("image/png").notNull(),
+  fileSize: int("fileSize"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Background = typeof backgrounds.$inferSelect;
+export type InsertBackground = typeof backgrounds.$inferInsert;

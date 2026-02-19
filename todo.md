@@ -377,3 +377,75 @@ All three fixes implemented and tested:
 ### Next Test
 - Run new static pipeline to verify product render displays at correct size (504px width)
 - Verify text, product, and background all composite correctly
+
+
+## ROUND 11 — PROFESSIONAL AD TEMPLATE REDESIGN
+
+- [ ] Typography: Bold impactful fonts (Bebas Neue, Oswald, Impact) with text effects (shadows, outlines, glows)
+- [ ] Layout: Proven DTC supplement ad patterns — headline top, product centered, benefits around product, CTA bottom
+- [ ] Graphic elements: Gradient overlays, colour accents, badge shapes, glow/shadow on product render
+- [ ] Create 4 distinct HTML/CSS template styles so variations look genuinely different
+- [ ] Background prompts: More specific, tied to headline concept, abstract/gradient options
+- [ ] Test end-to-end pipeline with new templates
+- [ ] Verify output matches professional DTC supplement ad quality
+
+
+## ROUND 11 — UPDATED PLAN (Background Manager + Template Redesign)
+
+- [ ] Remove nano banana AI background generation from static pipeline
+- [ ] DB schema: backgrounds table (id, name, url, category, createdAt)
+- [ ] tRPC endpoints: upload background, list backgrounds, delete background
+- [ ] Background Manager UI page in sidebar (upload, gallery, delete)
+- [ ] CSS background presets: 8-10 built-in options (dark dramatic, warm amber, clean pink, studio white, etc.)
+- [ ] Template 1: Bold Impact — large headline with text stroke, product with glow ring, benefit badges with icons
+- [ ] Template 2: Clean Editorial — light/pastel background, product on surface, elegant headline
+- [ ] Template 3: Feature Showcase — product left-aligned, benefit callouts stacked right with checkmarks
+- [ ] Template 4: Dark Premium — full-bleed dark, dramatic lighting, centred product, gradient text
+- [ ] Rewrite pipeline Stage 4 to use uploaded/CSS backgrounds instead of AI generation
+- [ ] Simplify selection gate: remove background prompt step, add background picker (uploads + presets)
+- [ ] Test end-to-end pipeline with new templates
+- [ ] Verify output matches professional DTC supplement ad quality
+
+
+## ROUND 11 — BACKGROUND MANAGER + TEMPLATE REDESIGN
+
+- [ ] Remove nano banana AI background generation from static pipeline
+- [ ] DB schema: backgrounds table (id, name, url, category, createdAt)
+- [ ] tRPC endpoints: upload background, list backgrounds, delete background
+- [ ] Background Manager UI page in sidebar (upload, gallery by category, delete)
+- [ ] CSS background presets: 8-10 built-in options
+- [ ] Template 1: Bold Impact — large headline with text stroke, product glow, benefit badges
+- [ ] Template 2: Clean Editorial — light/pastel, product on surface, elegant headline
+- [ ] Template 3: Feature Showcase — product left, benefit callouts right with checkmarks
+- [ ] Template 4: Dark Premium — full-bleed dark, dramatic lighting, centred product
+- [ ] Rewrite pipeline Stage 4 to use uploaded/CSS backgrounds
+- [ ] Simplify selection gate: background picker (uploads + presets) instead of AI prompts
+- [ ] Test end-to-end pipeline with new templates
+
+
+## ROUND 11 — BACKGROUND MANAGER + TEMPLATE REDESIGN (IN PROGRESS)
+
+- [x] DB schema: backgrounds table (id, name, url, category, createdAt)
+- [x] tRPC endpoints: upload background, list backgrounds, delete background
+- [x] Background Manager UI page in sidebar (upload, gallery, delete)
+- [x] Add Backgrounds to AppLayout sidebar navigation
+- [x] Template 1: Bold Impact — large headline with text stroke, product with glow ring, benefit badges
+- [x] Template 2: Clean Editorial — light/pastel background, product on surface, elegant headline
+- [x] Template 3: Feature Showcase — product left-aligned, benefit callouts stacked right with checkmark icons
+- [x] Template 4: Dark Premium — full-bleed dark background, dramatic lighting, large centred product
+- [x] Rewrite imageCompositing.ts with 4 professional templates
+- [x] CSS preset backgrounds: 8 built-in options (dark dramatic, warm amber, clean pink, studio white, etc.)
+- [x] Update SelectionGate to show background picker (uploads + CSS presets) instead of AI-generated
+- [x] Update staticPipeline to skip AI background generation entirely
+- [x] Update submitSelections endpoint to accept uploaded/preset backgrounds
+- [ ] Test end-to-end pipeline with new templates and background picker
+- [ ] Verify all 3 elements render correctly: product renders, text, backgrounds
+- [ ] Deploy and verify
+
+### Status
+- Background Manager page built and visible in sidebar
+- 4 professional HTML/CSS templates implemented in imageCompositing.ts
+- SelectionGate UI rewritten to show background picker
+- Pipeline code updated to skip AI background generation
+- Server restarted successfully, no compilation errors
+- Test pipeline run #270001 started but hit socket hang up at Stage 3 (Brief Review) — restarting server to retry

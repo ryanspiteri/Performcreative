@@ -221,11 +221,19 @@ export const appRouter = router({
           images: z.array(z.object({
             headline: z.string(),
             subheadline: z.string().nullable(),
-            background: z.object({
-              title: z.string(),
-              description: z.string(),
-              prompt: z.string(),
-            }),
+            background: z.union([
+              z.object({
+                type: z.literal("uploaded"),
+                url: z.string(),
+                title: z.string(),
+              }),
+              z.object({
+                type: z.literal("preset"),
+                presetId: z.string(),
+                css: z.string(),
+                title: z.string(),
+              }),
+            ]),
           })).length(3),
           benefits: z.string(),
           productRenderUrl: z.string().optional(),
@@ -493,6 +501,48 @@ Return JSON in this exact format:
       .mutation(async ({ input }) => {
         const id = await db.upsertProductInfo(input);
         return { id, success: true };
+      }),
+  }),
+
+  // ============================================================
+  // BACKGROUND MANAGER
+  // ============================================================
+  backgrounds: router({
+    list: publicProcedure
+      .input(z.object({ category: z.string().optional() }).optional())
+      .query(async ({ input }) => {
+        return db.listBackgrounds(input?.category);
+      }),
+
+    upload: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        category: z.string(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const fileSize = buffer.length;
+        const suffix = Math.random().toString(36).slice(2, 10);
+        const fileKey = `backgrounds/${input.category.toLowerCase()}/${input.name}-${suffix}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const id = await db.createBackground({
+          name: input.name,
+          category: input.category,
+          fileKey,
+          url,
+          mimeType: input.mimeType,
+          fileSize,
+        });
+        return { id, url, fileKey };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteBackground(input.id);
+        return { success: true };
       }),
   }),
 });
