@@ -1,0 +1,110 @@
+{
+  "query": "SELECT id, pipelineType, status, staticStage, foreplayAdId, LEFT(errorMessage, 200) as err, LEFT(transcript, 100) as transcript_preview, createdAt FROM pipeline_runs ORDER BY createdAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, pipelineType, status, staticStage, foreplayAdId, LEFT(errorMessage, 200) as err, LEFT(transcript, 100) as transcript_preview, createdAt FROM pipeline_runs ORDER BY createdAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "90002",
+      "pipelineType": "static",
+      "status": "running",
+      "staticStage": "stage_4_generation",
+      "foreplayAdId": "rj2EqftuHRlrzliEap3x",
+      "err": "NULL",
+      "transcript_preview": "NULL",
+      "createdAt": "2026-02-19 00:17:44"
+    },
+    {
+      "id": "90001",
+      "pipelineType": "video",
+      "status": "running",
+      "staticStage": "NULL",
+      "foreplayAdId": "lPONXVHBYABTGoD02Wtj",
+      "err": "NULL",
+      "transcript_preview": "Transcription unavailable - video could not be processed.",
+      "createdAt": "2026-02-19 00:17:24"
+    },
+    {
+      "id": "60006",
+      "pipelineType": "video",
+      "status": "completed",
+      "staticStage": "NULL",
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "err": "NULL",
+      "transcript_preview": "Transcription unavailable - video could not be processed.",
+      "createdAt": "2026-02-18 23:33:08"
+    },
+    {
+      "id": "60005",
+      "pipelineType": "video",
+      "status": "running",
+      "staticStage": "NULL",
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "err": "NULL",
+      "transcript_preview": "Transcription unavailable - video could not be processed.",
+      "createdAt": "2026-02-18 23:32:48"
+    },
+    {
+      "id": "60004",
+      "pipelineType": "video",
+      "status": "failed",
+      "staticStage": "NULL",
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "err": "Client network socket disconnected before secure TLS connection was established",
+      "transcript_preview": "Transcription unavailable - video could not be processed.",
+      "createdAt": "2026-02-18 23:32:23"
+    },
+    {
+      "id": "60003",
+      "pipelineType": "video",
+      "status": "completed",
+      "staticStage": "NULL",
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "err": "NULL",
+      "transcript_preview": "Transcription unavailable - video could not be processed.",
+      "createdAt": "2026-02-18 23:18:18"
+    },
+    {
+      "id": "60002",
+      "pipelineType": "static",
+      "status": "completed",
+      "staticStage": "NULL",
+      "foreplayAdId": "NULL",
+      "err": "Image generation unavailable: Dynamic require of \"path\" is not supported",
+      "transcript_preview": "NULL",
+      "createdAt": "2026-02-18 23:16:21"
+    },
+    {
+      "id": "60001",
+      "pipelineType": "static",
+      "status": "completed",
+      "staticStage": "NULL",
+      "foreplayAdId": "NULL",
+      "err": "Image generation unavailable: Dynamic require of \"path\" is not supported",
+      "transcript_preview": "NULL",
+      "createdAt": "2026-02-18 23:15:49"
+    },
+    {
+      "id": "30002",
+      "pipelineType": "video",
+      "status": "completed",
+      "staticStage": "NULL",
+      "foreplayAdId": "UKiOthLvodQ0YISqRmuL",
+      "err": "NULL",
+      "transcript_preview": "Transcription unavailable - video could not be processed.",
+      "createdAt": "2026-02-18 22:25:00"
+    },
+    {
+      "id": "30001",
+      "pipelineType": "static",
+      "status": "completed",
+      "staticStage": "NULL",
+      "foreplayAdId": "NULL",
+      "err": "NULL",
+      "transcript_preview": "NULL",
+      "createdAt": "2026-02-18 22:21:14"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tpipelineType\tstatus\tstaticStage\tforeplayAdId\terr\ttranscript_preview\tcreatedAt\n90002\tstatic\trunning\tstage_4_generation\trj2EqftuHRlrzliEap3x\tNULL\tNULL\t2026-02-19 00:17:44\n90001\tvideo\trunning\tNULL\tlPONXVHBYABTGoD02Wtj\tNULL\tTranscription unavailable - video could not be processed.\t2026-02-19 00:17:24\n60006\tvideo\tcompleted\tNULL\tUKiOthLvodQ0YISqRmuL\tNULL\tTranscription unavailable - video could not be processed.\t2026-02-18 23:33:08\n60005\tvideo\trunning\tNULL\tUKiOthLvodQ0YISqRmuL\tNULL\tTranscription unavailable - video could not be processed.\t2026-02-18 23:32:48\n60004\tvideo\tfailed\tNULL\tUKiOthLvodQ0YISqRmuL\tClient network socket disconnected before secure TLS connection was established\tTranscription unavailable - video could not be processed.\t2026-02-18 23:32:23\n60003\tvideo\tcompleted\tNULL\tUKiOthLvodQ0YISqRmuL\tNULL\tTranscription unavailable - video could not be processed.\t2026-02-18 23:18:18\n60002\tstatic\tcompleted\tNULL\tNULL\tImage generation unavailable: Dynamic require of \"path\" is not supported\tNULL\t2026-02-18 23:16:21\n60001\tstatic\tcompleted\tNULL\tNULL\tImage generation unavailable: Dynamic require of \"path\" is not supported\tNULL\t2026-02-18 23:15:49\n30002\tvideo\tcompleted\tNULL\tUKiOthLvodQ0YISqRmuL\tNULL\tTranscription unavailable - video could not be processed.\t2026-02-18 22:25:00\n30001\tstatic\tcompleted\tNULL\tNULL\tNULL\tNULL\t2026-02-18 22:21:14\n",
+  "stderr": "",
+  "execution_time_ms": 1519
+}

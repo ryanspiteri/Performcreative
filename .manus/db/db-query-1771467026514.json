@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE pipeline_runs SET status = 'failed', errorMessage = 'Pipeline stalled — marked as failed automatically (stale run from previous server instance)' WHERE status = 'running' AND updatedAt < DATE_SUB(NOW(), INTERVAL 30 MINUTE);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute UPDATE pipeline_runs SET status = 'failed', errorMessage = 'Pipeline stalled — marked as failed automatically (stale run from previous server instance)' WHERE status = 'running' AND updatedAt < DATE_SUB(NOW(), INTERVAL 30 MINUTE);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1525
+}

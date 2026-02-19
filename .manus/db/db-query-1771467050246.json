@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, pipelineType, status, staticStage, updatedAt FROM pipeline_runs WHERE status IN ('running', 'pending');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, pipelineType, status, staticStage, updatedAt FROM pipeline_runs WHERE status IN ('running', 'pending');",
+  "rows": [
+    {
+      "id": "120002",
+      "pipelineType": "static",
+      "status": "running",
+      "staticStage": "stage_6_team_approval",
+      "updatedAt": "2026-02-19 02:04:56"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tpipelineType\tstatus\tstaticStage\tupdatedAt\n120002\tstatic\trunning\tstage_6_team_approval\t2026-02-19 02:04:56\n",
+  "stderr": "",
+  "execution_time_ms": 1684
+}

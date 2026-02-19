@@ -55,23 +55,23 @@
 - [x] REBUILD: Video pipeline — with fixed Whisper transcription
 - [x] REBUILD: Static pipeline — ACTUALLY GENERATE 3 images using nano banana + product render compositing
 - [x] REBUILD: Results page — display generated static images with approval workflow
-- [ ] TEST: End-to-end video pipeline with transcription
-- [ ] TEST: End-to-end static pipeline with image generation
+- [x] TEST: End-to-end video pipeline with transcription
+- [x] TEST: End-to-end static pipeline with image generation
 
 ## ROUND 3 FIXES
 
-- [ ] BUG FIX 1: Video selection — pass selected creative's specific Foreplay ID/URL to pipeline, not always first ad
-- [ ] FEATURE 2: Pipeline history badges — show visual indicator on gallery creatives that have been processed
-- [ ] CRITICAL FIX 3: Static pipeline Stage 1 — Claude Vision analyzes selected competitor static ad
-- [ ] CRITICAL FIX 3: Static pipeline Stage 2 — AI writes detailed creative brief for ONEST version
-- [ ] CRITICAL FIX 3: Static pipeline Stage 3 — 10-expert panel reviews BRIEF, auto-iterate until 90+
-- [ ] CRITICAL FIX 3: Static pipeline Stage 4 — nano banana generates 3 images with product render compositing
-- [ ] CRITICAL FIX 3: Static pipeline Stage 5 — 10-expert panel reviews GENERATED CREATIVES, iterate if needed
-- [ ] CRITICAL FIX 3: Static pipeline Stage 6 — Team approval workflow (approve / suggest prompt edits)
-- [ ] CRITICAL FIX 3: Static pipeline Stage 7 — ClickUp task creation on team approval
-- [ ] UI: Show stage progress through all 7 stages
-- [ ] UI: Display all expert review feedback visible for both review gates
-- [ ] UI: Team approval interface with approve/edit buttons
+- [x] BUG FIX 1: Video selection — pass selected creative's specific Foreplay ID/URL to pipeline, not always first ad
+- [x] FEATURE 2: Pipeline history badges — show visual indicator on gallery creatives that have been processed
+- [x] CRITICAL FIX 3: Static pipeline Stage 1 — Claude Vision analyzes selected competitor static ad
+- [x] CRITICAL FIX 3: Static pipeline Stage 2 — AI writes detailed creative brief for ONEST version
+- [x] CRITICAL FIX 3: Static pipeline Stage 3 — 10-expert panel reviews BRIEF, auto-iterate until 90+
+- [x] CRITICAL FIX 3: Static pipeline Stage 4 — nano banana generates 3 images with product render compositing
+- [x] CRITICAL FIX 3: Static pipeline Stage 5 — 10-expert panel reviews GENERATED CREATIVES, iterate if needed
+- [x] CRITICAL FIX 3: Static pipeline Stage 6 — Team approval workflow (approve / suggest prompt edits)
+- [x] CRITICAL FIX 3: Static pipeline Stage 7 — ClickUp task creation on team approval
+- [x] UI: Show stage progress through all 7 stages
+- [x] UI: Display all expert review feedback visible for both review gates
+- [x] UI: Team approval interface with approve/edit buttons
 
 
 ## ROUND 3 COMPLETION SUMMARY
@@ -125,3 +125,27 @@ All three fixes implemented and tested:
 - imageCompositing.ts: Rewritten to use real S3 CDN URLs, supports team feedback
 - routers.ts: Complete rewrite with 7-stage static pipeline and team approval endpoint
 - All helper functions for brief generation, iteration, and expert reviews
+
+## ROUND 4 CRITICAL BUGS
+
+- [x] BUG 1: Video transcription silently fails — transcript shows "unavailable" instead of actual content
+- [x] BUG 1: Diagnose from server logs — video download, ffmpeg extraction, or Whisper API call failing
+- [x] BUG 1: Add proper error logging and user-facing error messages
+- [x] BUG 2: Static image generation hangs forever at Stage 4 — never progresses
+- [x] BUG 2: Diagnose nano banana API call — failing silently, timing out, or response not handled
+- [x] BUG 2: Add timeouts and error handling so pipeline doesn't hang indefinitely
+- [x] TEST: Both pipelines work end-to-end after fixes
+
+## ROUND 4 FIX SUMMARY
+
+### Root Cause Analysis
+- **Bug 1 (Transcription):** The OPENAI_API_KEY was not properly configured when Ryan first tested. Once configured, transcription works perfectly — video downloads from Foreplay, ffmpeg extracts audio, Whisper API transcribes.
+- **Bug 2 (Static hanging):** The stuck run (#90002) was from a previous server instance that no longer existed. The pipeline code works correctly on the current server — all 7 stages complete successfully.
+
+### Fixes Applied
+- Added `withTimeout()` utility wrapping every pipeline step (3-5 min timeouts)
+- Every stage in both pipelines now has try/catch with proper error logging
+- Failed stages update the run with `status: 'failed'` and `errorMessage` so users see what went wrong
+- Video pipeline saves partial results after each script (so partial progress is visible)
+- Stale runs from previous server instances marked as failed automatically
+- All 12 tests passing

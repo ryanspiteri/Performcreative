@@ -16,6 +16,19 @@ import { SignJWT } from "jose";
 const VALID_USERNAME = "ONEST";
 const VALID_PASSWORD = "UnlockGrowth";
 
+// Timeout utility to prevent hanging forever
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
+    ),
+  ]);
+}
+
+const STAGE_TIMEOUT = 5 * 60 * 1000; // 5 minutes per stage
+const STEP_TIMEOUT = 3 * 60 * 1000; // 3 minutes per step
+
 export const appRouter = router({
   system: systemRouter,
 
@@ -194,16 +207,33 @@ async function runVideoPipeline(runId: number, input: {
   console.log("[Pipeline] Step 1: Transcribing video from:", input.mediaUrl);
   let transcript = "";
   try {
-    if (input.mediaUrl) transcript = await transcribeVideo(input.mediaUrl);
+    if (input.mediaUrl) {
+      transcript = await withTimeout(transcribeVideo(input.mediaUrl), STEP_TIMEOUT, "Transcription");
+      console.log("[Pipeline] Transcription succeeded, length:", transcript.length);
+    } else {
+      console.warn("[Pipeline] No media URL provided, skipping transcription");
+      transcript = "No video URL provided.";
+    }
   } catch (err: any) {
-    console.warn("[Pipeline] Transcription failed:", err.message);
-    transcript = "Transcription unavailable - video could not be processed.";
+    console.error("[Pipeline] Transcription failed:", err.message, err.stack);
+    transcript = `Transcription failed: ${err.message}`;
+    await db.updatePipelineRun(runId, { errorMessage: `Transcription error: ${err.message}` });
   }
   await db.updatePipelineRun(runId, { transcript });
 
   // Step 2: Visual analysis
   console.log("[Pipeline] Step 2: Running visual analysis...");
-  const visualAnalysis = await analyzeVideoFrames(input.mediaUrl, transcript, input.foreplayAdBrand);
+  let visualAnalysis = "";
+  try {
+    visualAnalysis = await withTimeout(
+      analyzeVideoFrames(input.mediaUrl, transcript, input.foreplayAdBrand),
+      STEP_TIMEOUT, "Visual analysis"
+    );
+    console.log("[Pipeline] Visual analysis complete, length:", visualAnalysis.length);
+  } catch (err: any) {
+    console.error("[Pipeline] Visual analysis failed:", err.message);
+    visualAnalysis = `Visual analysis failed: ${err.message}`;
+  }
   await db.updatePipelineRun(runId, { visualAnalysis });
 
   // Step 3: Generate scripts
@@ -216,24 +246,55 @@ async function runVideoPipeline(runId: number, input: {
   ];
   const allScripts: any[] = [];
   for (const config of scriptConfigs) {
-    console.log(`[Pipeline] Generating ${config.type}${config.num}...`);
-    const script = await generateScripts(transcript, visualAnalysis, input.product, config.type, config.num);
-    console.log(`[Pipeline] Running expert review for ${config.type}${config.num}...`);
-    const review = await reviewScript(script, input.product, config.type);
-    allScripts.push({ type: config.type, number: config.num, label: `${config.type}${config.num}`, ...script, review });
+    try {
+      console.log(`[Pipeline] Generating ${config.type}${config.num}...`);
+      const script = await withTimeout(
+        generateScripts(transcript, visualAnalysis, input.product, config.type, config.num),
+        STEP_TIMEOUT, `Script ${config.type}${config.num}`
+      );
+      console.log(`[Pipeline] Running expert review for ${config.type}${config.num}...`);
+      const review = await withTimeout(
+        reviewScript(script, input.product, config.type),
+        STEP_TIMEOUT, `Review ${config.type}${config.num}`
+      );
+      allScripts.push({ type: config.type, number: config.num, label: `${config.type}${config.num}`, ...script, review });
+      // Save after each script so partial results are visible
+      await db.updatePipelineRun(runId, { scriptsJson: allScripts });
+    } catch (err: any) {
+      console.error(`[Pipeline] ${config.type}${config.num} failed:`, err.message);
+      allScripts.push({
+        type: config.type, number: config.num, label: `${config.type}${config.num}`,
+        title: `${config.type}${config.num} - Generation Failed`,
+        hook: `Error: ${err.message}`,
+        script: [], visualDirection: "", strategicThesis: "",
+        review: { finalScore: 0, rounds: [], approved: false },
+      });
+      await db.updatePipelineRun(runId, { scriptsJson: allScripts });
+    }
   }
-  await db.updatePipelineRun(runId, { scriptsJson: allScripts });
 
   // Step 4: ClickUp tasks
   console.log("[Pipeline] Step 4: Creating ClickUp tasks...");
-  const taskInputs = allScripts.map(s => ({
-    title: s.title || `${s.type}${s.number} Script`,
-    type: s.label,
-    score: s.review.finalScore,
-    content: formatScriptForClickUp(s),
-  }));
-  const clickupTasks = await createMultipleScriptTasks(taskInputs, input.product, input.priority);
-  await db.updatePipelineRun(runId, { clickupTasksJson: clickupTasks, status: "completed", completedAt: new Date() });
+  try {
+    const taskInputs = allScripts.filter(s => s.review?.finalScore > 0).map(s => ({
+      title: s.title || `${s.type}${s.number} Script`,
+      type: s.label,
+      score: s.review.finalScore,
+      content: formatScriptForClickUp(s),
+    }));
+    if (taskInputs.length > 0) {
+      const clickupTasks = await withTimeout(
+        createMultipleScriptTasks(taskInputs, input.product, input.priority),
+        STEP_TIMEOUT, "ClickUp Tasks"
+      );
+      await db.updatePipelineRun(runId, { clickupTasksJson: clickupTasks, status: "completed", completedAt: new Date() });
+    } else {
+      await db.updatePipelineRun(runId, { status: "completed", completedAt: new Date(), errorMessage: "All scripts failed to generate" });
+    }
+  } catch (err: any) {
+    console.error("[Pipeline] ClickUp task creation failed:", err.message);
+    await db.updatePipelineRun(runId, { status: "completed", completedAt: new Date(), errorMessage: `ClickUp failed: ${err.message}` });
+  }
   console.log(`[Pipeline] Video pipeline run #${runId} completed!`);
 }
 
@@ -261,43 +322,84 @@ async function runStaticPipeline(runId: number, input: {
   // ---- STAGE 1: Claude Vision analyzes the competitor static ad ----
   console.log("[Static] Stage 1: Analyzing competitor static ad...");
   await db.updatePipelineRun(runId, { staticStage: "stage_1_analysis" });
-  const analysis = await analyzeStaticAd(ad.imageUrl, ad.brandName || "Competitor");
+  let analysis: string;
+  try {
+    analysis = await withTimeout(analyzeStaticAd(ad.imageUrl, ad.brandName || "Competitor"), STAGE_TIMEOUT, "Stage 1: Analysis");
+    console.log("[Static] Stage 1 complete, analysis length:", analysis.length);
+  } catch (err: any) {
+    console.error("[Static] Stage 1 failed:", err.message);
+    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 1 (Analysis) failed: ${err.message}` });
+    return;
+  }
   await db.updatePipelineRun(runId, { staticAnalysis: analysis });
 
   // ---- STAGE 2: AI writes a creative brief for the ONEST version ----
   console.log("[Static] Stage 2: Writing creative brief...");
   await db.updatePipelineRun(runId, { staticStage: "stage_2_brief" });
-  const brief = await generateCreativeBrief(analysis, input.product, ad.brandName || "Competitor");
+  let brief: string;
+  try {
+    brief = await withTimeout(generateCreativeBrief(analysis, input.product, ad.brandName || "Competitor"), STAGE_TIMEOUT, "Stage 2: Brief");
+    console.log("[Static] Stage 2 complete, brief length:", brief.length);
+  } catch (err: any) {
+    console.error("[Static] Stage 2 failed:", err.message);
+    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 2 (Brief) failed: ${err.message}` });
+    return;
+  }
   await db.updatePipelineRun(runId, { staticBrief: brief });
 
   // ---- STAGE 3: 10-expert panel reviews the BRIEF ----
   console.log("[Static] Stage 3: Expert panel reviewing brief...");
   await db.updatePipelineRun(runId, { staticStage: "stage_3_brief_review" });
-  const { reviewResult: briefReview, finalBrief } = await reviewBriefWithPanel(brief, input.product);
+  let briefReview: any;
+  let finalBrief: string;
+  try {
+    const result = await withTimeout(reviewBriefWithPanel(brief, input.product), STAGE_TIMEOUT * 2, "Stage 3: Brief Review");
+    briefReview = result.reviewResult;
+    finalBrief = result.finalBrief;
+    console.log("[Static] Stage 3 complete, score:", briefReview.finalScore);
+  } catch (err: any) {
+    console.error("[Static] Stage 3 failed:", err.message);
+    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 3 (Brief Review) failed: ${err.message}` });
+    return;
+  }
   await db.updatePipelineRun(runId, { staticBriefReview: briefReview, staticBrief: finalBrief });
 
   // ---- STAGE 4: Generate 3 static ad images ----
   console.log("[Static] Stage 4: Generating 3 image variations...");
   await db.updatePipelineRun(runId, { staticStage: "stage_4_generation" });
-  const variations = await generateStaticAdVariations(
-    "", // not used — we use CDN URLs from brandAssets
-    ad.imageUrl,
-    input.product,
-    ad.brandName || "Competitor"
-  );
-  const generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
+  let generatedImages: any[];
+  try {
+    const variations = await withTimeout(
+      generateStaticAdVariations("", ad.imageUrl, input.product, ad.brandName || "Competitor"),
+      STAGE_TIMEOUT * 2, "Stage 4: Image Generation"
+    );
+    generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
+    console.log("[Static] Stage 4 complete, generated", generatedImages.length, "images");
+  } catch (err: any) {
+    console.error("[Static] Stage 4 failed:", err.message);
+    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 4 (Image Generation) failed: ${err.message}` });
+    return;
+  }
   await db.updatePipelineRun(runId, {
-    staticAdImages: [
-      ad, // keep reference ad
-      ...generatedImages,
-    ],
-    generatedImageUrl: variations[0]?.url || "",
+    staticAdImages: [ad, ...generatedImages],
+    generatedImageUrl: generatedImages[0]?.url || "",
   });
 
   // ---- STAGE 5: 10-expert panel reviews the GENERATED CREATIVES ----
   console.log("[Static] Stage 5: Expert panel reviewing generated creatives...");
   await db.updatePipelineRun(runId, { staticStage: "stage_5_creative_review" });
-  const creativeReview = await reviewCreativesWithPanel(generatedImages, finalBrief, input.product);
+  let creativeReview: any;
+  try {
+    creativeReview = await withTimeout(
+      reviewCreativesWithPanel(generatedImages, finalBrief, input.product),
+      STAGE_TIMEOUT, "Stage 5: Creative Review"
+    );
+    console.log("[Static] Stage 5 complete, score:", creativeReview.finalScore);
+  } catch (err: any) {
+    console.error("[Static] Stage 5 failed:", err.message);
+    await db.updatePipelineRun(runId, { status: "failed", errorMessage: `Stage 5 (Creative Review) failed: ${err.message}` });
+    return;
+  }
   await db.updatePipelineRun(runId, { staticCreativeReview: creativeReview });
 
   // ---- STAGE 6: Team approval (pause here — wait for team input) ----
@@ -314,53 +416,71 @@ async function runStaticStage7(runId: number, run: any) {
   console.log("[Static] Stage 7: Creating ClickUp task...");
   await db.updatePipelineRun(runId, { staticStage: "stage_7_clickup" });
 
-  const { createScriptTask } = await import("./services/clickup");
-  const brief = run.staticBrief || "Creative brief";
-  const product = run.product;
-  const priority = run.priority;
+  try {
+    const { createScriptTask } = await import("./services/clickup");
+    const brief = run.staticBrief || "Creative brief";
+    const product = run.product;
+    const priority = run.priority;
 
-  const task = await createScriptTask(
-    `${run.foreplayAdTitle || "Static Ad"} - ONEST ${product} Creative`,
-    "STATIC",
-    (run.staticCreativeReview as any)?.finalScore || 90,
-    `# Static Ad Creative Brief\n\n${brief}\n\n## Generated Variations\n${((run.staticAdImages as any[]) || []).filter((img: any) => img.variation).map((img: any) => `- ${img.variation}: ${img.url}`).join("\n")}`,
-    product,
-    priority
-  );
+    const task = await withTimeout(
+      createScriptTask(
+        `${run.foreplayAdTitle || "Static Ad"} - ONEST ${product} Creative`,
+        "STATIC",
+        (run.staticCreativeReview as any)?.finalScore || 90,
+        `# Static Ad Creative Brief\n\n${brief}\n\n## Generated Variations\n${((run.staticAdImages as any[]) || []).filter((img: any) => img.variation).map((img: any) => `- ${img.variation}: ${img.url}`).join("\n")}`,
+        product,
+        priority
+      ),
+      STEP_TIMEOUT, "Stage 7: ClickUp Task"
+    );
 
-  await db.updatePipelineRun(runId, {
-    clickupTasksJson: [task],
-    staticStage: "completed",
-    status: "completed",
-    completedAt: new Date(),
-  });
-  console.log(`[Static] Pipeline run #${runId} completed!`);
+    await db.updatePipelineRun(runId, {
+      clickupTasksJson: [task],
+      staticStage: "completed",
+      status: "completed",
+      completedAt: new Date(),
+    });
+    console.log(`[Static] Pipeline run #${runId} completed!`);
+  } catch (err: any) {
+    console.error("[Static] Stage 7 failed:", err.message);
+    await db.updatePipelineRun(runId, {
+      status: "failed",
+      errorMessage: `Stage 7 (ClickUp) failed: ${err.message}`,
+    });
+  }
 }
 
 // Revision flow: team rejected, re-generate with feedback
 async function runStaticRevision(runId: number, run: any, teamNotes: string) {
   console.log("[Static] Revising creatives based on team feedback...");
 
-  const { generateStaticAdVariations } = await import("./services/imageCompositing");
-  const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
+  try {
+    const { generateStaticAdVariations } = await import("./services/imageCompositing");
+    const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
 
-  // Re-generate with team feedback incorporated into prompts
-  const variations = await generateStaticAdVariations(
-    "",
-    ad.imageUrl || "",
-    run.product,
-    run.foreplayAdBrand || "Competitor",
-    teamNotes // pass team feedback for prompt adjustment
-  );
+    // Re-generate with team feedback incorporated into prompts
+    const variations = await withTimeout(
+      generateStaticAdVariations("", ad.imageUrl || "", run.product, run.foreplayAdBrand || "Competitor", teamNotes),
+      STAGE_TIMEOUT * 2, "Revision: Image Generation"
+    );
 
-  const generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
-  await db.updatePipelineRun(runId, {
-    staticAdImages: [ad, ...generatedImages],
-    generatedImageUrl: variations[0]?.url || "",
-    staticStage: "stage_6_team_approval",
-    teamApprovalStatus: "pending",
-  });
-  console.log("[Static] Revised creatives ready for team review");
+    const generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
+    await db.updatePipelineRun(runId, {
+      staticAdImages: [ad, ...generatedImages],
+      generatedImageUrl: variations[0]?.url || "",
+      staticStage: "stage_6_team_approval",
+      teamApprovalStatus: "pending",
+    });
+    console.log("[Static] Revised creatives ready for team review");
+  } catch (err: any) {
+    console.error("[Static] Revision failed:", err.message);
+    await db.updatePipelineRun(runId, {
+      status: "failed",
+      errorMessage: `Revision failed: ${err.message}`,
+      staticStage: "stage_6_team_approval",
+      teamApprovalStatus: "pending",
+    });
+  }
 }
 
 // ============================================================

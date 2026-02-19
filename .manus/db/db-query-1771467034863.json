@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, pipelineType, status, staticStage, errorMessage, TIMESTAMPDIFF(MINUTE, updatedAt, NOW()) as mins_since_update FROM pipeline_runs ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, pipelineType, status, staticStage, errorMessage, TIMESTAMPDIFF(MINUTE, updatedAt, NOW()) as mins_since_update FROM pipeline_runs ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "120002",
+      "pipelineType": "static",
+      "status": "running",
+      "staticStage": "stage_6_team_approval",
+      "errorMessage": "NULL",
+      "mins_since_update": "5"
+    },
+    {
+      "id": "120001",
+      "pipelineType": "video",
+      "status": "completed",
+      "staticStage": "NULL",
+      "errorMessage": "NULL",
+      "mins_since_update": "3"
+    },
+    {
+      "id": "90002",
+      "pipelineType": "static",
+      "status": "failed",
+      "staticStage": "stage_4_generation",
+      "errorMessage": "Pipeline stalled — marked as failed automatically (stale run from previous server instance)",
+      "mins_since_update": "0"
+    },
+    {
+      "id": "90001",
+      "pipelineType": "video",
+      "status": "failed",
+      "staticStage": "NULL",
+      "errorMessage": "Pipeline stalled — marked as failed automatically (stale run from previous server instance)",
+      "mins_since_update": "0"
+    },
+    {
+      "id": "60006",
+      "pipelineType": "video",
+      "status": "completed",
+      "staticStage": "NULL",
+      "errorMessage": "NULL",
+      "mins_since_update": "140"
+    },
+    {
+      "id": "60005",
+      "pipelineType": "video",
+      "status": "failed",
+      "staticStage": "NULL",
+      "errorMessage": "Pipeline stalled — marked as failed automatically (stale run from previous server instance)",
+      "mins_since_update": "0"
+    },
+    {
+      "id": "60004",
+      "pipelineType": "video",
+      "status": "failed",
+      "staticStage": "NULL",
+      "errorMessage": "Client network socket disconnected before secure TLS connection was established",
+      "mins_since_update": "155"
+    },
+    {
+      "id": "60003",
+      "pipelineType": "video",
+      "status": "completed",
+      "staticStage": "NULL",
+      "errorMessage": "NULL",
+      "mins_since_update": "155"
+    },
+    {
+      "id": "60002",
+      "pipelineType": "static",
+      "status": "completed",
+      "staticStage": "NULL",
+      "errorMessage": "Image generation unavailable: Dynamic require of \"path\" is not supported",
+      "mins_since_update": "173"
+    },
+    {
+      "id": "60001",
+      "pipelineType": "static",
+      "status": "completed",
+      "staticStage": "NULL",
+      "errorMessage": "Image generation unavailable: Dynamic require of \"path\" is not supported",
+      "mins_since_update": "174"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tpipelineType\tstatus\tstaticStage\terrorMessage\tmins_since_update\n120002\tstatic\trunning\tstage_6_team_approval\tNULL\t5\n120001\tvideo\tcompleted\tNULL\tNULL\t3\n90002\tstatic\tfailed\tstage_4_generation\tPipeline stalled — marked as failed automatically (stale run from previous server instance)\t0\n90001\tvideo\tfailed\tNULL\tPipeline stalled — marked as failed automatically (stale run from previous server instance)\t0\n60006\tvideo\tcompleted\tNULL\tNULL\t140\n60005\tvideo\tfailed\tNULL\tPipeline stalled — marked as failed automatically (stale run from previous server instance)\t0\n60004\tvideo\tfailed\tNULL\tClient network socket disconnected before secure TLS connection was established\t155\n60003\tvideo\tcompleted\tNULL\tNULL\t155\n60002\tstatic\tcompleted\tNULL\tImage generation unavailable: Dynamic require of \"path\" is not supported\t173\n60001\tstatic\tcompleted\tNULL\tImage generation unavailable: Dynamic require of \"path\" is not supported\t174\n",
+  "stderr": "",
+  "execution_time_ms": 1512
+}
