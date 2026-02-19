@@ -179,3 +179,12 @@ All three fixes implemented and tested:
 - [x] FIX: Use top-level ES module import `import ffmpegStatic from 'ffmpeg-static'` instead of require()
 - [x] FIX: Verify binary path resolves correctly — server logs now show: "Using ffmpeg-static binary: /home/ubuntu/.../ffmpeg"
 - [x] TEST: All 19 tests passing, ffmpeg-static binary path logged correctly on startup
+
+## ROUND 7 — VISUAL MATCHING FIX
+
+- [x] FIX Stage 1: Claude analysis extracts precise visual details (layout, color palette, typography, text placement, mood, lighting, background, product placement, overlays/effects)
+- [x] FIX Stage 2: Creative brief includes "Visual Reference Guide" with specific art direction + 3 detailed image generation prompts (200+ words each)
+- [x] FIX Stage 4: Nano banana receives competitor ad as reference image for Variation 1 (image-to-image style transfer)
+- [x] FIX Stage 4: Prompts extracted from brief — extremely detailed about replicating visual style, layout, composition
+- [x] FIX: Creative brief passed through entire pipeline to image generation step
+- [x] TEST: All 19 tests passing, visual matching pipeline ready for testing

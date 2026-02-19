@@ -499,7 +499,7 @@ async function runStaticPipeline(runId: number, input: {
   let generatedImages: any[];
   try {
     const variations = await withTimeout(
-      generateStaticAdVariations("", ad.imageUrl, input.product, ad.brandName || "Competitor"),
+      generateStaticAdVariations(finalBrief, ad.imageUrl, input.product, ad.brandName || "Competitor"),
       STAGE_TIMEOUT * 2, "Stage 4: Image Generation"
     );
     generatedImages = variations.map(v => ({ ...v, variation: v.variation }));
@@ -589,7 +589,7 @@ async function runStaticRevision(runId: number, run: any, teamNotes: string) {
 
     // Re-generate with team feedback incorporated into prompts
     const variations = await withTimeout(
-      generateStaticAdVariations("", ad.imageUrl || "", run.product, run.foreplayAdBrand || "Competitor", teamNotes),
+      generateStaticAdVariations(run.staticBrief || "", ad.imageUrl || "", run.product, run.foreplayAdBrand || "Competitor", teamNotes),
       STAGE_TIMEOUT * 2, "Revision: Image Generation"
     );
 
@@ -625,39 +625,68 @@ async function generateCreativeBrief(
 ): Promise<string> {
   const { default: axios } = await import("axios");
 
-  const system = `You are an expert creative director writing a detailed creative brief for ONEST Health, an Australian health supplement brand. You write briefs that are specific, actionable, and designed to produce high-converting static ad creatives.`;
+  const system = `You are an elite creative director who writes extremely detailed, visually-specific creative briefs. Your briefs are so precise that an AI image generator can recreate the exact visual style from your descriptions alone.
+
+You specialise in translating competitor ad analysis into actionable art direction for ONEST Health, an Australian health supplement brand. ONEST brand colours: #FF3838 (red), #0347ED (blue), with dark backgrounds (#01040A base).`;
 
   const productInfoBlock = productInfoContext ? `\n\nPRODUCT INFORMATION FOR ${product}:\n${productInfoContext}\n\nUse this product information to make the brief specific and accurate.` : "";
 
-  const prompt = `Based on this competitor analysis, write a detailed creative brief for an ONEST Health ${product} static ad.
+  const prompt = `Based on this detailed competitor analysis, write a creative brief for an ONEST Health ${product} static ad that VISUALLY MATCHES the competitor's style.
 
-COMPETITOR ANALYSIS:
+COMPETITOR VISUAL ANALYSIS:
 ${competitorAnalysis}${productInfoBlock}
 
-Write a comprehensive creative brief covering:
+Write a comprehensive creative brief with these EXACT sections:
 
-1. **OBJECTIVE**: What this ad should achieve (awareness, conversion, etc.)
-2. **TARGET AUDIENCE**: Demographics, psychographics, pain points
-3. **KEY MESSAGE**: The single most important takeaway
-4. **VISUAL DIRECTION**: 
-   - Layout structure (composition, focal points)
-   - Color palette (specific hex codes for ONEST brand)
-   - Typography style and hierarchy
-   - Product placement and sizing
-   - Background treatment and mood
-5. **COPY DIRECTION**: Headlines, subheadlines, body copy, CTA
-6. **BRAND ELEMENTS**: ONEST logo placement, brand colors (#FF3838 red, #0347ED blue, dark backgrounds)
-7. **DIFFERENTIATION**: How this differs from the competitor reference
-8. **3 VARIATION CONCEPTS**:
-   - Variation 1: Similar background style to reference (not identical)
-   - Variation 2: Different background style (describe specifically)
-   - Variation 3: Different background style (describe specifically)
+## 1. OBJECTIVE
+What this ad should achieve.
 
-Be extremely specific about visual elements — this brief will be used to generate actual images.`;
+## 2. TARGET AUDIENCE
+Demographics, psychographics, pain points.
+
+## 3. KEY MESSAGE
+The single most important takeaway for ${product}.
+
+## 4. VISUAL REFERENCE GUIDE
+This is the MOST IMPORTANT section. Based on the competitor analysis above, describe the EXACT visual style to replicate:
+- **Background**: Exact colors, gradients, textures, lighting effects (reference the competitor's specific colors and mood)
+- **Composition**: Where the product sits, how much space it takes, focal point
+- **Lighting**: Direction, intensity, color cast, glow effects (match the competitor's lighting)
+- **Mood**: The emotional feel conveyed through visuals
+- **Effects**: Any particles, smoke, geometric shapes, energy effects, grain, etc.
+- **Color mapping**: Map competitor colors to ONEST brand colors (e.g., "competitor uses teal accents → replace with ONEST #FF3838 red")
+
+## 5. COPY DIRECTION
+Headlines, subheadlines, body copy, CTA text.
+
+## 6. BRAND ELEMENTS
+ONEST logo placement (top-right, white wordmark), brand colors usage.
+
+## 7. THREE IMAGE GENERATION PROMPTS
+Write 3 EXTREMELY DETAILED prompts (200+ words each) for an AI image generator. Each prompt describes ONLY the background/environment — no product, no text, no logo (those are composited separately).
+
+**VARIATION 1 PROMPT** (Similar style to competitor reference):
+Describe a background that closely matches the competitor's visual style — same color palette mapped to ONEST colours, same lighting direction, same mood, same texture effects. Be hyper-specific about colors, gradients, light positions, and effects.
+
+**VARIATION 2 PROMPT** (Different background style):
+Describe a distinctly different background that still works for the same product and audience. Different color emphasis, different lighting approach, different texture.
+
+**VARIATION 3 PROMPT** (Different background style):
+Describe another distinctly different background. Explore a different mood or visual approach while maintaining brand consistency.
+
+Each prompt MUST:
+- Specify exact colors as descriptive terms ("deep charcoal black", "warm amber orange", "electric crimson red")
+- Describe lighting direction and intensity
+- Describe textures and effects in detail
+- Mention composition (where to leave space for product placement)
+- Be written as a single continuous paragraph suitable for an AI image generator
+- End with: "Square format 1200x1200px. No text, no product, no logo, just background."
+
+Be extremely specific. Vague prompts produce generic images.`;
 
   const res = await axios.post("https://api.anthropic.com/v1/messages", {
     model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
+    max_tokens: 6000,
     system,
     messages: [{ role: "user", content: prompt }],
   }, {
