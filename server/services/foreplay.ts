@@ -85,20 +85,22 @@ export async function fetchBoardAds(boardId: string, limit = 100): Promise<Forep
  *   - description, headline, full_transcription, timestamped_transcription
  */
 function normalizeAds(ads: any[]): ForeplayAd[] {
-  return ads.map((ad: any) => {
+  return ads.map((ad: any, idx: number) => {
     // Build transcription from timestamped data if available
     let transcription = ad.full_transcription || "";
     if (!transcription && ad.timestamped_transcription && Array.isArray(ad.timestamped_transcription)) {
       transcription = ad.timestamped_transcription.map((t: any) => t.sentence || "").join(" ").trim();
     }
 
+    const extractedImage = (ad.cards?.[0]?.image) || ad.image || "";
+    
     return {
       id: ad.id || ad.ad_id || String(Math.random()),
       title: ad.headline || ad.name || ad.description?.slice(0, 80) || "Untitled Ad",
       brandName: ad.name || "",
       mediaUrl: ad.video || "",           // video URL
-      thumbnailUrl: ad.thumbnail || (ad.creatives?.[0]?.image) || ad.image || "",   // thumbnail from creatives array
-      imageUrl: (ad.creatives?.[0]?.image) || ad.image || "",           // static image from creatives array
+      thumbnailUrl: ad.thumbnail || extractedImage || "",   // thumbnail from creatives array
+      imageUrl: extractedImage,           // static image from creatives array
       mediaType: (ad.display_format || "").toLowerCase(),
       platform: ad.publisher_platform || "facebook",
       description: ad.description || "",

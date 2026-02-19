@@ -1,0 +1,40 @@
+{
+  "query": "SELECT id, title, imageUrl, thumbnailUrl FROM foreplay_creatives WHERE type = 'STATIC';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, title, imageUrl, thumbnailUrl FROM foreplay_creatives WHERE type = 'STATIC';",
+  "rows": [
+    {
+      "id": "90008",
+      "title": "Happy Mammoth",
+      "imageUrl": "NULL",
+      "thumbnailUrl": "NULL"
+    },
+    {
+      "id": "90009",
+      "title": "Happy Mammoth",
+      "imageUrl": "NULL",
+      "thumbnailUrl": "NULL"
+    },
+    {
+      "id": "90010",
+      "title": "Inno Supps",
+      "imageUrl": "NULL",
+      "thumbnailUrl": "NULL"
+    },
+    {
+      "id": "90011",
+      "title": "🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌",
+      "imageUrl": "https://r2.foreplay.co/419b943031d34cd6308b589101351adb7ab95419ade1b068200882bb76503889.jpg",
+      "thumbnailUrl": "https://r2.foreplay.co/419b943031d34cd6308b589101351adb7ab95419ade1b068200882bb76503889.jpg"
+    },
+    {
+      "id": "90012",
+      "title": "Inno Supps",
+      "imageUrl": "NULL",
+      "thumbnailUrl": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\ttitle\timageUrl\tthumbnailUrl\n90008\tHappy Mammoth\tNULL\tNULL\n90009\tHappy Mammoth\tNULL\tNULL\n90010\tInno Supps\tNULL\tNULL\n90011\t🔥 Boost Nitric Oxide To Accelerate Blood Flow  - 100% Money Back Guarantee👌\thttps://r2.foreplay.co/419b943031d34cd6308b589101351adb7ab95419ade1b068200882bb76503889.jpg\thttps://r2.foreplay.co/419b943031d34cd6308b589101351adb7ab95419ade1b068200882bb76503889.jpg\n90012\tInno Supps\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1624
+}
