@@ -171,3 +171,11 @@ All three fixes implemented and tested:
 - [x] BUG 2: Root cause 1: Anthropic credits were depleted (now topped up by Ryan)
 - [x] BUG 2: Root cause 2: Claude API returns "Unable to download the file" for Foreplay URLs — fixed by downloading and encoding as base64
 - [x] TEST: All 19 tests passing, Claude Vision base64 confirmed working with Foreplay images
+
+
+## ROUND 6B — FFMPEG FIX
+
+- [x] BUG: ffmpeg-static import fails in deployed environment — require() inside try/catch throws error silently in tsx
+- [x] FIX: Use top-level ES module import `import ffmpegStatic from 'ffmpeg-static'` instead of require()
+- [x] FIX: Verify binary path resolves correctly — server logs now show: "Using ffmpeg-static binary: /home/ubuntu/.../ffmpeg"
+- [x] TEST: All 19 tests passing, ffmpeg-static binary path logged correctly on startup

@@ -5,22 +5,18 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import os from "os";
+// Import ffmpeg-static at the top level so tsx can resolve it properly
+import ffmpegStatic from "ffmpeg-static";
 
 const execAsync = promisify(exec);
 
 // Get the ffmpeg binary path from ffmpeg-static package
 function getFfmpegPath(): string {
-  try {
-    // ffmpeg-static exports the path to the bundled ffmpeg binary
-    const ffmpegStatic = require("ffmpeg-static") as string;
-    if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-      console.log("[Whisper] Using ffmpeg-static binary:", ffmpegStatic);
-      return ffmpegStatic;
-    }
-  } catch (e) {
-    console.warn("[Whisper] ffmpeg-static not found, trying system ffmpeg");
+  if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
+    console.log("[Whisper] Using ffmpeg-static binary:", ffmpegStatic);
+    return ffmpegStatic;
   }
-  // Fallback to system ffmpeg
+  console.warn("[Whisper] ffmpeg-static not available, falling back to system ffmpeg");
   return "ffmpeg";
 }
 
