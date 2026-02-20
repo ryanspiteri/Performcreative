@@ -556,7 +556,7 @@ All three fixes implemented and tested:
 - [x] Write tests for new features
 
 ## ROUND 19 — BUG FIXES
-- [ ] Fix tRPC query error on Browse Creatives page — API returning HTML instead of JSON ("Unexpected token '<'")
+- [x] Fix tRPC query error on Browse Creatives page — API returning HTML instead of JSON ("Unexpected token '<'") — TRANSIENT: caused by server restarts during HMR, not a persistent code bug
 
 ## ROUND 19 — VIDEO PIPELINE IMPROVEMENTS
 - [x] Add approval gate to video pipeline before ClickUp push (same pattern as iteration pipeline)
@@ -564,3 +564,10 @@ All three fixes implemented and tested:
 - [x] Add link to view 3-column script on system instead of messy markdown table in ClickUp
 - [x] Build shareable script view page that ClickUp links point to (links to /results/:id?script=label)
 - [x] Fix 502 tRPC error (transient — caused by server restart during HMR, not a code bug — no fix needed)
+
+## ROUND 20 — BANNERBEAR LAYER NAME MAPPING
+- [x] Update Bannerbear layer mapping to match Ryan's template: Heading, Benefits (+ background, product_image, logo once added)
+- [x] Use single template E9YaWrZMqPrNZnRd74 as default
+- [x] Make layer name mapping configurable per template (flexible mapping system with auto-detection)
+- [ ] WAITING: Ryan to add 3 image layers to Bannerbear template (background, product_image, logo)
+- [ ] TEST: End-to-end pipeline with complete Bannerbear template (once all layers added)

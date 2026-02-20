@@ -68,11 +68,11 @@ export const CSS_PRESETS: Array<{
   },
 ];
 
-// Bannerbear template rotation — alternate between templates for variety
+// Bannerbear template rotation — use single template for now (add more later)
 const TEMPLATE_ROTATION = [
-  BANNERBEAR_TEMPLATES.hyperburnHelps,
-  BANNERBEAR_TEMPLATES.bluePurpleGradient,
-  BANNERBEAR_TEMPLATES.hyperburnHelps,
+  BANNERBEAR_TEMPLATES.staticAd1,
+  BANNERBEAR_TEMPLATES.staticAd1,
+  BANNERBEAR_TEMPLATES.staticAd1,
 ];
 
 // ============================================================

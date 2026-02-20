@@ -64,8 +64,7 @@ describe("Flux Pro Service", () => {
 
 describe("Bannerbear Service", () => {
   it("should export BANNERBEAR_TEMPLATES with correct UIDs", () => {
-    expect(BANNERBEAR_TEMPLATES.hyperburnHelps).toBe("wXmzGBDakV3vZLN7gj");
-    expect(BANNERBEAR_TEMPLATES.bluePurpleGradient).toBe("E9YaWrZMqPrNZnRd74");
+    expect(BANNERBEAR_TEMPLATES.staticAd1).toBe("E9YaWrZMqPrNZnRd74");
   });
 
   it("should export createBannerbearImage function", () => {

@@ -21,12 +21,11 @@ describe("API Keys Validation", () => {
   it("should validate Bannerbear API key by fetching template info", async () => {
     // Validate the API key works by fetching template details
     const { getTemplateInfo } = await import("./services/bannerbear");
-    const templateUid = BANNERBEAR_TEMPLATES.hyperburnHelps;
+    const templateUid = BANNERBEAR_TEMPLATES.staticAd1;
     const info = await getTemplateInfo(templateUid);
     
     expect(info).toBeDefined();
     expect(info.uid).toBe(templateUid);
-    expect(info.name).toBe("Hyperburn Helps");
     expect(info.width).toBeGreaterThan(0);
     expect(info.height).toBeGreaterThan(0);
     

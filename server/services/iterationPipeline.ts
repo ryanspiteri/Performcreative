@@ -356,8 +356,8 @@ export async function regenerateIterationVariation(
   const { url: persistedBgUrl } = await storagePut(fileKey, buffer, "image/jpeg");
 
   // Composite with Bannerbear
-  const templateUids = [BANNERBEAR_TEMPLATES.hyperburnHelps, BANNERBEAR_TEMPLATES.bluePurpleGradient];
-  const templateUid = templateUids[variationIndex % templateUids.length];
+  // Use the single template for now (add more later for variety)
+  const templateUid = BANNERBEAR_TEMPLATES.staticAd1;
 
   const finalUrl = await generateStaticAdWithBannerbear({
     templateUid,
