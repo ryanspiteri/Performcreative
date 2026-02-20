@@ -539,3 +539,6 @@ All three fixes implemented and tested:
 - [x] Update tests for new image generation stack
 - [x] Test Static Pipeline end-to-end with Flux Pro + Bannerbear
 - [x] Test Iteration Pipeline end-to-end with Flux Pro + Bannerbear
+
+## ROUND 17 — BUG FIXES
+- [x] Fix Iterate Winners upload — "Upload failed — no URL returned" error when uploading winning ad image

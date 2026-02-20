@@ -23,6 +23,7 @@ export default function IterateWinners() {
   const [runId, setRunId] = useState<number | null>(null);
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
+  const uploadRender = trpc.renders.upload.useMutation();
 
   // File upload handler
   const handleFileUpload = useCallback(async (file: File) => {
@@ -37,7 +38,7 @@ export default function IterateWinners() {
 
     setUploading(true);
     try {
-      // Convert to base64 and upload via renders endpoint
+      // Convert to base64
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -47,32 +48,19 @@ export default function IterateWinners() {
         reader.readAsDataURL(file);
       });
 
-      // Upload to S3 via the renders upload endpoint
-      const result = await fetch("/api/trpc/renders.upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product: "iteration-source",
-          fileName: file.name.replace(/\.[^.]+$/, ""),
-          mimeType: file.type,
-          base64Data: base64,
-        }),
+      // Upload to S3 via tRPC mutation
+      const result = await uploadRender.mutateAsync({
+        product: "iteration-source",
+        fileName: file.name.replace(/\.[^.]+$/, ""),
+        mimeType: file.type,
+        base64Data: base64,
       });
 
-      // Handle tRPC batch response format
-      const data = await result.json();
-      let url: string;
-      if (Array.isArray(data)) {
-        url = data[0]?.result?.data?.url;
-      } else {
-        url = data?.result?.data?.url;
-      }
-
-      if (!url) {
+      if (!result.url) {
         throw new Error("Upload failed — no URL returned");
       }
 
-      setUploadedImageUrl(url);
+      setUploadedImageUrl(result.url);
       setUploadedImageName(file.name);
       toast.success("Image uploaded successfully");
     } catch (err: any) {
@@ -80,7 +68,7 @@ export default function IterateWinners() {
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [uploadRender]);
 
   // Drag and drop handlers
   const handleDrop = useCallback((e: React.DragEvent) => {
