@@ -400,13 +400,65 @@ Return JSON in this exact format:
       return ACTIVE_PRODUCTS;
     }),
 
-    // Get available Bannerbear templates
-    getBannerbearTemplates: publicProcedure.query(() => {
-      return [
-        { uid: 'wXmzGBDakV3vZLN7gj', name: 'Hyperburn Helps', description: 'Bold dark template with product focus' },
-        { uid: 'E9YaWrZMqPrNZnRd74', name: 'Blue Purple Gradient', description: 'Blue/purple gradient podcast-style layout' },
-      ];
+    // Get available Bannerbear templates (fetched live from Bannerbear API)
+    getBannerbearTemplates: publicProcedure.query(async () => {
+      const { listBannerbearTemplates } = await import("./services/bannerbear");
+      try {
+        const templates = await listBannerbearTemplates();
+        return templates.map(t => ({
+          uid: t.uid,
+          name: t.name,
+          width: t.width,
+          height: t.height,
+          layers: t.layers,
+          previewUrl: t.previewUrl,
+          tags: t.tags,
+        }));
+      } catch (err: any) {
+        console.error("[Router] Failed to list Bannerbear templates:", err.message);
+        // Fallback to hardcoded list if API fails
+        return [
+          { uid: 'wXmzGBDakV3vZLN7gj', name: 'Hyperburn Helps', width: 0, height: 0, layers: [], previewUrl: undefined, tags: [] },
+          { uid: 'E9YaWrZMqPrNZnRd74', name: 'Blue Purple Gradient', width: 0, height: 0, layers: [], previewUrl: undefined, tags: [] },
+        ];
+      }
     }),
+
+    // Get template details including layer names
+    getBannerbearTemplateLayers: publicProcedure
+      .input(z.object({ templateUid: z.string() }))
+      .query(async ({ input }) => {
+        const { getTemplateInfo } = await import("./services/bannerbear");
+        const info = await getTemplateInfo(input.templateUid);
+        return {
+          uid: info.uid,
+          name: info.name,
+          width: info.width,
+          height: info.height,
+          layers: (info.available_modifications || []).map((m: any) => ({
+            name: m.name,
+            type: m.type || 'unknown',
+          })),
+          previewUrl: info.preview_url,
+        };
+      }),
+
+    // Preview/test a Bannerbear template with dummy or custom data
+    previewBannerbearTemplate: publicProcedure
+      .input(z.object({
+        templateUid: z.string(),
+        headline: z.string().optional(),
+        subheadline: z.string().optional(),
+        benefitCallout: z.string().optional(),
+        backgroundImageUrl: z.string().optional(),
+        productRenderUrl: z.string().optional(),
+        logoUrl: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { previewBannerbearTemplate } = await import("./services/bannerbear");
+        const result = await previewBannerbearTemplate(input);
+        return result;
+      }),
 
     // Team approval endpoint for Stage 6
     teamApprove: publicProcedure

@@ -1,12 +1,13 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, TestTube2 } from "lucide-react";
 
 const navItems = [
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
+  { icon: TestTube2, label: "Template Tester", path: "/template-tester" },
   { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -60,7 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Assets</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(2, 5).map((item) => {
+          {navItems.slice(2, 6).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -84,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.slice(5).map((item) => {
+          {navItems.slice(6).map((item) => {
             const isActive = location === item.path;
             return (
               <button

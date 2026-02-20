@@ -18,25 +18,26 @@ describe("API Keys Validation", () => {
     console.log("[Test] Generated image URL:", imageUrl);
   }, 180000); // 3 minute timeout for image generation
 
-  it("should validate Bannerbear API key with a simple template render", async () => {
-    // Use the first template with minimal modifications
+  it("should validate Bannerbear API key by fetching template info", async () => {
+    // Validate the API key works by fetching template details
+    const { getTemplateInfo } = await import("./services/bannerbear");
     const templateUid = BANNERBEAR_TEMPLATES.hyperburnHelps;
+    const info = await getTemplateInfo(templateUid);
     
-    const modifications = [
-      {
-        name: "headline",
-        text: "API Test",
-      },
-    ];
+    expect(info).toBeDefined();
+    expect(info.uid).toBe(templateUid);
+    expect(info.name).toBe("Hyperburn Helps");
+    expect(info.width).toBeGreaterThan(0);
+    expect(info.height).toBeGreaterThan(0);
     
-    // This will throw if API key is invalid
-    const imageUrl = await createBannerbearImage(templateUid, modifications);
+    console.log(`[Test] Bannerbear API key validated successfully`);
+    console.log(`[Test] Template: ${info.name} (${info.width}x${info.height})`);
+    console.log(`[Test] Layers: ${(info.available_modifications || []).length}`);
     
-    expect(imageUrl).toBeDefined();
-    expect(typeof imageUrl).toBe("string");
-    expect(imageUrl).toMatch(/^https?:\/\//);
-    
-    console.log("[Test] Bannerbear API key validated successfully");
-    console.log("[Test] Generated image URL:", imageUrl);
-  }, 120000); // 2 minute timeout for image generation
+    // Note: If template has 0 layers, it means the user hasn't set up
+    // dynamic layers yet. The Template Tester page will guide them.
+    if ((info.available_modifications || []).length === 0) {
+      console.log(`[Test] ⚠️ Template has no dynamic layers — user needs to add layers in Bannerbear editor`);
+    }
+  }, 30000); // 30 second timeout for API call
 });

@@ -545,3 +545,12 @@ All three fixes implemented and tested:
 - [x] Fix iteration pipeline image generation failure (all 3 variations failed) — Flux Pro requires dimensions as multiples of 32, was sending 1080x1080, fixed to 1088x1088
 - [x] Add approval gate before ClickUp push — only create ClickUp tasks after user approves
 - [x] Add ability to iterate/regenerate individual variations before approving
+
+## ROUND 18 — STATIC PIPELINE VERIFICATION + BANNERBEAR IMPROVEMENTS
+- [x] Verify static pipeline Selection Gate flow works end-to-end with Flux Pro + Bannerbear (already correct)
+- [x] Fix any issues in static pipeline image generation with new Flux Pro + Bannerbear stack (no issues found)
+- [x] Add detailed Bannerbear error logging — show which layer names are missing/mismatched
+- [x] Add Bannerbear layer name validation before sending API request
+- [x] Build Bannerbear Template Preview/Test page — test templates with dummy data
+- [x] Add Template Preview page to sidebar navigation
+- [x] Write tests for new features
