@@ -554,3 +554,13 @@ All three fixes implemented and tested:
 - [x] Build Bannerbear Template Preview/Test page — test templates with dummy data
 - [x] Add Template Preview page to sidebar navigation
 - [x] Write tests for new features
+
+## ROUND 19 — BUG FIXES
+- [ ] Fix tRPC query error on Browse Creatives page — API returning HTML instead of JSON ("Unexpected token '<'")
+
+## ROUND 19 — VIDEO PIPELINE IMPROVEMENTS
+- [x] Add approval gate to video pipeline before ClickUp push (same pattern as iteration pipeline)
+- [x] Put Strategic Thesis before the script in ClickUp task descriptions
+- [x] Add link to view 3-column script on system instead of messy markdown table in ClickUp
+- [x] Build shareable script view page that ClickUp links point to (links to /results/:id?script=label)
+- [x] Fix 502 tRPC error (transient — caused by server restart during HMR, not a code bug — no fix needed)

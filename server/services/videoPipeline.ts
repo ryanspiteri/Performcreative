@@ -522,10 +522,11 @@ ${brief.onestAdaptation}
 }
 
 /**
- * Run Stages 4-5 (Script Generation + ClickUp) after user approves the brief.
+ * Run Stage 4 (Script Generation) after user approves the brief.
+ * Pauses at stage_4b_script_approval for user to review scripts before ClickUp.
  */
-export async function runVideoPipelineStages4to5(runId: number, run: any) {
-  console.log(`[VideoPipeline] Resuming stages 4-5 for run #${runId}`);
+export async function runVideoPipelineStage4(runId: number, run: any) {
+  console.log(`[VideoPipeline] Resuming stage 4 for run #${runId}`);
 
   const brief = run.videoBriefOptions as VideoBriefOptions;
   if (!brief) {
@@ -619,14 +620,28 @@ export async function runVideoPipelineStages4to5(runId: number, run: any) {
   }
   console.log(`[VideoPipeline] All 4 scripts processed. Success: ${allScripts.filter(s => s.review?.finalScore > 0).length}/4`);
 
-  // Stage 5: ClickUp tasks
+  // Pause at script approval gate — user must approve before ClickUp push
+  await db.updatePipelineRun(runId, {
+    videoStage: "stage_4b_script_approval",
+  });
+  console.log(`[VideoPipeline] Scripts generated. Waiting for user approval before ClickUp push.`);
+}
+
+/**
+ * Run Stage 5 (ClickUp tasks) after user approves the scripts.
+ */
+export async function runVideoPipelineStage5(runId: number, run: any, appUrl: string) {
+  console.log(`[VideoPipeline] Running stage 5 (ClickUp) for run #${runId}`);
   await db.updatePipelineRun(runId, { videoStage: "stage_5_clickup" });
+
+  const allScripts = (run.scriptsJson as any[]) || [];
+
   try {
     const taskInputs = allScripts.filter(s => s.review?.finalScore > 0).map(s => ({
       title: s.title || `${s.type}${s.number} Script`,
       type: s.label,
       score: s.review.finalScore,
-      content: formatScriptForClickUp(s),
+      content: formatScriptForClickUp(s, runId, appUrl),
     }));
     if (taskInputs.length > 0) {
       const clickupTasks = await withTimeout(
@@ -658,11 +673,35 @@ export async function runVideoPipelineStages4to5(runId: number, run: any) {
   }
 }
 
-function formatScriptForClickUp(script: any): string {
-  let content = `# ${script.title}\n\n**Type:** ${script.type} | **Score:** ${script.review?.finalScore}/100\n\n## HOOK\n${script.hook}\n\n## FULL SCRIPT\n\n| TIMESTAMP | VISUAL | DIALOGUE |\n|---|---|---|\n`;
+/**
+ * Complete the video pipeline without pushing to ClickUp.
+ */
+export async function completeVideoPipelineWithoutClickUp(runId: number) {
+  await db.updatePipelineRun(runId, {
+    status: "completed",
+    completedAt: new Date(),
+    videoStage: "completed",
+  });
+}
+
+function formatScriptForClickUp(script: any, runId: number, appUrl: string): string {
+  const scriptViewUrl = `${appUrl}/results/${runId}?script=${script.label}`;
+  let content = `# ${script.title}\n\n**Type:** ${script.type} | **Score:** ${script.review?.finalScore}/100\n\n`;
+  // Strategic Thesis FIRST
+  content += `## STRATEGIC THESIS\n${script.strategicThesis}\n\n`;
+  content += `## HOOK\n${script.hook}\n\n`;
+  // Link to 3-column script view on the system instead of messy markdown table
+  content += `## FULL SCRIPT\n\n`;
+  content += `**[View 3-Column Script on ONEST Pipeline →](${scriptViewUrl})**\n\n`;
+  content += `> The full script is available in the ONEST Creative Pipeline with proper 3-column formatting (Timestamp | Visual | Dialogue).\n\n`;
+  // Still include a simplified text version for offline reference
   if (script.script && Array.isArray(script.script)) {
-    for (const row of script.script) content += `| ${row.timestamp} | ${row.visual} | ${row.dialogue} |\n`;
+    for (const row of script.script) {
+      content += `**${row.timestamp}**\n`;
+      content += `Visual: ${row.visual}\n`;
+      content += `Dialogue: ${row.dialogue}\n\n`;
+    }
   }
-  content += `\n## VISUAL DIRECTION\n${script.visualDirection}\n\n## STRATEGIC THESIS\n${script.strategicThesis}\n`;
+  content += `## VISUAL DIRECTION\n${script.visualDirection}\n`;
   return content;
 }

@@ -9,7 +9,7 @@ import { syncFromForeplay, startAutoSync, getSyncStatus } from "./services/forep
 import { analyzeVideoFrames, generateScripts, reviewScript } from "./services/claude";
 import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
-import { runVideoPipelineStages1to3, runVideoPipelineStages4to5 } from "./services/videoPipeline";
+import { runVideoPipelineStages1to3, runVideoPipelineStage4, runVideoPipelineStage5, completeVideoPipelineWithoutClickUp } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
 import { runIterationStages1to2, runIterationStage3, runIterationStage4, regenerateIterationVariation } from "./services/iterationPipeline";
 import { TRPCError } from "@trpc/server";
@@ -517,9 +517,9 @@ Return JSON in this exact format:
           await db.updatePipelineRun(input.runId, {
             videoStage: "stage_4_scripts",
           });
-          // Resume pipeline from Stage 4
-          runVideoPipelineStages4to5(input.runId, run).catch(err => {
-            console.error("[Pipeline] Video stages 4-5 failed:", err);
+          // Resume pipeline from Stage 4 (scripts only — pauses at script approval)
+          runVideoPipelineStage4(input.runId, run).catch((err: any) => {
+            console.error("[Pipeline] Video stage 4 failed:", err);
             db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
           });
         } else {
@@ -529,6 +529,34 @@ Return JSON in this exact format:
             errorMessage: `Brief rejected by user: ${input.notes || "No reason given"}`,
             videoStage: "stage_3b_brief_approval",
           });
+        }
+
+        return { success: true };
+      }),
+
+    // Video script approval — user approves scripts before ClickUp push
+    approveVideoScripts: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        approved: z.boolean(),
+        appUrl: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.videoStage !== "stage_4b_script_approval") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline is not in script approval stage" });
+        }
+
+        if (input.approved) {
+          // Push to ClickUp
+          runVideoPipelineStage5(input.runId, run, input.appUrl).catch((err: any) => {
+            console.error("[Pipeline] Video stage 5 (ClickUp) failed:", err);
+            db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
+          });
+        } else {
+          // Complete without ClickUp
+          await completeVideoPipelineWithoutClickUp(input.runId);
         }
 
         return { success: true };

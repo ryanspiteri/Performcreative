@@ -43,8 +43,9 @@ export default function Results() {
       if (d.pipelineType === "static" && d.staticStage === "stage_3b_selection") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_team_approval") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_revising") return 3000;
-      // Video pipeline: keep polling during stages 1-3 and 4-5, stop at brief approval
+      // Video pipeline: keep polling during stages 1-3 and 4-5, stop at approval gates
       if (d.pipelineType === "video" && d.videoStage === "stage_3b_brief_approval") return false;
+      if (d.pipelineType === "video" && d.videoStage === "stage_4b_script_approval") return false;
       if (d.pipelineType === "video" && (["running", "pending"] as string[]).includes(d.status)) return 3000;
       // Iteration pipeline: stop at brief approval, keep polling during generation
       if (d.pipelineType === "iteration" && d.iterationStage === "stage_2b_approval") return false;
@@ -127,6 +128,7 @@ const VIDEO_STAGES = [
   { key: "stage_3_brief", label: "Creative Brief", icon: PenTool },
   { key: "stage_3b_brief_approval", label: "Brief Approval", icon: ThumbsUp },
   { key: "stage_4_scripts", label: "Script Generation", icon: Sparkles },
+  { key: "stage_4b_script_approval", label: "Script Approval", icon: ThumbsUp },
   { key: "stage_5_clickup", label: "ClickUp Tasks", icon: ListChecks },
   { key: "completed", label: "Completed", icon: CheckCircle },
 ];
@@ -151,6 +153,20 @@ function VideoResults({ run }: { run: any }) {
   const approveBriefMutation = trpc.pipeline.approveVideoBrief.useMutation({
     onSuccess: () => {
       toast.success("Brief approved! Generating scripts...");
+      utils.pipeline.get.invalidate({ id: run.id });
+    },
+    onError: (err: any) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  const approveScriptsMutation = trpc.pipeline.approveVideoScripts.useMutation({
+    onSuccess: (_, variables) => {
+      if (variables.approved) {
+        toast.success("Scripts approved! Pushing to ClickUp...");
+      } else {
+        toast.success("Pipeline completed without ClickUp.");
+      }
       utils.pipeline.get.invalidate({ id: run.id });
     },
     onError: (err: any) => {
@@ -318,6 +334,39 @@ function VideoResults({ run }: { run: any }) {
       {/* Stage 4: Generated Scripts */}
       {scripts.length > 0 && <ScriptsSection scripts={scripts} />}
 
+      {/* Stage 4b: Script Approval Gate */}
+      {videoStage === "stage_4b_script_approval" && scripts.length > 0 && (
+        <div className="bg-[#191B1F] border border-[#FF3838]/30 rounded-xl p-5">
+          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <ThumbsUp className="w-4 h-4 text-[#FF3838]" /> Stage 4b: Approve Scripts
+          </h2>
+          <div className="bg-[#01040A] rounded-lg p-4 border border-white/10 mb-4">
+            <p className="text-gray-300 text-sm">
+              Review the {scripts.filter((s: any) => s.review?.finalScore > 0).length} generated scripts above. If you're happy with them, approve to push to ClickUp. Otherwise, complete without ClickUp.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => approveScriptsMutation.mutate({ runId: run.id, approved: true, appUrl: window.location.origin })}
+              disabled={approveScriptsMutation.isPending}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {approveScriptsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Approve & Push to ClickUp
+            </Button>
+            <Button
+              onClick={() => approveScriptsMutation.mutate({ runId: run.id, approved: false, appUrl: window.location.origin })}
+              disabled={approveScriptsMutation.isPending}
+              variant="outline"
+              className="flex-1 border-white/20 text-gray-300 hover:bg-white/5"
+            >
+              {approveScriptsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+              Complete Without ClickUp
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Stage 5: ClickUp Tasks */}
       {clickupTasks.length > 0 && (
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
@@ -348,7 +397,7 @@ function VideoResults({ run }: { run: any }) {
       )}
 
       {/* Running indicator */}
-      {isRunning && videoStage && !["stage_3b_brief_approval", "completed"].includes(videoStage) && (
+      {isRunning && videoStage && !["stage_3b_brief_approval", "stage_4b_script_approval", "completed"].includes(videoStage) && (
         <div className="bg-[#191B1F] border border-orange-500/20 rounded-xl p-6">
           <div className="flex items-center gap-3">
             <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
