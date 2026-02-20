@@ -467,3 +467,10 @@ All three fixes implemented and tested:
 - [x] FIX: Debug and fix Chromium path / Puppeteer launch issue
 - [x] FIX: Verify image compositing produces proper output with text + product + background
 - [x] TEST: End-to-end static pipeline produces 3 working images
+
+## ROUND 14 — PRODUCTION IMAGE GENERATION FIX
+
+### Static Pipeline Image Generation (Production)
+- [x] BUG: Image generation works locally but fails in production — Puppeteer/Chromium not available in deployed environment
+- [x] FIX: Replaced Puppeteer-based HTML rendering with Sharp SVG compositing — no browser dependency
+- [x] TEST: Verified all 3 images generate correctly with Sharp — product renders, logos, text, backgrounds all working
