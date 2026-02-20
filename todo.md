@@ -542,3 +542,6 @@ All three fixes implemented and tested:
 
 ## ROUND 17 — BUG FIXES
 - [x] Fix Iterate Winners upload — "Upload failed — no URL returned" error when uploading winning ad image
+- [x] Fix iteration pipeline image generation failure (all 3 variations failed) — Flux Pro requires dimensions as multiples of 32, was sending 1080x1080, fixed to 1088x1088
+- [x] Add approval gate before ClickUp push — only create ClickUp tasks after user approves
+- [x] Add ability to iterate/regenerate individual variations before approving

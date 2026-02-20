@@ -1,0 +1,8 @@
+{
+  "query": "SELECT id, status, pipelineType, iterationStage, errorMessage, iterationBrief, iterationVariationsJson FROM pipeline_runs WHERE pipelineType = 'iteration' ORDER BY id DESC LIMIT 1",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, status, pipelineType, iterationStage, errorMessage, iterationBrief, iterationVariationsJson FROM pipeline_runs WHERE pipelineType = 'iteration' ORDER BY id DESC LIMIT 1",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'iterationvariationsjson' in 'field list'"
+  ]
+}

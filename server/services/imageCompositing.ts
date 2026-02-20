@@ -146,8 +146,8 @@ export async function generateStaticAdVariations(
 
         backgroundImageUrl = await generateFluxProBackground(
           config.background.prompt,
-          1080,
-          1080
+          1088,
+          1088
         );
         console.log(`[ImageCompositing] Flux Pro background generated: ${backgroundImageUrl.substring(0, 80)}...`);
 
@@ -156,7 +156,7 @@ export async function generateStaticAdVariations(
       } else {
         // Fallback: generate a default background with Flux Pro
         const defaultPrompt = `Premium dark background for health supplement advertisement. Deep charcoal black base (#01040A) with dramatic ${i === 0 ? "crimson red (#FF3838)" : i === 1 ? "electric blue (#0347ED)" : "warm amber"} accent lighting. Subtle atmospheric effects, premium fitness aesthetic. No text, no product, no logos, no people.`;
-        backgroundImageUrl = await generateFluxProBackground(defaultPrompt, 1080, 1080);
+        backgroundImageUrl = await generateFluxProBackground(defaultPrompt, 1088, 1088);
         backgroundImageUrl = await persistFluxImage(backgroundImageUrl, variationLabel);
       }
 

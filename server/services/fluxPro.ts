@@ -36,9 +36,12 @@ interface FluxProResult {
  */
 export async function generateFluxProBackground(
   prompt: string,
-  width: number = 1200,
-  height: number = 1200
+  width: number = 1088,
+  height: number = 1088
 ): Promise<string> {
+  // Flux Pro requires dimensions to be multiples of 32
+  width = Math.round(width / 32) * 32;
+  height = Math.round(height / 32) * 32;
   if (!FLUX_API_KEY) {
     throw new Error("FLUX_PRO_API_KEY not configured");
   }
@@ -48,8 +51,8 @@ export async function generateFluxProBackground(
   // Step 1: Submit generation request
   const requestBody: FluxProRequest = {
     prompt,
-    width,
-    height,
+    width: Math.max(256, Math.min(1440, width)),
+    height: Math.max(256, Math.min(1440, height)),
     prompt_upsampling: false,
     safety_tolerance: 2,
   };

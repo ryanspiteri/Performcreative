@@ -194,65 +194,9 @@ export async function runIterationStage3(runId: number, run: any) {
 
     await db.updatePipelineRun(runId, {
       iterationVariations: results,
-      iterationStage: "stage_4_clickup",
+      iterationStage: "stage_3b_variation_approval",
     });
-    console.log(`[Iteration] Stage 3 complete. Generated ${results.length} variations.`);
-
-    // ---- STAGE 4: Create ClickUp tasks ----
-    try {
-      console.log(`[Iteration] Stage 4: Creating ClickUp tasks...`);
-      const tasks: any[] = [];
-
-      for (let i = 0; i < results.length; i++) {
-        const v = briefData?.variations?.[i] || {};
-        const taskName = `[Iteration] ${product} - ${v.headline || `Variation ${i + 1}`}`;
-        const taskDesc = [
-          `## Iteration Pipeline — ${product}`,
-          `**Source Ad:** ${sourceUrl}`,
-          `**Variation:** ${i + 1} of 3`,
-          `**Headline:** ${v.headline || "N/A"}`,
-          `**Subheadline:** ${v.subheadline || "N/A"}`,
-          `**Angle:** ${v.angle || "N/A"}`,
-          `**Generated Image:** ${results[i]?.url || "N/A"}`,
-          "",
-          `### Analysis`,
-          analysis.substring(0, 500),
-        ].join("\n");
-
-        try {
-          const task = await createScriptTask(
-            taskName,
-            "Iteration Variation",
-            0,
-            taskDesc,
-            product,
-            "Medium"
-          );
-          tasks.push({ name: taskName, taskId: task.id, url: task.url });
-          console.log(`[Iteration] ClickUp task created: ${task.id}`);
-        } catch (err: any) {
-          console.warn(`[Iteration] ClickUp task ${i + 1} failed:`, err.message);
-          tasks.push({ name: taskName, error: err.message });
-        }
-      }
-
-      await db.updatePipelineRun(runId, {
-        clickupTasksJson: tasks,
-        status: "completed",
-        iterationStage: "completed",
-        completedAt: new Date(),
-      });
-      console.log(`[Iteration] Pipeline complete! ${tasks.length} ClickUp tasks created.`);
-    } catch (err: any) {
-      console.error(`[Iteration] Stage 4 failed:`, err.message);
-      // Still mark as completed since images were generated
-      await db.updatePipelineRun(runId, {
-        status: "completed",
-        iterationStage: "completed",
-        completedAt: new Date(),
-        errorMessage: `ClickUp task creation failed: ${err.message}`,
-      });
-    }
+    console.log(`[Iteration] Stage 3 complete. Generated ${results.length} variations. Paused at variation approval gate.`);
   } catch (err: any) {
     console.error(`[Iteration] Stage 3 failed:`, err.message);
     await db.updatePipelineRun(runId, {
@@ -261,6 +205,181 @@ export async function runIterationStage3(runId: number, run: any) {
       iterationStage: "stage_3_generation",
     });
   }
+}
+
+/**
+ * Stage 4: Create ClickUp tasks (called after user approves variations).
+ */
+export async function runIterationStage4(runId: number, run: any) {
+  console.log(`[Iteration] Stage 4: Creating ClickUp tasks for run #${runId}`);
+  await db.updatePipelineRun(runId, { iterationStage: "stage_4_clickup" });
+
+  const product = run.product;
+  const sourceUrl = run.iterationSourceUrl || "";
+  const analysis = run.iterationAnalysis || "";
+  const variations: any[] = run.iterationVariations || [];
+
+  let briefData: any = null;
+  try { briefData = JSON.parse(run.iterationBrief || ""); } catch { /* ignore */ }
+
+  try {
+    const tasks: any[] = [];
+
+    for (let i = 0; i < variations.length; i++) {
+      const v = briefData?.variations?.[i] || {};
+      const taskName = `[Iteration] ${product} - ${v.headline || `Variation ${i + 1}`}`;
+      const taskDesc = [
+        `## Iteration Pipeline \u2014 ${product}`,
+        `**Source Ad:** ${sourceUrl}`,
+        `**Variation:** ${i + 1} of ${variations.length}`,
+        `**Headline:** ${v.headline || "N/A"}`,
+        `**Subheadline:** ${v.subheadline || "N/A"}`,
+        `**Angle:** ${v.angle || "N/A"}`,
+        `**Generated Image:** ${variations[i]?.url || "N/A"}`,
+        "",
+        `### Analysis`,
+        analysis.substring(0, 500),
+      ].join("\n");
+
+      try {
+        const task = await createScriptTask(
+          taskName,
+          "Iteration Variation",
+          0,
+          taskDesc,
+          product,
+          "Medium"
+        );
+        tasks.push({ name: taskName, taskId: task.id, url: task.url });
+        console.log(`[Iteration] ClickUp task created: ${task.id}`);
+      } catch (err: any) {
+        console.warn(`[Iteration] ClickUp task ${i + 1} failed:`, err.message);
+        tasks.push({ name: taskName, error: err.message });
+      }
+    }
+
+    await db.updatePipelineRun(runId, {
+      clickupTasksJson: tasks,
+      status: "completed",
+      iterationStage: "completed",
+      completedAt: new Date(),
+    });
+    console.log(`[Iteration] Pipeline complete! ${tasks.length} ClickUp tasks created.`);
+  } catch (err: any) {
+    console.error(`[Iteration] Stage 4 failed:`, err.message);
+    await db.updatePipelineRun(runId, {
+      status: "failed",
+      errorMessage: `Stage 4 (ClickUp) failed: ${err.message}`,
+    });
+  }
+}
+
+/**
+ * Regenerate a single variation image with an optional new prompt/headline.
+ */
+export async function regenerateIterationVariation(
+  runId: number,
+  variationIndex: number,
+  overrides?: { headline?: string; subheadline?: string; backgroundPrompt?: string }
+) {
+  const run = await db.getPipelineRun(runId);
+  if (!run) throw new Error("Run not found");
+
+  const variations: any[] = Array.isArray(run.iterationVariations) ? run.iterationVariations : [];
+  if (variationIndex < 0 || variationIndex >= variations.length) {
+    throw new Error(`Invalid variation index: ${variationIndex}`);
+  }
+
+  let briefData: any = null;
+  try { briefData = JSON.parse(run.iterationBrief || ""); } catch { /* ignore */ }
+
+  const v = briefData?.variations?.[variationIndex] || {};
+  const product = run.product;
+  const analysis = run.iterationAnalysis || "";
+
+  // Build selections for just this one variation
+  const headline = overrides?.headline || v.headline || `VARIATION ${variationIndex + 1}`;
+  const subheadline = overrides?.subheadline || v.subheadline || null;
+  const bgPrompt = overrides?.backgroundPrompt
+    || (v.backgroundNote
+      ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
+      : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
+
+  const selections: ImageSelections = {
+    images: [
+      {
+        headline,
+        subheadline,
+        background: {
+          type: "flux" as const,
+          title: `Regenerated V${variationIndex + 1}`,
+          prompt: bgPrompt,
+        },
+      },
+      // Dummy entries for the other 2 slots (won't be used)
+      { headline: "PLACEHOLDER", subheadline: null, background: { type: "flux" as const, title: "N/A", prompt: "" } },
+      { headline: "PLACEHOLDER", subheadline: null, background: { type: "flux" as const, title: "N/A", prompt: "" } },
+    ],
+    benefits: briefData?.sharedBenefits || "Premium Formula | Clinically Dosed | Australian Made",
+  };
+
+  // Only generate the one variation we need
+  const { generateFluxProBackground } = await import("./fluxPro");
+  const { generateStaticAdWithBannerbear, BANNERBEAR_TEMPLATES } = await import("./bannerbear");
+  const { LOGOS } = await import("../config/brandAssets");
+
+  console.log(`[Iteration] Regenerating variation ${variationIndex + 1} for run #${runId}`);
+  console.log(`[Iteration] Headline: "${headline}", BG prompt: "${bgPrompt.substring(0, 100)}..."`);
+
+  // Get product render
+  let productRenderUrl: string;
+  try {
+    const renders = await db.getProductRendersByProduct(product);
+    if (renders.length > 0) {
+      productRenderUrl = renders[Math.floor(Math.random() * renders.length)].url;
+    } else {
+      const allRenders = await db.listProductRenders();
+      productRenderUrl = allRenders.length > 0 ? allRenders[0].url : "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
+    }
+  } catch {
+    productRenderUrl = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
+  }
+
+  // Generate background with Flux Pro
+  const backgroundUrl = await generateFluxProBackground(bgPrompt, 1088, 1088);
+
+  // Persist to S3
+  const resp = await fetch(backgroundUrl);
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  const { storagePut } = await import("../storage");
+  const fileKey = `flux-backgrounds/regen-v${variationIndex + 1}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const { url: persistedBgUrl } = await storagePut(fileKey, buffer, "image/jpeg");
+
+  // Composite with Bannerbear
+  const templateUids = [BANNERBEAR_TEMPLATES.hyperburnHelps, BANNERBEAR_TEMPLATES.bluePurpleGradient];
+  const templateUid = templateUids[variationIndex % templateUids.length];
+
+  const finalUrl = await generateStaticAdWithBannerbear({
+    templateUid,
+    headline,
+    subheadline: subheadline || undefined,
+    benefitCallout: briefData?.sharedBenefits || "Premium Formula | Clinically Dosed | Australian Made",
+    backgroundImageUrl: persistedBgUrl,
+    productRenderUrl,
+    logoUrl: LOGOS.wordmark_white,
+  });
+
+  // Update the specific variation in the array
+  const variationLabel = variationIndex === 0 ? "Control" : `Variation ${variationIndex + 1}`;
+  variations[variationIndex] = { url: finalUrl, variation: variationLabel };
+
+  await db.updatePipelineRun(runId, {
+    iterationVariations: variations,
+    iterationStage: "stage_3b_variation_approval",
+  });
+
+  console.log(`[Iteration] Variation ${variationIndex + 1} regenerated: ${finalUrl}`);
+  return { url: finalUrl, variation: variationLabel };
 }
 
 // ============================================================

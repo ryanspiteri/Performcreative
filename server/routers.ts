@@ -11,7 +11,7 @@ import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
 import { runVideoPipelineStages1to3, runVideoPipelineStages4to5 } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
-import { runIterationStages1to2, runIterationStage3 } from "./services/iterationPipeline";
+import { runIterationStages1to2, runIterationStage3, runIterationStage4, regenerateIterationVariation } from "./services/iterationPipeline";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
@@ -542,6 +542,70 @@ Return JSON in this exact format:
         }
 
         return { success: true };
+      }),
+
+    // Approve iteration variations and push to ClickUp
+    approveIterationVariations: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        approved: z.boolean(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.iterationStage !== "stage_3b_variation_approval") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline is not in variation approval stage" });
+        }
+
+        if (input.approved) {
+          runIterationStage4(input.runId, run).catch(err => {
+            console.error("[Pipeline] Iteration stage 4 failed:", err);
+            db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
+          });
+        } else {
+          // Mark as completed without ClickUp tasks (user chose not to push)
+          await db.updatePipelineRun(input.runId, {
+            status: "completed",
+            iterationStage: "completed",
+            completedAt: new Date(),
+            teamApprovalNotes: input.notes || "Variations completed without ClickUp push",
+          });
+        }
+
+        return { success: true };
+      }),
+
+    // Regenerate a single iteration variation
+    regenerateVariation: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        variationIndex: z.number().min(0).max(2),
+        headline: z.string().optional(),
+        subheadline: z.string().optional(),
+        backgroundPrompt: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.iterationStage !== "stage_3b_variation_approval") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline is not in variation approval stage" });
+        }
+
+        try {
+          const result = await regenerateIterationVariation(
+            input.runId,
+            input.variationIndex,
+            {
+              headline: input.headline || undefined,
+              subheadline: input.subheadline || undefined,
+              backgroundPrompt: input.backgroundPrompt || undefined,
+            }
+          );
+          return { success: true, url: result.url, variation: result.variation };
+        } catch (err: any) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: err.message });
+        }
       }),
   }),
 
