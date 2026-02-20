@@ -569,5 +569,12 @@ All three fixes implemented and tested:
 - [x] Update Bannerbear layer mapping to match Ryan's template: Heading, Benefits (+ background, product_image, logo once added)
 - [x] Use single template E9YaWrZMqPrNZnRd74 as default
 - [x] Make layer name mapping configurable per template (flexible mapping system with auto-detection)
-- [ ] WAITING: Ryan to add 3 image layers to Bannerbear template (background, product_image, logo)
-- [ ] TEST: End-to-end pipeline with complete Bannerbear template (once all layers added)
+- [x] Ryan added 3 image layers to Bannerbear template (background, Product Render, Logo)
+- [x] TEST: Bannerbear API confirmed accepting all 5 layer modifications (text + image)
+
+## ROUND 21 — BANNERBEAR TEMPLATE LAYERS COMPLETE
+- [x] Update layer mapping: Product Render, Benefits, Heading, background, Logo
+- [x] Verify Template Tester shows all 5 layers as ready (fixed: use current_defaults instead of available_modifications)
+- [x] Run end-to-end pipeline test with complete Bannerbear template
+- [x] Fix Template Tester UI to use layer mapping (shows Ready instead of Missing layers)
+- [x] Fix layer discovery to use current_defaults instead of available_modifications

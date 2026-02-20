@@ -34,14 +34,14 @@ export interface TemplateLayerMapping {
  * by fetching the template's layers and matching them.
  */
 const TEMPLATE_LAYER_MAPPINGS: Record<string, TemplateLayerMapping> = {
-  // Ryan's "Static Ad 1" template
+  // Ryan's "Static Ad 1" template (1000x1000)
+  // Layers: Product Render, Benefits, Heading, background, logo
   'E9YaWrZMqPrNZnRd74': {
     headline: 'Heading',
     benefit_callout: 'Benefits',
-    // Image layers — will be mapped once Ryan adds them to the template
-    // background: 'background',
-    // product_image: 'product_image',
-    // logo: 'logo',
+    background: 'background',
+    product_image: 'Product Render',
+    logo: 'Logo',
   },
 };
 
@@ -151,6 +151,7 @@ interface BannerbearTemplateInfo {
   width: number;
   height: number;
   available_modifications: BannerbearTemplateLayer[];
+  current_defaults?: BannerbearTemplateLayer[];
   preview_url?: string;
   tags?: string[];
 }
@@ -185,7 +186,9 @@ export async function getTemplateInfo(templateUid: string): Promise<BannerbearTe
     }
 
     const info = await response.json() as BannerbearTemplateInfo;
-    const layerNames = (info.available_modifications || []).map((m: any) => m.name);
+    // Use current_defaults for the full layer list (available_modifications only shows "dynamic" layers)
+    const allLayers = info.current_defaults || info.available_modifications || [];
+    const layerNames = allLayers.map((m: any) => m.name);
 
     console.log(`[Bannerbear] Template "${info.name}" has ${layerNames.length} layers: ${layerNames.join(', ')}`);
 
@@ -199,7 +202,9 @@ export async function getTemplateInfo(templateUid: string): Promise<BannerbearTe
 
 export async function getTemplateLayers(templateUid: string): Promise<string[]> {
   const info = await getTemplateInfo(templateUid);
-  return (info.available_modifications || []).map((m: any) => m.name);
+  // Use current_defaults for full layer list; fall back to available_modifications
+  const allLayers = info.current_defaults || info.available_modifications || [];
+  return allLayers.map((m: any) => m.name);
 }
 
 export async function validateModifications(
@@ -512,7 +517,7 @@ export async function listBannerbearTemplates(): Promise<Array<{
       name: t.name,
       width: t.width,
       height: t.height,
-      layers: (t.available_modifications || []).map((m: any) => m.name),
+      layers: (t.current_defaults || t.available_modifications || []).map((m: any) => m.name),
       previewUrl: t.preview_url,
       tags: t.tags,
       layerMapping: TEMPLATE_LAYER_MAPPINGS[t.uid] || undefined,

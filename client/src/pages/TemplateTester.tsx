@@ -16,17 +16,28 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  ArrowRight,
 } from "lucide-react";
 
-// Expected layer names that the pipeline sends to Bannerbear
-const EXPECTED_LAYERS = [
+// Canonical layer names the pipeline uses internally
+const CANONICAL_LAYERS = [
   { name: "background", type: "image", description: "Full-canvas background image (from Flux Pro or uploaded)" },
   { name: "product_image", type: "image", description: "Product render PNG with transparency" },
   { name: "logo", type: "image", description: "ONEST brand logo" },
   { name: "headline", type: "text", description: "Main headline text (e.g., 'BURN FAT FASTER')" },
-  { name: "subheadline", type: "text", description: "Supporting text below headline" },
+  { name: "subheadline", type: "text", description: "Supporting text below headline (optional)" },
   { name: "benefit_callout", type: "text", description: "Benefit text (e.g., 'Energy & Focus | Suppress Appetite')" },
 ];
+
+interface LayerMapping {
+  headline?: string;
+  subheadline?: string;
+  benefit_callout?: string;
+  background?: string;
+  product_image?: string;
+  logo?: string;
+  [key: string]: string | undefined;
+}
 
 export default function TemplateTester() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -74,6 +85,31 @@ export default function TemplateTester() {
     });
   }
 
+  /**
+   * Check if a canonical layer is satisfied by the template's actual layers,
+   * using the layer mapping if available.
+   */
+  function isLayerMapped(
+    canonicalName: string,
+    templateLayers: string[],
+    mapping: LayerMapping | null | undefined
+  ): { mapped: boolean; actualName: string | null } {
+    // First check if there's an explicit mapping
+    if (mapping && mapping[canonicalName]) {
+      const actualName = mapping[canonicalName]!;
+      const found = templateLayers.some(l => l.toLowerCase() === actualName.toLowerCase());
+      return { mapped: found, actualName: found ? actualName : null };
+    }
+
+    // Fall back to direct name match
+    const directMatch = templateLayers.find(l => l.toLowerCase() === canonicalName.toLowerCase());
+    if (directMatch) {
+      return { mapped: true, actualName: directMatch };
+    }
+
+    return { mapped: false, actualName: null };
+  }
+
   const selectedTemplateInfo = templates?.find(t => t.uid === selectedTemplate);
 
   return (
@@ -86,21 +122,21 @@ export default function TemplateTester() {
         </h1>
         <p className="text-gray-400 mt-2">
           Test your Bannerbear templates with dummy data before running a full pipeline.
-          This validates that your template layer names match what the system expects.
+          The system automatically maps your layer names to the pipeline's internal names.
         </p>
       </div>
 
-      {/* Expected Layers Reference */}
+      {/* Layer Mapping Reference */}
       <div className="bg-[#191B1F] border border-white/10 rounded-xl p-5 mb-6">
         <h2 className="text-white font-semibold text-sm flex items-center gap-2 mb-3">
           <Layers className="w-4 h-4 text-[#0347ED]" />
-          Required Layer Names
+          Pipeline Layer Requirements
         </h2>
         <p className="text-gray-400 text-xs mb-3">
-          Your Bannerbear templates must have layers with these exact names for the pipeline to work correctly.
+          The pipeline needs these layers. Your template can use different names — the system maps them automatically.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {EXPECTED_LAYERS.map((layer) => (
+          {CANONICAL_LAYERS.map((layer) => (
             <div key={layer.name} className="bg-[#0D0F12] rounded-lg p-3 border border-white/5">
               <div className="flex items-center gap-2 mb-1">
                 {layer.type === "image" ? (
@@ -186,9 +222,17 @@ export default function TemplateTester() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {templates.map((template) => {
               const isSelected = selectedTemplate === template.uid;
-              const hasAllLayers = EXPECTED_LAYERS.every(el => template.layers.includes(el.name));
-              const missingLayers = EXPECTED_LAYERS.filter(el => !template.layers.includes(el.name));
-              const extraLayers = template.layers.filter(l => !EXPECTED_LAYERS.find(el => el.name === l));
+              const mapping = (template.layerMapping || null) as LayerMapping | null;
+
+              // Check each canonical layer using the mapping
+              const layerStatus = CANONICAL_LAYERS.map(cl => ({
+                ...cl,
+                ...isLayerMapped(cl.name, template.layers, mapping),
+              }));
+
+              const requiredLayers = layerStatus.filter(l => l.name !== "subheadline"); // subheadline is optional
+              const allRequiredMapped = requiredLayers.every(l => l.mapped);
+              const missingRequired = requiredLayers.filter(l => !l.mapped);
 
               return (
                 <div
@@ -205,7 +249,7 @@ export default function TemplateTester() {
                         {template.width}x{template.height} &middot; UID: {template.uid}
                       </p>
                     </div>
-                    {hasAllLayers ? (
+                    {allRequiredMapped ? (
                       <span className="flex items-center gap-1 text-green-400 text-xs bg-green-400/10 px-2 py-1 rounded-full">
                         <CheckCircle className="w-3 h-3" />
                         Ready
@@ -229,57 +273,85 @@ export default function TemplateTester() {
                     </div>
                   )}
 
-                  {/* Layer Status */}
+                  {/* Layer Mapping Status */}
                   <div className="mb-3">
-                    <p className="text-gray-400 text-xs font-semibold mb-1.5">Template Layers ({template.layers.length}):</p>
-                    <div className="flex flex-wrap gap-1">
-                      {template.layers.map((layer) => {
-                        const isExpected = EXPECTED_LAYERS.find(el => el.name === layer);
-                        return (
-                          <span
-                            key={layer}
-                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                              isExpected
-                                ? "bg-green-400/10 text-green-400 border border-green-400/20"
-                                : "bg-gray-500/10 text-gray-400 border border-gray-500/20"
-                            }`}
-                          >
-                            {layer}
+                    <p className="text-gray-400 text-xs font-semibold mb-2">Layer Mapping:</p>
+                    <div className="space-y-1">
+                      {layerStatus.map((layer) => (
+                        <div
+                          key={layer.name}
+                          className={`flex items-center gap-2 text-[11px] font-mono px-2 py-1 rounded ${
+                            layer.mapped
+                              ? "bg-green-400/5 border border-green-400/15"
+                              : layer.name === "subheadline"
+                              ? "bg-gray-500/5 border border-gray-500/15"
+                              : "bg-red-400/5 border border-red-400/15"
+                          }`}
+                        >
+                          {layer.mapped ? (
+                            <CheckCircle className="w-3 h-3 text-green-400 shrink-0" />
+                          ) : layer.name === "subheadline" ? (
+                            <Info className="w-3 h-3 text-gray-500 shrink-0" />
+                          ) : (
+                            <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                          )}
+                          <span className={layer.mapped ? "text-green-400" : layer.name === "subheadline" ? "text-gray-500" : "text-red-400"}>
+                            {layer.name}
                           </span>
-                        );
-                      })}
+                          {layer.mapped && layer.actualName && layer.actualName !== layer.name && (
+                            <>
+                              <ArrowRight className="w-3 h-3 text-gray-600 shrink-0" />
+                              <span className="text-gray-300">{layer.actualName}</span>
+                            </>
+                          )}
+                          {layer.mapped && layer.actualName && layer.actualName === layer.name && (
+                            <span className="text-gray-600 ml-auto">direct match</span>
+                          )}
+                          {!layer.mapped && layer.name === "subheadline" && (
+                            <span className="text-gray-600 ml-auto">optional</span>
+                          )}
+                          {!layer.mapped && layer.name !== "subheadline" && (
+                            <span className="text-red-400/60 ml-auto">not found</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
 
                   {/* Missing Layers Warning */}
-                  {missingLayers.length > 0 && (
+                  {missingRequired.length > 0 && (
                     <div className="bg-amber-400/5 border border-amber-400/20 rounded-lg p-2.5 mb-3">
                       <p className="text-amber-400 text-xs font-semibold flex items-center gap-1 mb-1">
                         <AlertTriangle className="w-3 h-3" />
                         Missing required layers:
                       </p>
                       <div className="flex flex-wrap gap-1">
-                        {missingLayers.map((layer) => (
+                        {missingRequired.map((layer) => (
                           <span key={layer.name} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-400/10 text-red-400 border border-red-400/20">
                             {layer.name} ({layer.type})
                           </span>
                         ))}
                       </div>
                       <p className="text-amber-400/70 text-[10px] mt-1.5">
-                        Add these layers in the Bannerbear template editor with the exact names shown above.
+                        Add matching layers in Bannerbear, or update the layer mapping in settings.
                       </p>
                     </div>
                   )}
 
-                  {/* Extra Layers Info */}
-                  {extraLayers.length > 0 && (
-                    <div className="bg-blue-400/5 border border-blue-400/20 rounded-lg p-2.5 mb-3">
-                      <p className="text-blue-400 text-xs flex items-center gap-1">
-                        <Info className="w-3 h-3" />
-                        Extra layers (will use defaults): {extraLayers.join(", ")}
-                      </p>
+                  {/* All Layers Info */}
+                  <div className="bg-blue-400/5 border border-blue-400/20 rounded-lg p-2.5 mb-3">
+                    <p className="text-blue-400 text-xs flex items-center gap-1 mb-1">
+                      <Info className="w-3 h-3" />
+                      Template layers ({template.layers.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {template.layers.map((l) => (
+                        <span key={l} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-400/10 text-blue-300 border border-blue-400/20">
+                          {l}
+                        </span>
+                      ))}
                     </div>
-                  )}
+                  </div>
 
                   {/* Test Button */}
                   <Button

@@ -413,13 +413,14 @@ Return JSON in this exact format:
           layers: t.layers,
           previewUrl: t.previewUrl,
           tags: t.tags,
+          layerMapping: t.layerMapping || null,
         }));
       } catch (err: any) {
         console.error("[Router] Failed to list Bannerbear templates:", err.message);
         // Fallback to hardcoded list if API fails
         return [
-          { uid: 'wXmzGBDakV3vZLN7gj', name: 'Hyperburn Helps', width: 0, height: 0, layers: [], previewUrl: undefined, tags: [] },
-          { uid: 'E9YaWrZMqPrNZnRd74', name: 'Blue Purple Gradient', width: 0, height: 0, layers: [], previewUrl: undefined, tags: [] },
+          { uid: 'wXmzGBDakV3vZLN7gj', name: 'Hyperburn Helps', width: 0, height: 0, layers: [] as string[], previewUrl: undefined, tags: [] as string[], layerMapping: null as Record<string, string> | null },
+          { uid: 'E9YaWrZMqPrNZnRd74', name: 'Blue Purple Gradient', width: 0, height: 0, layers: [] as string[], previewUrl: undefined, tags: [] as string[], layerMapping: null as Record<string, string> | null },
         ];
       }
     }),
@@ -435,7 +436,7 @@ Return JSON in this exact format:
           name: info.name,
           width: info.width,
           height: info.height,
-          layers: (info.available_modifications || []).map((m: any) => ({
+          layers: ((info as any).current_defaults || info.available_modifications || []).map((m: any) => ({
             name: m.name,
             type: m.type || 'unknown',
           })),
