@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO product_renders (product, fileName, fileKey, url, mimeType, fileSize, createdAt)\nVALUES (\n  'Hyperburn',\n  'hyperburn-lime-splash.png',\n  'product-renders/hyperburn-lime-splash.png',\n  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/DNhkuelIfYJfVwmB.png',\n  'image/png',\n  9347929,\n  CURRENT_TIMESTAMP\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute INSERT INTO product_renders (product, fileName, fileKey, url, mimeType, fileSize, createdAt)\nVALUES (\n  'Hyperburn',\n  'hyperburn-lime-splash.png',\n  'product-renders/hyperburn-lime-splash.png',\n  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/DNhkuelIfYJfVwmB.png',\n  'image/png',\n  9347929,\n  CURRENT_TIMESTAMP\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1539
+}

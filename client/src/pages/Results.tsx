@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { IterationResults } from "@/components/IterationResults";
 import { useRoute, useLocation } from "wouter";
 import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles } from "lucide-react";
 import { useState, useMemo } from "react";
@@ -45,6 +46,9 @@ export default function Results() {
       // Video pipeline: keep polling during stages 1-3 and 4-5, stop at brief approval
       if (d.pipelineType === "video" && d.videoStage === "stage_3b_brief_approval") return false;
       if (d.pipelineType === "video" && (["running", "pending"] as string[]).includes(d.status)) return 3000;
+      // Iteration pipeline: stop at brief approval, keep polling during generation
+      if (d.pipelineType === "iteration" && d.iterationStage === "stage_2b_approval") return false;
+      if (d.pipelineType === "iteration" && (["running", "pending"] as string[]).includes(d.status)) return 3000;
       return false;
     }}
   );
@@ -107,6 +111,9 @@ export default function Results() {
 
       {/* Video pipeline results */}
       {run.pipelineType === "video" && <VideoResults run={run} />}
+
+      {/* Iteration pipeline results */}
+      {run.pipelineType === "iteration" && <IterationResults run={run} />}
     </div>
   );
 }

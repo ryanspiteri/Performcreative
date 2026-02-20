@@ -64,6 +64,13 @@
       "when": 1771539275837,
       "tag": "0008_purple_medusa",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1771546835967,
+      "tag": "0009_modern_silver_fox",
+      "breakpoints": true
     }
   ]
 }

@@ -474,3 +474,68 @@ All three fixes implemented and tested:
 - [x] BUG: Image generation works locally but fails in production — Puppeteer/Chromium not available in deployed environment
 - [x] FIX: Replaced Puppeteer-based HTML rendering with Sharp SVG compositing — no browser dependency
 - [x] TEST: Verified all 3 images generate correctly with Sharp — product renders, logos, text, backgrounds all working
+
+## ROUND 15 — PROFESSIONAL TEMPLATE QUALITY UPGRADE
+
+### Design Specifications (from Ryan's 4 examples)
+- [ ] TYPOGRAPHY: Massive bold headlines (30-40% of canvas), condensed/italic/bold fonts with text shadows
+- [ ] TYPOGRAPHY: Use embedded bold condensed font (Impact, Oswald, or similar) via base64 in SVG
+- [ ] LAYOUT: ONEST logo top-centre, prominent and clean
+- [ ] LAYOUT: Product render large and dominant (40-50% of canvas height)
+- [ ] LAYOUT: Disclaimer text at bottom "*INDIVIDUAL RESULTS MAY VARY. NO RESULTS GUARANTEED"
+- [ ] BENEFIT BADGES: Orange gradient badges with white icons (lightning, fire, heart, etc.) like Example 2
+- [ ] BENEFIT BADGES: Styled tag/ribbon shape with rounded ends
+- [ ] BACKGROUNDS: Use uploaded photographic backgrounds (not CSS gradients)
+- [ ] BACKGROUNDS: Full-bleed background image covering entire canvas
+
+### Template Rewrites
+- [ ] Template 1: Hero Headline — massive headline top, product centre-bottom, ONEST logo top (like Example 1 & 3)
+- [ ] Template 2: Feature Showcase — product left, benefit badges right with icons (like Example 2)
+- [ ] Template 3: Bold Statement — large centred headline, product below, subheadline, CTA
+- [ ] Template 4: UGC/Testimonial — text overlay banner on photo background (like Example 4)
+
+### Testing
+- [ ] TEST: Generate test images with each template and verify quality
+- [ ] TEST: End-to-end pipeline produces professional-quality output
+
+## ROUND 15B — ITERATION PIPELINE (New Feature)
+
+### Database
+- [ ] DB: Add iteration_pipeline_runs table (id, userId, originalImageUrl, analysis, variations, status, createdAt)
+- [ ] DB: Or extend pipeline_runs with pipelineType='iteration' and new columns
+
+### Backend
+- [ ] BACKEND: Upload endpoint for user's winning ad image → S3
+- [ ] BACKEND: Claude Vision analysis of uploaded ad — extract headline, copy, layout, colours, typography, product placement, background style
+- [ ] BACKEND: Generate 3 copy variation briefs (new headlines/angles, same visual style)
+- [ ] BACKEND: User approval gate — show analysis + proposed variations before generating
+- [ ] BACKEND: Generate 3 variation images using Sharp compositing with same layout/style as original
+- [ ] BACKEND: ClickUp task creation for approved variations
+
+### Frontend
+- [ ] UI: New "Iterate on Winners" entry point in sidebar or Browse Creatives
+- [ ] UI: Upload interface for user's winning ad
+- [ ] UI: Analysis display — show extracted elements (headline, copy, layout, colours)
+- [ ] UI: Variation preview — show 3 proposed copy angles with approve/edit
+- [ ] UI: Generated variations gallery with download/approve
+
+### Testing
+- [ ] TEST: End-to-end iteration pipeline with uploaded ad
+
+## ROUND 16 — FLUX PRO + BANNERBEAR INTEGRATION
+- [x] Research Flux Pro API — endpoints, auth, image generation capabilities
+- [x] Research Bannerbear API — template creation, compositing, text overlays, image layers
+- [x] Add API key settings fields for Flux Pro and Bannerbear
+- [x] Build Flux Pro service — generate background images from Claude's style analysis prompts
+- [x] Build Bannerbear service — template-based compositing (text, product render, logo, badges)
+- [x] Validate Flux Pro API key (api.bfl.ai, x-key header, polling_url from response)
+- [x] Validate Bannerbear API key (sync API, 2 templates: wXmzGBDakV3vZLN7gj, E9YaWrZMqPrNZnRd74)
+- [x] Upload Hyperburn Lime Splash product render to DB
+- [x] Wire Flux Pro into static pipeline — generate backgrounds from Claude's visual analysis
+- [x] Wire Bannerbear into static pipeline — composite text/product/logo onto Flux backgrounds
+- [x] Wire Flux Pro into iteration pipeline — generate variation backgrounds
+- [x] Wire Bannerbear into iteration pipeline — composite variations
+- [x] Build IterationResults frontend component in Results.tsx
+- [x] Update tests for new image generation stack
+- [x] Test Static Pipeline end-to-end with Flux Pro + Bannerbear
+- [x] Test Iteration Pipeline end-to-end with Flux Pro + Bannerbear

@@ -97,6 +97,7 @@ const CSS_PRESETS = [
 type BackgroundSelection = 
   | { type: "uploaded"; url: string; title: string }
   | { type: "preset"; presetId: string; css: string; title: string }
+  | { type: "flux"; title: string; description?: string; prompt: string }
   | null;
 
 /**
@@ -200,12 +201,18 @@ export default function SelectionGate({ runId, options, product, onSubmitted }: 
     const selections: any = {
       images: [0, 1, 2].map(i => {
         const bg = selectedBackgrounds[i]!;
+        let background: any;
+        if (bg.type === "uploaded") {
+          background = { type: "uploaded" as const, url: bg.url, title: bg.title };
+        } else if (bg.type === "flux") {
+          background = { type: "flux" as const, title: bg.title, description: bg.description, prompt: bg.prompt };
+        } else {
+          background = { type: "preset" as const, presetId: bg.presetId, css: bg.css, title: bg.title };
+        }
         return {
           headline: getHeadline(i)!,
           subheadline: getSubheadline(i),
-          background: bg.type === "uploaded"
-            ? { type: "uploaded" as const, url: bg.url, title: bg.title }
-            : { type: "preset" as const, presetId: bg.presetId, css: bg.css, title: bg.title },
+          background,
         };
       }),
       benefits: finalBenefits,
@@ -651,6 +658,50 @@ export default function SelectionGate({ runId, options, product, onSubmitted }: 
                   </div>
                 )}
 
+                {/* AI-Generated Backgrounds (from Claude's analysis) */}
+                {options.backgrounds && options.backgrounds.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-gray-500 text-xs mb-2 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-[#FF3838]" /> AI-Generated Backgrounds (Flux Pro)
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {options.backgrounds.map((bg, bgIdx) => {
+                        const isSelected = selectedBackgrounds[imgIdx]?.type === "flux" &&
+                          (selectedBackgrounds[imgIdx] as any)?.prompt === bg.prompt;
+                        return (
+                          <button
+                            key={bgIdx}
+                            onClick={() => selectBackground(imgIdx, {
+                              type: "flux",
+                              title: bg.title,
+                              description: bg.description,
+                              prompt: bg.prompt,
+                            })}
+                            className={`relative text-left rounded-lg p-3 border-2 transition-all ${
+                              isSelected
+                                ? "border-[#FF3838] ring-2 ring-[#FF3838]/30 bg-[#FF3838]/5"
+                                : "border-white/10 hover:border-white/30 bg-[#01040A]"
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <Sparkles className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isSelected ? "text-[#FF3838]" : "text-gray-500"}`} />
+                              <div>
+                                <p className={`text-sm font-medium ${isSelected ? "text-white" : "text-gray-300"}`}>{bg.title}</p>
+                                <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{bg.description}</p>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <div className="absolute top-2 right-2">
+                                <CheckCircle className="w-4 h-4 text-[#FF3838]" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* CSS Presets */}
                 <div className="mb-4">
                   <p className="text-gray-500 text-xs mb-2 font-medium uppercase tracking-wider">Gradient Presets</p>
@@ -730,7 +781,12 @@ export default function SelectionGate({ runId, options, product, onSubmitted }: 
                         <div>
                           <span className="text-gray-500 text-xs">Background:</span>
                           <p className={bg ? "text-gray-300" : "text-red-400"}>
-                            {bg?.title || "Not selected"}
+                            {bg ? (
+                              <>
+                                {bg.title}
+                                {bg.type === "flux" && <span className="text-[#FF3838] text-[10px] ml-1">(AI)</span>}
+                              </>
+                            ) : "Not selected"}
                           </p>
                         </div>
                         <div>

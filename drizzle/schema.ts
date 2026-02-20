@@ -24,7 +24,7 @@ export type ActiveProduct = typeof ACTIVE_PRODUCTS[number];
 
 export const pipelineRuns = mysqlTable("pipeline_runs", {
   id: int("id").autoincrement().primaryKey(),
-  pipelineType: mysqlEnum("pipelineType", ["video", "static"]).notNull(),
+  pipelineType: mysqlEnum("pipelineType", ["video", "static", "iteration"]).notNull(),
   status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending").notNull(),
   product: varchar("product", { length: 64 }).notNull(),
   priority: mysqlEnum("priority", ["Low", "Medium", "High", "Urgent"]).default("Medium").notNull(),
@@ -54,6 +54,11 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoBriefReview: json("videoBriefReview"),
   videoStage: varchar("videoStage", { length: 64 }),
   videoBriefOptions: json("videoBriefOptions"),
+  iterationSourceUrl: text("iterationSourceUrl"),
+  iterationAnalysis: text("iterationAnalysis"),
+  iterationBrief: text("iterationBrief"),
+  iterationStage: varchar("iterationStage", { length: 64 }),
+  iterationVariations: json("iterationVariations"),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

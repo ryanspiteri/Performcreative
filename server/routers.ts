@@ -11,6 +11,7 @@ import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
 import { runVideoPipelineStages1to3, runVideoPipelineStages4to5 } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
+import { runIterationStages1to2, runIterationStage3 } from "./services/iterationPipeline";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
@@ -235,10 +236,17 @@ export const appRouter = router({
                 css: z.string(),
                 title: z.string(),
               }),
+              z.object({
+                type: z.literal("flux"),
+                title: z.string(),
+                description: z.string().optional(),
+                prompt: z.string(),
+              }),
             ]),
           })).length(3),
           benefits: z.string(),
           productRenderUrl: z.string().optional(),
+          bannerbearTemplate: z.string().optional(),
         }),
       }))
       .mutation(async ({ input }) => {
@@ -392,6 +400,14 @@ Return JSON in this exact format:
       return ACTIVE_PRODUCTS;
     }),
 
+    // Get available Bannerbear templates
+    getBannerbearTemplates: publicProcedure.query(() => {
+      return [
+        { uid: 'wXmzGBDakV3vZLN7gj', name: 'Hyperburn Helps', description: 'Bold dark template with product focus' },
+        { uid: 'E9YaWrZMqPrNZnRd74', name: 'Blue Purple Gradient', description: 'Blue/purple gradient podcast-style layout' },
+      ];
+    }),
+
     // Team approval endpoint for Stage 6
     teamApprove: publicProcedure
       .input(z.object({
@@ -460,6 +476,68 @@ Return JSON in this exact format:
             status: "failed",
             errorMessage: `Brief rejected by user: ${input.notes || "No reason given"}`,
             videoStage: "stage_3b_brief_approval",
+          });
+        }
+
+        return { success: true };
+      }),
+
+    // ============================================================
+    // ITERATION PIPELINE — Iterate on your own winning ads
+    // ============================================================
+    triggerIteration: publicProcedure
+      .input(z.object({
+        product: z.string(),
+        priority: z.enum(["Low", "Medium", "High", "Urgent"]),
+        sourceImageUrl: z.string(),
+        sourceImageName: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const runId = await db.createPipelineRun({
+          pipelineType: "iteration",
+          status: "running",
+          product: input.product,
+          priority: input.priority,
+          triggerSource: "manual",
+          foreplayAdId: "iteration-" + Date.now(),
+          foreplayAdTitle: input.sourceImageName || "Winning Ad Iteration",
+          foreplayAdBrand: "ONEST Health",
+          iterationSourceUrl: input.sourceImageUrl,
+          iterationStage: "stage_1_analysis",
+        });
+        runIterationStages1to2(runId, input).catch(err => {
+          console.error("[Pipeline] Iteration pipeline stages 1-2 failed:", err);
+          db.updatePipelineRun(runId, { status: "failed", errorMessage: err.message || "Pipeline failed" });
+        });
+        return { runId, status: "running" };
+      }),
+
+    approveIterationBrief: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+        approved: z.boolean(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.iterationStage !== "stage_2b_approval") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline is not in iteration brief approval stage" });
+        }
+
+        if (input.approved) {
+          await db.updatePipelineRun(input.runId, {
+            iterationStage: "stage_3_generation",
+          });
+          runIterationStage3(input.runId, run).catch(err => {
+            console.error("[Pipeline] Iteration stage 3 failed:", err);
+            db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
+          });
+        } else {
+          await db.updatePipelineRun(input.runId, {
+            status: "failed",
+            errorMessage: `Iteration brief rejected: ${input.notes || "No reason given"}`,
+            iterationStage: "stage_2b_approval",
           });
         }
 

@@ -14,6 +14,7 @@ import StaticPipeline from "./pages/StaticPipeline";
 import ProductRenders from "./pages/ProductRenders";
 import ProductInfoHub from "./pages/ProductInfoHub";
 import Backgrounds from "./pages/Backgrounds";
+import IterateWinners from "./pages/IterateWinners";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -26,6 +27,7 @@ function AuthenticatedRoutes() {
         <Route path="/browse" component={BrowseCreatives} />
         <Route path="/renders" component={ProductRenders} />
         <Route path="/backgrounds" component={Backgrounds} />
+        <Route path="/iterate" component={IterateWinners} />
         <Route path="/product-info" component={ProductInfoHub} />
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />
