@@ -1,0 +1,60 @@
+{
+  "query": "SELECT * FROM product_renders ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT * FROM product_renders ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "90001",
+      "product": "Hyperburn",
+      "fileName": "867 copy.png",
+      "fileKey": "product-renders/Hyperburn/867 copy.png-ix8o8k21",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/867 copy.png-ix8o8k21",
+      "mimeType": "image/png",
+      "fileSize": "857139",
+      "createdAt": "2026-02-21 00:07:15"
+    },
+    {
+      "id": "60001",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02",
+      "fileKey": "product-renders/iteration-source/2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02-nzm2sbnx",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02-nzm2sbnx",
+      "mimeType": "image/png",
+      "fileSize": "1174934",
+      "createdAt": "2026-02-20 22:06:49"
+    },
+    {
+      "id": "30003",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02",
+      "fileKey": "product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-nbg62zfy",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-nbg62zfy",
+      "mimeType": "image/png",
+      "fileSize": "2118780",
+      "createdAt": "2026-02-20 01:59:24"
+    },
+    {
+      "id": "30002",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02",
+      "fileKey": "product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d",
+      "mimeType": "image/png",
+      "fileSize": "2118780",
+      "createdAt": "2026-02-20 01:34:39"
+    },
+    {
+      "id": "1",
+      "product": "Hyperburn",
+      "fileName": "2025_NEW_HB_RENDER-GRAPE.png",
+      "fileKey": "product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm",
+      "mimeType": "image/png",
+      "fileSize": "3053248",
+      "createdAt": "2026-02-19 04:04:50"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tproduct\tfileName\tfileKey\turl\tmimeType\tfileSize\tcreatedAt\n90001\tHyperburn\t867 copy.png\tproduct-renders/Hyperburn/867 copy.png-ix8o8k21\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/867 copy.png-ix8o8k21\timage/png\t857139\t2026-02-21 00:07:15\n60001\titeration-source\t2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02\tproduct-renders/iteration-source/2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02-nzm2sbnx\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02-nzm2sbnx\timage/png\t1174934\t2026-02-20 22:06:49\n30003\titeration-source\t2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02\tproduct-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-nbg62zfy\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-nbg62zfy\timage/png\t2118780\t2026-02-20 01:59:24\n30002\titeration-source\t2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02\tproduct-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d\timage/png\t2118780\t2026-02-20 01:34:39\n1\tHyperburn\t2025_NEW_HB_RENDER-GRAPE.png\tproduct-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm\timage/png\t3053248\t2026-02-19 04:04:50\n",
+  "stderr": "",
+  "execution_time_ms": 1535
+}

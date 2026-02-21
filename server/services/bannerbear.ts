@@ -354,6 +354,7 @@ export async function generateStaticAdWithBannerbear(params: {
   backgroundImageUrl: string;
   productRenderUrl: string;
   logoUrl: string;
+  textColor?: string;
 }): Promise<string> {
   // Get the layer mapping for this template
   const mapping = await getLayerMapping(params.templateUid);
@@ -384,16 +385,19 @@ export async function generateStaticAdWithBannerbear(params: {
     console.warn(`[Bannerbear] No 'logo' layer mapped — logo will not be applied`);
   }
 
+  // Use white text by default to ensure visibility on dark/vibrant backgrounds
+  const textColor = params.textColor || '#FFFFFF';
+
   const headlineLayer = resolveLayerName(mapping, 'headline');
   if (headlineLayer) {
-    modifications.push({ name: headlineLayer, text: params.headline });
+    modifications.push({ name: headlineLayer, text: params.headline, color: textColor });
   } else {
     console.warn(`[Bannerbear] No 'headline' layer mapped — headline text will not be applied`);
   }
 
   const benefitLayer = resolveLayerName(mapping, 'benefit_callout');
   if (benefitLayer) {
-    modifications.push({ name: benefitLayer, text: params.benefitCallout });
+    modifications.push({ name: benefitLayer, text: params.benefitCallout, color: textColor });
   } else {
     console.warn(`[Bannerbear] No 'benefit_callout' layer mapped — benefit text will not be applied`);
   }
@@ -401,7 +405,7 @@ export async function generateStaticAdWithBannerbear(params: {
   const subheadlineLayer = resolveLayerName(mapping, 'subheadline');
   if (subheadlineLayer) {
     if (params.subheadline) {
-      modifications.push({ name: subheadlineLayer, text: params.subheadline });
+      modifications.push({ name: subheadlineLayer, text: params.subheadline, color: textColor });
     } else {
       modifications.push({ name: subheadlineLayer, hide: true });
     }
@@ -427,6 +431,7 @@ export async function previewBannerbearTemplate(params: {
   backgroundImageUrl?: string;
   productRenderUrl?: string;
   logoUrl?: string;
+  textColor?: string;
 }): Promise<{
   imageUrl: string;
   validation: {
@@ -441,10 +446,12 @@ export async function previewBannerbearTemplate(params: {
 }> {
   const headline = params.headline || 'BURN FAT FASTER';
   const subheadline = params.subheadline || 'Premium Australian Formulation';
-  const benefitCallout = params.benefitCallout || 'Energy & Focus | Suppress Appetite | Boost Metabolism';
+  const benefitCallout = params.benefitCallout || 'Energy & Focus\nSuppress Appetite\nBoost Metabolism';
   const backgroundImageUrl = params.backgroundImageUrl || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1080&h=1080&fit=crop';
-  const productRenderUrl = params.productRenderUrl || 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/DNhkuelIfYJfVwmB.png';
+  // Default product render: use a simple placeholder — the router fetches from DB before calling this
+  const productRenderUrl = params.productRenderUrl || 'https://placehold.co/500x500/transparent/transparent?text=';
   const logoUrl = params.logoUrl || 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png';
+  const textColor = params.textColor || '#FFFFFF';
 
   // Get the layer mapping
   const layerMapping = await getLayerMapping(params.templateUid);
@@ -464,13 +471,13 @@ export async function previewBannerbearTemplate(params: {
   if (logoLayer) modifications.push({ name: logoLayer, image_url: logoUrl });
 
   const headlineLayer = resolveLayerName(layerMapping, 'headline');
-  if (headlineLayer) modifications.push({ name: headlineLayer, text: headline });
+  if (headlineLayer) modifications.push({ name: headlineLayer, text: headline, color: textColor });
 
   const subLayer = resolveLayerName(layerMapping, 'subheadline');
-  if (subLayer) modifications.push({ name: subLayer, text: subheadline });
+  if (subLayer) modifications.push({ name: subLayer, text: subheadline, color: textColor });
 
   const benefitLayer = resolveLayerName(layerMapping, 'benefit_callout');
-  if (benefitLayer) modifications.push({ name: benefitLayer, text: benefitCallout });
+  if (benefitLayer) modifications.push({ name: benefitLayer, text: benefitCallout, color: textColor });
 
   // Validate using the mapped names
   const validation = await validateModifications(params.templateUid, modifications);

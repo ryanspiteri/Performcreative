@@ -454,10 +454,26 @@ Return JSON in this exact format:
         backgroundImageUrl: z.string().optional(),
         productRenderUrl: z.string().optional(),
         logoUrl: z.string().optional(),
+        textColor: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { previewBannerbearTemplate } = await import("./services/bannerbear");
-        const result = await previewBannerbearTemplate(input);
+
+        // If no product render URL provided, fetch the latest from DB
+        let productRenderUrl = input.productRenderUrl;
+        if (!productRenderUrl) {
+          const renders = await db.listProductRenders('Hyperburn');
+          if (renders.length > 0) {
+            productRenderUrl = renders[0].url;
+            console.log(`[Preview] Using DB product render: ${renders[0].fileName}`);
+          }
+        }
+
+        const result = await previewBannerbearTemplate({
+          ...input,
+          productRenderUrl,
+          textColor: input.textColor || '#FFFFFF',
+        });
         return result;
       }),
 

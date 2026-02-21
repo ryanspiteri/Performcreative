@@ -578,3 +578,8 @@ All three fixes implemented and tested:
 - [x] Run end-to-end pipeline test with complete Bannerbear template
 - [x] Fix Template Tester UI to use layer mapping (shows Ready instead of Missing layers)
 - [x] Fix layer discovery to use current_defaults instead of available_modifications
+
+## ROUND 22 — BANNERBEAR PREVIEW BUGS
+- [x] BUG: Deleted product render still used in template tester preview — now fetches latest from DB
+- [x] BUG: Text colour not contrasting with background — now sends white (#FFFFFF) text colour override
+- [x] BUG: Two product renders appearing — was caused by old hardcoded non-transparent PNG, now uses DB render with transparency
