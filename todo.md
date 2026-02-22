@@ -583,3 +583,23 @@ All three fixes implemented and tested:
 - [x] BUG: Deleted product render still used in template tester preview — now fetches latest from DB
 - [x] BUG: Text colour not contrasting with background — now sends white (#FFFFFF) text colour override
 - [x] BUG: Two product renders appearing — was caused by old hardcoded non-transparent PNG, now uses DB render with transparency
+
+## ROUND 23 — UGC CLONE ENGINE (NEW PIPELINE)
+- [ ] Create database schema: ugc_uploads, ugc_variants, ugc_approvals tables
+- [ ] Build UGC service layer: transcription, structure extraction, variant generation
+- [ ] Create tRPC routes under trpc.ugc.* namespace
+- [ ] Build UGC Upload page with video upload, product/audience tagging, volume control
+- [ ] Build Structure Blueprint approval gate (Step 2)
+- [ ] Build variant generation logic with actor archetypes, voice tones, energy levels
+- [ ] Build UGC Dashboard showing all variants grouped by archetype
+- [ ] Build Approval UI with "Approve All" / "Approve Selected" functionality
+- [ ] Add optional Arcads integration module (actor generation)
+- [ ] Add optional Runway integration module (assembly/captions)
+- [ ] Add ElevenLabs voice generation integration
+- [ ] Add ClickUp push for approved variants (Video Ad Board, Review status)
+- [ ] Add sidebar nav item: "UGC Clone Engine"
+- [ ] Write tests for UGC pipeline (server/ugc.test.ts)
+- [ ] Verify all 53 existing tests still pass
+- [ ] Export formats: 4:5 and 9:16 only (no 1:1)
+- [ ] Volume handling: 5-200 variants per batch
+- [ ] Guardrails: preserve structure, no compliance changes, no auto-push
