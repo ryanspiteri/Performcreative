@@ -71,6 +71,13 @@
       "when": 1771546835967,
       "tag": "0009_modern_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1771790177250,
+      "tag": "0010_tan_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

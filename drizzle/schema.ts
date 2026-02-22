@@ -155,3 +155,54 @@ export const backgrounds = mysqlTable("backgrounds", {
 
 export type Background = typeof backgrounds.$inferSelect;
 export type InsertBackground = typeof backgrounds.$inferInsert;
+
+/**
+ * UGC Clone Engine — Uploaded winning UGC videos for cloning.
+ * Stores original video, configuration, and extracted structure.
+ */
+export const ugcUploads = mysqlTable("ugc_uploads", {
+  id: int("id").autoincrement().primaryKey(),
+  fileName: varchar("fileName", { length: 256 }).notNull(),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  videoUrl: text("videoUrl").notNull(),
+  product: varchar("product", { length: 64 }).notNull(),
+  audienceTag: varchar("audienceTag", { length: 128 }),
+  desiredOutputVolume: int("desiredOutputVolume").notNull(), // Number of variants requested
+  status: mysqlEnum("status", ["uploaded", "transcribing", "structure_extracted", "blueprint_approved", "generating_variants", "completed", "failed"]).default("uploaded").notNull(),
+  transcript: text("transcript"),
+  structureBlueprint: json("structureBlueprint"), // { hook, body, cta, timestamps, pacing }
+  blueprintApprovedAt: timestamp("blueprintApprovedAt"),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UgcUpload = typeof ugcUploads.$inferSelect;
+export type InsertUgcUpload = typeof ugcUploads.$inferInsert;
+
+/**
+ * UGC Clone Engine — Generated script variants from a UGC upload.
+ * Each variant is a controlled mutation of the original structure.
+ */
+export const ugcVariants = mysqlTable("ugc_variants", {
+  id: int("id").autoincrement().primaryKey(),
+  uploadId: int("uploadId").notNull(), // FK to ugcUploads
+  variantNumber: int("variantNumber").notNull(), // 1, 2, 3, ... N
+  actorArchetype: varchar("actorArchetype", { length: 128 }).notNull(), // e.g. "fitness enthusiast", "busy mum", "athlete"
+  voiceTone: varchar("voiceTone", { length: 64 }).notNull(), // e.g. "energetic", "calm", "authoritative"
+  energyLevel: mysqlEnum("energyLevel", ["low", "medium", "high"]).notNull(),
+  scriptText: text("scriptText").notNull(),
+  hookVariation: text("hookVariation"),
+  ctaVariation: text("ctaVariation"),
+  runtime: int("runtime"), // Estimated runtime in seconds
+  status: mysqlEnum("status", ["generated", "awaiting_approval", "approved", "rejected", "pushed_to_clickup"]).default("generated").notNull(),
+  clickupTaskId: varchar("clickupTaskId", { length: 256 }),
+  clickupTaskUrl: text("clickupTaskUrl"),
+  approvedAt: timestamp("approvedAt"),
+  rejectedAt: timestamp("rejectedAt"),
+  pushedToClickupAt: timestamp("pushedToClickupAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UgcVariant = typeof ugcVariants.$inferSelect;
+export type InsertUgcVariant = typeof ugcVariants.$inferInsert;

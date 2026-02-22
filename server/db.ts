@@ -1,6 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -315,4 +315,60 @@ export async function upsertProductInfo(data: InsertProductInfo) {
     const result = await db.insert(productInfo).values(data);
     return (result as any)[0]?.insertId;
   }
+}
+
+// ============================================================
+// UGC Clone Engine
+// ============================================================
+
+export async function createUgcUpload(data: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(ugcUploads).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function listUgcUploads(): Promise<any[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(ugcUploads).orderBy(desc(ugcUploads.createdAt));
+}
+
+export async function getUgcUpload(id: number): Promise<any | null> {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const results = await db.select().from(ugcUploads).where(eq(ugcUploads.id, id));
+  return results[0] || null;
+}
+
+export async function updateUgcUpload(id: number, data: any): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(ugcUploads).set(data).where(eq(ugcUploads.id, id));
+}
+
+export async function createUgcVariant(data: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(ugcVariants).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function listUgcVariants(uploadId: number): Promise<any[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(ugcVariants).where(eq(ugcVariants.uploadId, uploadId)).orderBy(ugcVariants.variantNumber);
+}
+
+export async function updateUgcVariant(id: number, data: any): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(ugcVariants).set(data).where(eq(ugcVariants.id, id));
 }

@@ -16,6 +16,8 @@ import ProductInfoHub from "./pages/ProductInfoHub";
 import Backgrounds from "./pages/Backgrounds";
 import IterateWinners from "./pages/IterateWinners";
 import TemplateTester from "./pages/TemplateTester";
+import UgcUpload from "./pages/UgcUpload";
+import UgcDashboard from "./pages/UgcDashboard";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -30,6 +32,8 @@ function AuthenticatedRoutes() {
         <Route path="/backgrounds" component={Backgrounds} />
         <Route path="/iterate" component={IterateWinners} />
         <Route path="/template-tester" component={TemplateTester} />
+        <Route path="/ugc" component={UgcUpload} />
+        <Route path="/ugc/:id" component={UgcDashboard} />
         <Route path="/product-info" component={ProductInfoHub} />
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />

@@ -161,3 +161,90 @@ export async function createMultipleScriptTasks(
   }
   return tasks;
 }
+
+/**
+ * Create ClickUp task for approved UGC variant
+ */
+export async function createUgcVariantTask(variant: {
+  variantNumber: number;
+  actorArchetype: string;
+  voiceTone: string;
+  energyLevel: string;
+  scriptText: string;
+  hookVariation?: string;
+  ctaVariation?: string;
+  runtime?: number;
+  product: string;
+  uploadId: number;
+}): Promise<ClickUpTask> {
+  try {
+    const { listId, statusName } = await findVideoAdBoardList();
+
+    const taskName = `UGC Clone #${variant.uploadId}-${variant.variantNumber} - ${variant.actorArchetype}`;
+    const description = `**Pipeline:** UGC Clone Engine
+**Product:** ${variant.product}
+**Actor Archetype:** ${variant.actorArchetype}
+**Voice Tone:** ${variant.voiceTone}
+**Energy Level:** ${variant.energyLevel}
+**Runtime:** ~${variant.runtime}s
+**Hook Variation:** ${variant.hookVariation || "Default"}
+**CTA Variation:** ${variant.ctaVariation || "Default"}
+
+---
+
+**SCRIPT:**
+
+${variant.scriptText}`;
+
+    const res = await clickupClient.post(`/list/${listId}/task`, {
+      name: taskName,
+      description,
+      status: "Review", // Per requirements: push to "Review" status
+      priority: 3, // Medium priority by default
+      tags: ["UGC Clone", variant.actorArchetype, variant.product, "pipeline-generated"],
+    });
+
+    return {
+      id: res.data.id,
+      name: res.data.name,
+      url: res.data.url,
+      status: res.data.status?.status || "Review",
+    };
+  } catch (error: any) {
+    console.error("[ClickUp] Error creating UGC variant task:", error?.response?.data || error.message);
+    return {
+      id: `pending-${Date.now()}`,
+      name: `UGC Clone #${variant.uploadId}-${variant.variantNumber}`,
+      url: "#",
+      status: "pending",
+    };
+  }
+}
+
+/**
+ * Push multiple approved UGC variants to ClickUp
+ */
+export async function pushUgcVariantsToClickup(
+  variants: Array<{
+    id: number;
+    variantNumber: number;
+    actorArchetype: string;
+    voiceTone: string;
+    energyLevel: string;
+    scriptText: string;
+    hookVariation?: string;
+    ctaVariation?: string;
+    runtime?: number;
+    product: string;
+    uploadId: number;
+  }>
+): Promise<Array<{ variantId: number; task: ClickUpTask }>> {
+  const results: Array<{ variantId: number; task: ClickUpTask }> = [];
+  
+  for (const variant of variants) {
+    const task = await createUgcVariantTask(variant);
+    results.push({ variantId: variant.id, task });
+  }
+  
+  return results;
+}

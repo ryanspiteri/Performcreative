@@ -821,6 +821,219 @@ Return JSON in this exact format:
         return { success: true };
       }),
   }),
+
+  ugc: router({
+    // List all UGC uploads
+    list: publicProcedure.query(async () => db.listUgcUploads()),
+
+    // Get single UGC upload with variants
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const upload = await db.getUgcUpload(input.id);
+        if (!upload) throw new TRPCError({ code: "NOT_FOUND", message: "UGC upload not found" });
+        const variants = await db.listUgcVariants(input.id);
+        return { upload, variants };
+      }),
+
+    // Upload video and create UGC record
+    upload: publicProcedure
+      .input(z.object({
+        fileName: z.string(),
+        base64Data: z.string(),
+        mimeType: z.string(),
+        product: z.string(),
+        audienceTag: z.string().optional(),
+        desiredOutputVolume: z.number().min(1).max(200),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const fileSize = buffer.length;
+        const suffix = Math.random().toString(36).slice(2, 10);
+        const fileKey = `ugc-uploads/${input.product.toLowerCase()}/${input.fileName}-${suffix}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const id = await db.createUgcUpload({
+          fileName: input.fileName,
+          fileKey,
+          videoUrl: url,
+          product: input.product,
+          audienceTag: input.audienceTag,
+          desiredOutputVolume: input.desiredOutputVolume,
+          status: "uploaded",
+        });
+        return { id, url };
+      }),
+
+    // Start transcription + structure extraction
+    startExtraction: publicProcedure
+      .input(z.object({ uploadId: z.number() }))
+      .mutation(async ({ input }) => {
+        const upload = await db.getUgcUpload(input.uploadId);
+        if (!upload) throw new TRPCError({ code: "NOT_FOUND", message: "UGC upload not found" });
+        
+        await db.updateUgcUpload(input.uploadId, { status: "transcribing" });
+        
+        // Start async extraction in background
+        (async () => {
+          try {
+            const { extractStructureBlueprint } = await import("./services/ugcClone");
+            const { transcribeAudio } = await import("./_core/voiceTranscription");
+            
+            // Step 1: Transcribe
+            const transcriptResult = await transcribeAudio({ audioUrl: upload.videoUrl });
+            if (!('text' in transcriptResult)) {
+              throw new Error("Transcription failed");
+            }
+            
+            // Step 2: Extract structure
+            const blueprint = await extractStructureBlueprint(transcriptResult.text, upload.product);
+            await db.updateUgcUpload(input.uploadId, {
+              status: "structure_extracted",
+              transcript: transcriptResult.text,
+              structureBlueprint: blueprint,
+            });
+          } catch (error: any) {
+            console.error("[UGC] Extraction failed:", error);
+            await db.updateUgcUpload(input.uploadId, {
+              status: "error",
+              errorMessage: error.message,
+            });
+          }
+        })();
+        
+        return { success: true, uploadId: input.uploadId };
+      }),
+
+    // Approve structure blueprint
+    approveBlueprint: publicProcedure
+      .input(z.object({ uploadId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.updateUgcUpload(input.uploadId, {
+          status: "blueprint_approved",
+          blueprintApprovedAt: new Date(),
+        });
+        return { success: true };
+      }),
+
+    // Generate variants
+    generateVariants: publicProcedure
+      .input(z.object({ uploadId: z.number() }))
+      .mutation(async ({ input }) => {
+        const upload = await db.getUgcUpload(input.uploadId);
+        if (!upload) throw new TRPCError({ code: "NOT_FOUND", message: "UGC upload not found" });
+        if (!upload.structureBlueprint) throw new TRPCError({ code: "BAD_REQUEST", message: "Blueprint not extracted yet" });
+        
+        await db.updateUgcUpload(input.uploadId, { status: "generating_variants" });
+        
+        // Start async variant generation in background
+        (async () => {
+          try {
+            const { generateVariants } = await import("./services/ugcClone");
+            const variants = await generateVariants({
+              uploadId: input.uploadId,
+              product: upload.product,
+              audienceTag: upload.audienceTag,
+              desiredOutputVolume: upload.desiredOutputVolume,
+              structureBlueprint: upload.structureBlueprint as any,
+              transcript: upload.transcript || "",
+            });
+            
+            // Save all variants to database
+            for (const variant of variants) {
+              await db.createUgcVariant({
+                uploadId: input.uploadId,
+                variantNumber: variant.variantNumber,
+                actorArchetype: variant.actorArchetype,
+                voiceTone: variant.voiceTone,
+                energyLevel: variant.energyLevel,
+                scriptText: variant.scriptText,
+                hookVariation: variant.hookVariation,
+                ctaVariation: variant.ctaVariation,
+                runtime: variant.runtime,
+                status: "awaiting_approval",
+              });
+            }
+            
+            await db.updateUgcUpload(input.uploadId, { status: "completed" });
+          } catch (error: any) {
+            console.error("[UGC] Variant generation failed:", error);
+            await db.updateUgcUpload(input.uploadId, {
+              status: "error",
+              errorMessage: error.message,
+            });
+          }
+        })();
+        
+        return { success: true, uploadId: input.uploadId };
+      }),
+
+    // List variants for an upload
+    listVariants: publicProcedure
+      .input(z.object({ uploadId: z.number() }))
+      .query(async ({ input }) => db.listUgcVariants(input.uploadId)),
+
+    // Approve selected variants
+    approveVariants: publicProcedure
+      .input(z.object({ variantIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        for (const id of input.variantIds) {
+          await db.updateUgcVariant(id, {
+            status: "approved",
+            approvedAt: new Date(),
+          });
+        }
+        return { success: true, count: input.variantIds.length };
+      }),
+
+    // Reject selected variants
+    rejectVariants: publicProcedure
+      .input(z.object({ variantIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        for (const id of input.variantIds) {
+          await db.updateUgcVariant(id, {
+            status: "rejected",
+            rejectedAt: new Date(),
+          });
+        }
+        return { success: true, count: input.variantIds.length };
+      }),
+
+    // Push approved variants to ClickUp
+    pushToClickup: publicProcedure
+      .input(z.object({ variantIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        const { pushUgcVariantsToClickup } = await import("./services/clickup");
+        
+        // Fetch all variants with upload info
+        const variantsToPush: any[] = [];
+        for (const variantId of input.variantIds) {
+          const variants = await db.listUgcVariants(0); // Get all variants
+          const variant = variants.find((v: any) => v.id === variantId);
+          if (variant) {
+            const upload = await db.getUgcUpload(variant.uploadId);
+            variantsToPush.push({
+              ...variant,
+              product: upload?.product || "Unknown",
+            });
+          }
+        }
+        
+        // Push to ClickUp
+        const results = await pushUgcVariantsToClickup(variantsToPush);
+        
+        // Update variants with ClickUp task info
+        for (const result of results) {
+          await db.updateUgcVariant(result.variantId, {
+            status: "pushed_to_clickup",
+            clickupTaskId: result.task.id,
+            clickupTaskUrl: result.task.url,
+            pushedToClickupAt: new Date(),
+          });
+        }
+        
+        return { success: true, count: results.length };
+      }),
+  }),
 });
 
 // ============================================================
