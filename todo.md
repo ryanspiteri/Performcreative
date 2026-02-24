@@ -877,3 +877,24 @@ All three fixes implemented and tested:
 - [ ] Check what ad selection method is actually used (NOT Foreplay)
 - [ ] Update audit report with correct implementation details
 - [ ] Verify all assumptions against actual code
+
+## REMOVE BANNERBEAR LEGACY CODE (Round 29)
+
+### Audit All Image Generation Paths
+- [x] Check main pipeline (Stage 3) - confirm using Gemini ✅
+- [x] Check regenerateVariation function - currently using Bannerbear ❌
+- [x] Check for any other Bannerbear/Flux Pro imports
+- [x] Verify no legacy code paths remain
+
+### Replace regenerateVariation Function
+- [x] Read current regenerateVariation implementation
+- [x] Replace Flux Pro + Bannerbear with Gemini 3 Pro Image
+- [x] Use same logic as Stage 3 (buildEnhancedPrompt + generateProductAd)
+- [ ] Test regeneration flow
+
+### Remove Legacy Imports
+- [x] Remove Bannerbear imports from iterationPipeline.ts (were dynamic imports)
+- [x] Remove Flux Pro imports from iterationPipeline.ts (were dynamic imports)
+- [x] Remove imageCompositing import (ImageSelections, generateStaticAdVariations)
+- [x] Clean up unused ImageSelections object
+- [x] Verify TypeScript compiles without errors

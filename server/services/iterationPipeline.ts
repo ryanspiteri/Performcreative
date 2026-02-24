@@ -1,6 +1,6 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
-import { generateStaticAdVariations, ImageSelections } from "./imageCompositing";
+// Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { createScriptTask } from "./clickup";
 import { generateProductAd } from "./geminiImage";
 import { buildEnhancedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
@@ -368,69 +368,41 @@ export async function regenerateIterationVariation(
       ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
       : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
 
-  const selections: ImageSelections = {
-    images: [
-      {
-        headline,
-        subheadline,
-        background: {
-          type: "flux" as const,
-          title: `Regenerated V${variationIndex + 1}`,
-          prompt: bgPrompt,
-        },
-      },
-      // Dummy entries for the other 2 slots (won't be used)
-      { headline: "PLACEHOLDER", subheadline: null, background: { type: "flux" as const, title: "N/A", prompt: "" } },
-      { headline: "PLACEHOLDER", subheadline: null, background: { type: "flux" as const, title: "N/A", prompt: "" } },
-    ],
-    benefits: briefData?.sharedBenefits || "Premium Formula | Clinically Dosed | Australian Made",
-  };
-
-  // Only generate the one variation we need
-  const { generateFluxProBackground } = await import("./fluxPro");
-  const { generateStaticAdWithBannerbear, BANNERBEAR_TEMPLATES } = await import("./bannerbear");
-  const { LOGOS } = await import("../config/brandAssets");
-
-  console.log(`[Iteration] Regenerating variation ${variationIndex + 1} for run #${runId}`);
+  // Use Gemini 3 Pro Image for regeneration (same as main pipeline)
+  console.log(`[Iteration] Regenerating variation ${variationIndex + 1} for run #${runId} using Gemini`);
   console.log(`[Iteration] Headline: "${headline}", BG prompt: "${bgPrompt.substring(0, 100)}..."`);
 
   // Get product render
-  let productRenderUrl: string;
-  try {
-    const renders = await db.getProductRendersByProduct(product);
-    if (renders.length > 0) {
-      productRenderUrl = renders[Math.floor(Math.random() * renders.length)].url;
-    } else {
-      const allRenders = await db.listProductRenders();
-      productRenderUrl = allRenders.length > 0 ? allRenders[0].url : "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
-    }
-  } catch {
-    productRenderUrl = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
+  const productRenders = await db.getProductRendersByProduct(product);
+  if (productRenders.length === 0) {
+    throw new Error(`No product render found for ${product}`);
   }
+  const productRender = productRenders[0];
 
-  // Generate background with Flux Pro
-  const backgroundUrl = await generateFluxProBackground(bgPrompt, 1088, 1088);
+  // Get aspect ratio and creativity level from run config
+  const aspectRatio = run.aspectRatio || "1:1";
+  const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
 
-  // Persist to S3
-  const resp = await fetch(backgroundUrl);
-  const buffer = Buffer.from(await resp.arrayBuffer());
-  const { storagePut } = await import("../storage");
-  const fileKey = `flux-backgrounds/regen-v${variationIndex + 1}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-  const { url: persistedBgUrl } = await storagePut(fileKey, buffer, "image/jpeg");
-
-  // Composite with Bannerbear
-  // Use the single template for now (add more later for variety)
-  const templateUid = BANNERBEAR_TEMPLATES.staticAd1;
-
-  const finalUrl = await generateStaticAdWithBannerbear({
-    templateUid,
+  // Build enhanced prompt using same logic as Stage 3
+  const geminiPrompt = buildEnhancedPrompt({
     headline,
     subheadline: subheadline || undefined,
-    benefitCallout: briefData?.sharedBenefits || "Premium Formula | Clinically Dosed | Australian Made",
-    backgroundImageUrl: persistedBgUrl,
-    productRenderUrl,
-    logoUrl: LOGOS.wordmark_white,
+    productName: `ONEST Health ${product}`,
+    backgroundStyle: bgPrompt,
+    creativityLevel,
+    targetAudience: briefData?.targetAudience || "fitness-conscious adults",
   });
+
+  // Generate with Gemini
+  const geminiImages = await generateProductAd({
+    prompt: geminiPrompt,
+    productRenderUrl: productRender.url,
+    aspectRatio: aspectRatio as any,
+    resolution: aspectRatio === "1:1" || aspectRatio === "4:5" ? "2K" : "4K",
+    variationCount: 1,
+  });
+
+  const finalUrl = geminiImages[0].url;
 
   // Update the specific variation in the array
   const variationLabel = variationIndex === 0 ? "Control" : `Variation ${variationIndex + 1}`;
