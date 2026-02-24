@@ -169,7 +169,7 @@ export async function runIterationStage3(runId: number, run: any) {
     // Get creativity level and aspect ratio from run config
     const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
     const aspectRatio = run.aspectRatio || "1:1";
-    const variationCount = briefData?.variations?.length || 3;
+    const variationCount = run.variationCount || briefData?.variations?.length || 3;
     
     console.log(`[Iteration] Using creativity level: ${creativityLevel}`);
     console.log(`[Iteration] Aspect ratio: ${aspectRatio}`);
@@ -237,8 +237,8 @@ export async function runIterationStage3(runId: number, run: any) {
         const geminiImages = await generateProductAd({
           prompt: fallbackPrompt,
           productRenderUrl: productRender.url,
-          aspectRatio: "1:1",
-          resolution: "2K",
+          aspectRatio: aspectRatio as any,
+          resolution: aspectRatio === "1:1" || aspectRatio === "4:5" ? "2K" : "4K",
           variationCount: 1,
         });
 
@@ -596,11 +596,80 @@ async function generateIterationBrief(
 
 Return ONLY valid JSON. No markdown, no code blocks, no explanation.`;
 
-  const variationTypeInstructions = variationTypes && variationTypes.length > 0
-    ? `- VARIATION TYPES TO TEST: ${variationTypes.join(", ")}
-- For each type, ONLY vary that element (e.g., if headline_only, keep everything else identical)
-- If multiple types selected, distribute variations across all types`
-    : "- KEEP the same visual layout, colour scheme, typography style, and product placement\n- TEST a different headline, subheadline, and copy angle";
+  // Build detailed variation type instructions
+  let variationTypeInstructions = "";
+  
+  if (variationTypes && variationTypes.length > 0) {
+    const typeConstraints: Record<string, string> = {
+      headline_only: `**HEADLINE_ONLY**: Only vary the headline text. Keep EXACTLY the same:
+- Background style, colours, and gradients
+- Layout and composition
+- Product placement and size
+- Props and visual metaphors
+- Typography style (only text changes)
+- Subheadline and benefit callouts`,
+      
+      background_only: `**BACKGROUND_ONLY**: Only vary background colours/styles. Keep EXACTLY the same:
+- Headline text (word-for-word)
+- Layout and composition
+- Product placement and size
+- Props and visual metaphors
+- Typography style
+- All copy (headline, subheadline, benefits)
+Test different: solid colours, gradients, colour schemes (warm/cool/high-contrast)`,
+      
+      layout_only: `**LAYOUT_ONLY**: Only vary product placement and text positioning. Keep EXACTLY the same:
+- Headline text (word-for-word)
+- Background style and colours
+- Props and visual metaphors
+- Typography style
+- All copy
+Test different: centered, asymmetric, split-screen, diagonal, grid compositions`,
+      
+      benefit_callouts_only: `**BENEFIT_CALLOUTS_ONLY**: Only vary subheadline and benefit copy. Keep EXACTLY the same:
+- Main headline (word-for-word)
+- Background style and colours
+- Layout and composition
+- Product placement
+- Props and visual metaphors
+Test different: benefit angles (speed, results, ingredients, science, guarantees)`,
+      
+      props_only: `**PROPS_ONLY**: Only vary visual metaphors and supporting elements. Keep EXACTLY the same:
+- Headline text (word-for-word)
+- Background style and colours
+- Layout and composition
+- Product placement
+- All copy
+Test different: visual metaphors (fire, lightning, transformation, science, speed)`,
+      
+      talent_swap: `**TALENT_SWAP**: Only vary the person/model. Keep EXACTLY the same:
+- Headline text (word-for-word)
+- Background style and colours
+- Layout and composition
+- Product placement
+- Props and visual metaphors
+- All copy
+Test different: age groups, genders, ethnicities, body types`,
+      
+      full_remix: `**FULL_REMIX**: Change everything - headline, background, layout, props, benefits.
+Maximum creative freedom. Only maintain product identity and core value proposition.`
+    };
+    
+    const selectedConstraints = variationTypes
+      .map(type => typeConstraints[type])
+      .filter(Boolean)
+      .join("\n\n");
+    
+    const variationsPerType = Math.ceil(variationCount / variationTypes.length);
+    
+    variationTypeInstructions = `VARIATION TYPE CONSTRAINTS:
+${selectedConstraints}
+
+DISTRIBUTION: Generate approximately ${variationsPerType} variation(s) for each selected type.
+If multiple types selected, clearly label which type each variation tests.`;
+  } else {
+    variationTypeInstructions = "- KEEP the same visual layout, colour scheme, typography style, and product placement\n- TEST a different headline, subheadline, and copy angle";
+  }
 
   const userPrompt = `Based on this analysis of an ONEST Health winning ad for ${product}:
 
@@ -626,18 +695,19 @@ Return JSON in this exact format with ${variationCount} variations:
   "originalHeadline": "exact headline from the winning ad",
   "originalAngle": "description of the original ad's angle",
   "preserveElements": ["list of visual elements to keep exactly the same"],
-  "sharedBenefits": "short benefit text that appears on all variations (e.g. 'Clinically Dosed | No Fillers | Australian Made')",
+  "targetAudience": "description of target audience",
   "variations": [
     {
       "number": 1,
+      "variationType": "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix",
       "angle": "Benefit-Driven",
       "angleDescription": "Why this angle works and what it tests",
       "headline": "NEW HEADLINE TEXT (3-8 words, all caps)",
       "subheadline": "Supporting subheadline (5-12 words)",
       "benefitCallouts": ["Benefit 1", "Benefit 2", "Benefit 3"],
-      "backgroundNote": "Any specific background adjustments for this variation"
+      "backgroundNote": "Specific instructions for background/layout/props based on variation type"
     }
-    ... (generate ${variationCount} total variations)
+    ... (generate ${variationCount} total variations, distributed across selected types)
   ]
 }`;
 

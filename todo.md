@@ -813,3 +813,67 @@ All three fixes implemented and tested:
 - [x] Show aspect ratio from user input
 - [x] Update brief approval section to reflect new system
 - [ ] Test Results page with new variation matrix data
+
+## Button Text Fix (Round 27E)
+
+### "Generate 3 Variations" Button Still Hardcoded
+- [x] Find the button in IterateWinners.tsx
+- [x] Update button text to show dynamic variation count (e.g., "Generate 10 Variations")
+- [ ] Verify button updates when slider changes
+- [ ] Test with different variation counts (1, 10, 25, 50)
+
+## CRITICAL BUG FIXES (Round 28 - QA Audit Findings)
+
+### Bug #1: Frontend Validation Missing (P1)
+- [x] Add validation to IterateWinners.tsx to prevent submitting with zero variation types
+- [x] Disable "Generate" button when variationTypes.length === 0
+- [ ] Show error message: "Please select at least one variation type"
+- [ ] Test edge case: clicking generate with no types selected
+
+### Bug #2: Variation Types Not Used in Brief Generation (P0 - CRITICAL)
+- [x] Read current generateIterationBrief() function implementation
+- [x] Design variation type constraint logic for each type:
+  * headline_only → Only vary headline, preserve background/layout/props
+  * background_only → Only vary background, preserve headline/layout
+  * layout_only → Only vary product placement, preserve headline/background
+  * props_only → Only vary visual metaphors, preserve headline/background/layout
+  * benefits_only → Only vary benefit copy, preserve headline/background/layout
+  * talent_swap → Only change person/model, preserve everything else
+  * full_remix → Change everything
+- [x] Implement conditional prompt generation based on variationTypes array
+- [x] Add detailed constraint instructions for each type to Claude prompt
+- [x] Update JSON output format to include variationType field
+- [x] Calculate variations per type distribution (Math.ceil(count / types.length))
+- [ ] Test each variation type individually
+- [ ] Test multiple types selected simultaneously
+
+### Bug #3: Variation Count Fallback to 3 (P1)
+- [x] Fix line 172 in iterationPipeline.ts
+- [x] Change from `briefData?.variations?.length || 3` to `run.variationCount || 3`
+- [ ] Test edge case: empty briefData.variations array
+- [ ] Verify count from database is used correctly
+
+### Bug #4: Fallback Generation Hardcoded Aspect Ratio (P2)
+- [x] Fix line 240 in iterationPipeline.ts
+- [x] Change from `aspectRatio: "1:1"` to `aspectRatio: aspectRatio as any`
+- [x] Also update resolution to respect aspect ratio (2K for 1:1/4:5, 4K for 9:16/16:9)
+- [ ] Test fallback generation path
+- [ ] Verify aspect ratio variable is used
+
+### Image Creation Guidelines Documentation
+- [x] Write comprehensive guidelines for Iterate Winners image generation
+- [x] Document variation type constraints and how they affect prompts
+- [x] Document complete pipeline flow (Stage 1-4)
+- [x] Document aspect ratio handling and cost calculations
+- [x] Document error handling and fallback generation
+- [x] File: /home/ubuntu/iterate_winners_pipeline_logic.md (69KB)
+- [ ] Include examples for each variation type
+- [ ] Document Gemini prompt structure and parameters
+- [ ] Add best practices for background complexity (simple backgrounds preferred)
+- [ ] Document aspect ratio handling
+- [ ] Include troubleshooting section
+
+### Audit Corrections
+- [ ] Check what ad selection method is actually used (NOT Foreplay)
+- [ ] Update audit report with correct implementation details
+- [ ] Verify all assumptions against actual code
