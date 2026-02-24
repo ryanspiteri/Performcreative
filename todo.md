@@ -624,4 +624,27 @@ All three fixes implemented and tested:
 - [x] Write tests for Gemini service (5 tests passing)
 - [ ] Test Gemini image generation with ONEST product renders end-to-end
 - [ ] Update IterationResults.tsx UI if needed (current UI should work as-is)
-- [ ] Save checkpoint after successful integration
+- [x] Save checkpoint after successful integration (version aca4a6b2)
+
+## ROUND 23 — GEMINI PROMPT ENHANCEMENT & API FIX
+
+- [x] Fix Gemini API error: responseModalities not supported by gemini-2.0-flash-exp-image-generation
+- [x] Research correct Gemini image generation API format
+- [x] Upgrade Google AI API to paid tier (billing account activated)
+- [x] Verify Gemini image generation working (test passed)
+- [x] Implement enhanced prompt system with headline analysis
+- [x] Add emotional targeting and audience-specific prompts
+- [x] Integrate enhanced prompts into iteration pipeline
+- [x] Add creativity slider (SAFE/BOLD/WILD) to iteration pipeline UI and backend
+- [x] Add creativityLevel field to database schema
+- [x] Apply database migration
+- [ ] Test Iterate Winners with creativity slider
+- [ ] Test UGC upload with 25MB video
+- [ ] Save checkpoint after successful testing
+
+## ROUND 24 — UGC UPLOAD BUG FIX
+
+- [x] Investigate UGC Clone Engine upload error: "Unexpected token '<', '<html><hea'... is not valid JSON"
+- [x] Add detailed error logging to UGC upload mutation
+- [x] Add file size validation and better error handling
+- [ ] Test 25MB video upload with new logging

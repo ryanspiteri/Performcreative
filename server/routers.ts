@@ -588,6 +588,7 @@ Return JSON in this exact format:
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
         sourceImageUrl: z.string(),
         sourceImageName: z.string().optional(),
+        creativityLevel: z.enum(["SAFE", "BOLD", "WILD"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const runId = await db.createPipelineRun({
@@ -601,6 +602,7 @@ Return JSON in this exact format:
           foreplayAdBrand: "ONEST Health",
           iterationSourceUrl: input.sourceImageUrl,
           iterationStage: "stage_1_analysis",
+          creativityLevel: input.creativityLevel || "BOLD",
         });
         runIterationStages1to2(runId, input).catch(err => {
           console.error("[Pipeline] Iteration pipeline stages 1-2 failed:", err);
@@ -847,21 +849,49 @@ Return JSON in this exact format:
         desiredOutputVolume: z.number().min(1).max(200),
       }))
       .mutation(async ({ input }) => {
-        const buffer = Buffer.from(input.base64Data, "base64");
-        const fileSize = buffer.length;
-        const suffix = Math.random().toString(36).slice(2, 10);
-        const fileKey = `ugc-uploads/${input.product.toLowerCase()}/${input.fileName}-${suffix}`;
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
-        const id = await db.createUgcUpload({
-          fileName: input.fileName,
-          fileKey,
-          videoUrl: url,
-          product: input.product,
-          audienceTag: input.audienceTag,
-          desiredOutputVolume: input.desiredOutputVolume,
-          status: "uploaded",
-        });
-        return { id, url };
+        try {
+          console.log(`[UGC Upload] Starting upload: ${input.fileName}, base64 length: ${input.base64Data.length}`);
+          
+          const buffer = Buffer.from(input.base64Data, "base64");
+          const fileSize = buffer.length;
+          const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+          
+          console.log(`[UGC Upload] Buffer created: ${fileSizeMB}MB`);
+          
+          if (fileSize > 500 * 1024 * 1024) {
+            throw new TRPCError({ 
+              code: "BAD_REQUEST", 
+              message: `File too large: ${fileSizeMB}MB (max 500MB)` 
+            });
+          }
+          
+          const suffix = Math.random().toString(36).slice(2, 10);
+          const fileKey = `ugc-uploads/${input.product.toLowerCase()}/${input.fileName}-${suffix}`;
+          
+          console.log(`[UGC Upload] Uploading to S3: ${fileKey}`);
+          const { url } = await storagePut(fileKey, buffer, input.mimeType);
+          console.log(`[UGC Upload] S3 upload complete: ${url}`);
+          
+          const id = await db.createUgcUpload({
+            fileName: input.fileName,
+            fileKey,
+            videoUrl: url,
+            product: input.product,
+            audienceTag: input.audienceTag,
+            desiredOutputVolume: input.desiredOutputVolume,
+            status: "uploaded",
+          });
+          
+          console.log(`[UGC Upload] Database record created: ID ${id}`);
+          return { id, url };
+        } catch (error: any) {
+          console.error(`[UGC Upload] Error:`, error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message || "Upload failed",
+            cause: error,
+          });
+        }
       }),
 
     // Start transcription + structure extraction

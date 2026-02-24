@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `pipeline_runs` ADD `creativityLevel` enum('SAFE','BOLD','WILD') DEFAULT 'BOLD';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute ALTER TABLE `pipeline_runs` ADD `creativityLevel` enum('SAFE','BOLD','WILD') DEFAULT 'BOLD';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1844
+}

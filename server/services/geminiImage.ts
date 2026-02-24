@@ -87,7 +87,7 @@ export async function generateProductAd(
           },
         ],
         generationConfig: {
-          responseModalities: ["IMAGE"],
+          responseModalities: ["Text", "Image"],
         },
       };
 

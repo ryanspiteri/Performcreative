@@ -3,6 +3,7 @@ import { analyzeStaticAd } from "./claude";
 import { generateStaticAdVariations, ImageSelections } from "./imageCompositing";
 import { createScriptTask } from "./clickup";
 import { generateProductAd } from "./geminiImage";
+import { buildEnhancedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import axios from "axios";
 import { ENV } from "../_core/env";
 
@@ -155,23 +156,24 @@ export async function runIterationStage3(runId: number, run: any) {
     // Generate 3 variations using Gemini
     const geminiResults: any[] = [];
     
+    // Get creativity level from run config (default to BOLD for best balance)
+    const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
+    console.log(`[Iteration] Using creativity level: ${creativityLevel}`);
+
     if (briefData?.variations && Array.isArray(briefData.variations)) {
-      // Generate each variation with its specific prompt
+      // Generate each variation with enhanced prompt system
       for (let i = 0; i < 3; i++) {
         const v = briefData.variations[i] || {};
         
-        // Build Gemini prompt that includes the product, headline, and background style
-        const geminiPrompt = [
-          `Create a high-end product advertisement for this ONEST Health supplement bottle.`,
-          `The product should be the hero element, prominently displayed.`,
-          v.backgroundNote ? `Background style: ${v.backgroundNote}` : `Background: ${["Dramatic warm crimson red accent lighting with energetic mood", "Cool electric blue accent lighting with mysterious mood", "Warm amber spotlight with premium luxury aesthetic"][i]}`,
-          `Headline text: "${v.headline || `VARIATION ${i + 1}`}"`,
-          v.subheadline ? `Subheadline: "${v.subheadline}"` : "",
-          `Style: Premium fitness/health supplement ad with dramatic lighting.`,
-          `The product label and branding must be preserved exactly as shown.`,
-          `Include subtle atmospheric effects like light rays or particles.`,
-          `No people, no other products, clean composition.`,
-        ].filter(Boolean).join(" ");
+        // Build enhanced Gemini prompt using headline analysis
+        const geminiPrompt = buildEnhancedPrompt({
+          headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
+          subheadline: v.subheadline || undefined,
+          productName: `ONEST Health ${product}`,
+          backgroundStyle: v.backgroundNote || undefined,
+          creativityLevel,
+          targetAudience: briefData.targetAudience || undefined,
+        });
 
         console.log(`[Iteration] Generating variation ${i + 1}/3 with Gemini`);
         console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
@@ -194,18 +196,31 @@ export async function runIterationStage3(runId: number, run: any) {
         });
       }
     } else {
-      // Fallback: 3 generic variations
-      const fallbackPrompts = [
-        "Create a high-end product ad for this ONEST Health supplement. Dramatic warm crimson red accent lighting with energetic mood. Premium fitness aesthetic with subtle smoke particles. The product should be the hero element.",
-        "Create a high-end product ad for this ONEST Health supplement. Cool electric blue accent lighting with mysterious mood. Bold energetic background with geometric light rays. The product should be the hero element.",
-        "Create a high-end product ad for this ONEST Health supplement. Warm amber spotlight with premium luxury aesthetic. Minimalist dark background with clean composition. The product should be the hero element.",
+      // Fallback: 3 generic variations with enhanced prompts
+      const fallbackHeadlines = [
+        `${product.toUpperCase()} - Unleash Your Power`,
+        `${product.toUpperCase()} - Transform Your Energy`,
+        `${product.toUpperCase()} - Premium Performance`,
+      ];
+      
+      const fallbackBackgrounds = [
+        "Dramatic warm crimson red accent lighting with energetic mood, subtle smoke particles",
+        "Cool electric blue accent lighting with mysterious mood, geometric light rays",
+        "Warm amber spotlight with premium luxury aesthetic, minimalist dark background",
       ];
 
       for (let i = 0; i < 3; i++) {
         console.log(`[Iteration] Generating fallback variation ${i + 1}/3 with Gemini`);
         
+        const fallbackPrompt = buildEnhancedPrompt({
+          headline: fallbackHeadlines[i],
+          productName: `ONEST Health ${product}`,
+          backgroundStyle: fallbackBackgrounds[i],
+          creativityLevel,
+        });
+        
         const geminiImages = await generateProductAd({
-          prompt: fallbackPrompts[i],
+          prompt: fallbackPrompt,
           productRenderUrl: productRender.url,
           aspectRatio: "1:1",
           resolution: "2K",

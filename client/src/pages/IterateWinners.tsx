@@ -13,6 +13,8 @@ const PRODUCTS = [
   "CollagenPlus",
 ];
 
+type CreativityLevel = "SAFE" | "BOLD" | "WILD";
+
 export default function IterateWinners() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<"upload" | "running" | "results">("upload");
@@ -21,6 +23,7 @@ export default function IterateWinners() {
   const [uploadedImageName, setUploadedImageName] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
+  const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
@@ -94,6 +97,7 @@ export default function IterateWinners() {
         priority: "Medium",
         sourceImageUrl: uploadedImageUrl,
         sourceImageName: uploadedImageName,
+        creativityLevel,
       });
       setRunId(result.runId);
       setLocation(`/results/${result.runId}`);
@@ -137,6 +141,43 @@ export default function IterateWinners() {
                   {p}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Creativity Slider */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Creative Risk Level</label>
+            <div className="bg-white/5 rounded-xl p-6">
+              <div className="flex gap-2 mb-4">
+                {(['SAFE', 'BOLD', 'WILD'] as CreativityLevel[]).map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setCreativityLevel(level)}
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                      creativityLevel === level
+                        ? level === 'SAFE'
+                          ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20"
+                          : level === 'BOLD'
+                          ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                          : "bg-red-500 text-white shadow-lg shadow-red-500/20"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+              <div className="text-xs text-gray-400">
+                {creativityLevel === 'SAFE' && (
+                  <p><span className="font-medium text-blue-400">SAFE:</span> Proven visual patterns, lower risk, familiar aesthetics. Best for testing budgets.</p>
+                )}
+                {creativityLevel === 'BOLD' && (
+                  <p><span className="font-medium text-purple-400">BOLD:</span> Unexpected concepts, moderate risk, higher upside. Balanced creativity for scale. (Recommended)</p>
+                )}
+                {creativityLevel === 'WILD' && (
+                  <p><span className="font-medium text-red-400">WILD:</span> Controversial/polarising concepts, highest risk, moonshot potential. May alienate some but deeply resonate with others.</p>
+                )}
+              </div>
             </div>
           </div>
 

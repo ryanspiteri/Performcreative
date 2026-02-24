@@ -59,6 +59,7 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   iterationBrief: text("iterationBrief"),
   iterationStage: varchar("iterationStage", { length: 64 }),
   iterationVariations: json("iterationVariations"),
+  creativityLevel: mysqlEnum("creativityLevel", ["SAFE", "BOLD", "WILD"]).default("BOLD"),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
