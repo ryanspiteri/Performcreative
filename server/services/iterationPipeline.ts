@@ -2,6 +2,7 @@ import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
 import { generateStaticAdVariations, ImageSelections } from "./imageCompositing";
 import { createScriptTask } from "./clickup";
+import { generateProductAd } from "./geminiImage";
 import axios from "axios";
 import { ENV } from "../_core/env";
 
@@ -137,60 +138,92 @@ export async function runIterationStage3(runId: number, run: any) {
       briefData = null;
     }
 
-    // Build selections from the brief — use Flux Pro for background generation
-    const selections: ImageSelections = {
-      images: [],
-      benefits: briefData?.sharedBenefits || "Premium Formula | Clinically Dosed | Australian Made",
-    };
+    // Use Gemini 3 Pro Image for high-quality product ad generation
+    // Replaces the old Flux Pro + Bannerbear two-step process with single-API generation
+    console.log("[Iteration] Using Gemini 3 Pro Image for variation generation");
 
+    // Get product render from database
+    const renders = await db.listProductRenders(product);
+    const productRender = renders.find((r: any) => r.isDefault) || renders[0];
+    
+    if (!productRender) {
+      throw new Error(`No product render found for ${product}`);
+    }
+
+    console.log(`[Iteration] Using product render: ${productRender.url}`);
+
+    // Generate 3 variations using Gemini
+    const geminiResults: any[] = [];
+    
     if (briefData?.variations && Array.isArray(briefData.variations)) {
+      // Generate each variation with its specific prompt
       for (let i = 0; i < 3; i++) {
         const v = briefData.variations[i] || {};
-        // Generate a Flux Pro background prompt based on the analysis + variation angle
-        const bgPrompt = v.backgroundNote
-          ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
-          : `Premium dark background for health supplement advertisement. ${i === 0 ? "Warm crimson red accent lighting, energetic mood" : i === 1 ? "Cool electric blue accent lighting, mysterious mood" : "Warm amber spotlight, premium luxury mood"}. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`;
+        
+        // Build Gemini prompt that includes the product, headline, and background style
+        const geminiPrompt = [
+          `Create a high-end product advertisement for this ONEST Health supplement bottle.`,
+          `The product should be the hero element, prominently displayed.`,
+          v.backgroundNote ? `Background style: ${v.backgroundNote}` : `Background: ${["Dramatic warm crimson red accent lighting with energetic mood", "Cool electric blue accent lighting with mysterious mood", "Warm amber spotlight with premium luxury aesthetic"][i]}`,
+          `Headline text: "${v.headline || `VARIATION ${i + 1}`}"`,
+          v.subheadline ? `Subheadline: "${v.subheadline}"` : "",
+          `Style: Premium fitness/health supplement ad with dramatic lighting.`,
+          `The product label and branding must be preserved exactly as shown.`,
+          `Include subtle atmospheric effects like light rays or particles.`,
+          `No people, no other products, clean composition.`,
+        ].filter(Boolean).join(" ");
 
-        selections.images.push({
+        console.log(`[Iteration] Generating variation ${i + 1}/3 with Gemini`);
+        console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
+
+        const geminiImages = await generateProductAd({
+          prompt: geminiPrompt,
+          productRenderUrl: productRender.url,
+          aspectRatio: "1:1",
+          resolution: "2K",
+          variationCount: 1,
+        });
+
+        geminiResults.push({
+          url: geminiImages[0].url,
+          s3Key: geminiImages[0].s3Key,
           headline: v.headline || `VARIATION ${i + 1}`,
           subheadline: v.subheadline || null,
-          background: {
-            type: "flux" as const,
-            title: v.backgroundNote || `Variation ${i + 1} Background`,
-            prompt: bgPrompt,
-          },
+          angle: v.angle || null,
+          backgroundNote: v.backgroundNote || null,
         });
       }
     } else {
-      // Fallback: 3 Flux Pro generated backgrounds
+      // Fallback: 3 generic variations
+      const fallbackPrompts = [
+        "Create a high-end product ad for this ONEST Health supplement. Dramatic warm crimson red accent lighting with energetic mood. Premium fitness aesthetic with subtle smoke particles. The product should be the hero element.",
+        "Create a high-end product ad for this ONEST Health supplement. Cool electric blue accent lighting with mysterious mood. Bold energetic background with geometric light rays. The product should be the hero element.",
+        "Create a high-end product ad for this ONEST Health supplement. Warm amber spotlight with premium luxury aesthetic. Minimalist dark background with clean composition. The product should be the hero element.",
+      ];
+
       for (let i = 0; i < 3; i++) {
-        selections.images.push({
+        console.log(`[Iteration] Generating fallback variation ${i + 1}/3 with Gemini`);
+        
+        const geminiImages = await generateProductAd({
+          prompt: fallbackPrompts[i],
+          productRenderUrl: productRender.url,
+          aspectRatio: "1:1",
+          resolution: "2K",
+          variationCount: 1,
+        });
+
+        geminiResults.push({
+          url: geminiImages[0].url,
+          s3Key: geminiImages[0].s3Key,
           headline: `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: null,
-          background: {
-            type: "flux" as const,
-            title: ["Dark Energy", "Electric Blue", "Minimal Premium"][i],
-            prompt: [
-              "Premium dark background for health supplement ad. Deep charcoal with dramatic crimson red accent lighting. Subtle smoke particles, energetic mood. No text, no product, no logos, no people.",
-              "Bold energetic background for supplement ad. Deep navy with electric blue accent lighting from below. Geometric light rays, cool-toned. No text, no product, no logos, no people.",
-              "Minimalist premium dark background for supplement ad. Matte black with soft warm spotlight from above. Clean, refined, luxury aesthetic. No text, no product, no logos, no people.",
-            ][i],
-          },
+          angle: null,
+          backgroundNote: null,
         });
       }
     }
 
-    const results = await withTimeout(
-      generateStaticAdVariations(
-        analysis,
-        sourceUrl,
-        product,
-        "ONEST Health",
-        selections
-      ),
-      STEP_TIMEOUT,
-      "Stage 3: Image Generation"
-    );
+    const results = geminiResults;
 
     await db.updatePipelineRun(runId, {
       iterationVariations: results,

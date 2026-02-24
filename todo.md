@@ -603,3 +603,25 @@ All three fixes implemented and tested:
 - [ ] Export formats: 4:5 and 9:16 only (no 1:1)
 - [ ] Volume handling: 5-200 variants per batch
 - [ ] Guardrails: preserve structure, no compliance changes, no auto-push
+
+## ROUND 24 — UGC UPLOAD BUG + LOVABLE RESEARCH
+
+- [x] BUG: UGC upload fails with 46MB video — Express body size limit was 50MB
+- [x] FIX: Increased Express body size limit to 500MB for video uploads
+- [ ] TEST: Upload 46MB video file and verify successful response
+- [ ] RESEARCH: Investigate Lovable app (onest-creative-studio.lovable.app) to understand Google Gemini image generation
+- [ ] RESEARCH: Check if Lovable uses Google Gemini 3 Flash for image generation
+- [ ] INTEGRATE: Add Google Gemini image generation to Iterate Winners pipeline
+- [ ] COMPARE: Test Gemini output vs current Flux Pro output quality
+
+## ROUND 22 — GEMINI 3 PRO IMAGE INTEGRATION
+
+- [x] Configure Google AI API key (AIzaSyC94Qr3xLfuTlqmCC9umoBguDCAqs8c4oM)
+- [x] Validate Google AI API key with test request
+- [x] Create server/services/geminiImage.ts service
+- [x] Implement generateProductAd() function with product render compositing
+- [x] Add Gemini image generation to Iterate Winners pipeline (replace Flux Pro + Bannerbear)
+- [x] Write tests for Gemini service (5 tests passing)
+- [ ] Test Gemini image generation with ONEST product renders end-to-end
+- [ ] Update IterationResults.tsx UI if needed (current UI should work as-is)
+- [ ] Save checkpoint after successful integration
