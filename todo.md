@@ -785,3 +785,31 @@ All three fixes implemented and tested:
 - [ ] Test with populated Headline Bank (should use proven winners)
 - [ ] Test all 4 aspect ratios
 - [ ] Save checkpoint
+
+## UGC Pipeline Progression Bug (Round 27C)
+
+### Issue: Pipeline stops at upload status page
+- [ ] Investigate why pipeline doesn't auto-progress after upload completes
+- [ ] Check if backend is triggering variant generation automatically
+- [ ] Check if there's a missing "Generate Variants" button or action
+- [ ] Verify UGC pipeline flow: upload → transcription → variant generation
+- [ ] Fix progression logic to automatically move to next stage
+- [ ] Test end-to-end flow with uploaded video
+
+## CRITICAL UI BUGS (Round 27D)
+
+### UGC Pipeline Stuck at Upload Page
+- [x] Investigate why pipeline doesn't auto-progress after upload
+- [x] Check if there's a missing "Generate Variants" button
+- [x] Verify backend is triggering variant generation
+- [x] Add proper navigation/progression after upload completes
+- [ ] Test end-to-end UGC upload flow
+
+### Iterate Winners Results Page - Legacy UI Still Showing
+- [x] Remove "Preserve These Elements" section from Stage 2
+- [x] Remove hardcoded 3 variations (V1, V2, V3) display
+- [x] Show selected variation types from user input
+- [x] Show variation count from user input
+- [x] Show aspect ratio from user input
+- [x] Update brief approval section to reflect new system
+- [ ] Test Results page with new variation matrix data

@@ -186,18 +186,36 @@ export function IterationResults({ run }: { run: any }) {
                 </div>
               )}
 
-              {briefData.preserveElements && (
-                <div className="bg-[#01040A] rounded-lg p-3 border border-white/5">
-                  <span className="text-xs text-gray-500 block mb-2">Preserve These Elements</span>
-                  <div className="flex flex-wrap gap-2">
-                    {briefData.preserveElements.map((el: string, i: number) => (
-                      <span key={i} className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-full border border-emerald-500/20">
-                        {el}
-                      </span>
-                    ))}
-                  </div>
+              {/* Variation Matrix Configuration */}
+              <div className="bg-[#01040A] rounded-lg p-3 border border-white/5">
+                <span className="text-xs text-gray-500 block mb-2">Variation Matrix Configuration</span>
+                <div className="grid grid-cols-3 gap-4">
+                  {run.variationTypes && (
+                    <div>
+                      <span className="text-xs text-gray-400">Variation Types</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(typeof run.variationTypes === 'string' ? JSON.parse(run.variationTypes) : run.variationTypes).map((type: string, i: number) => (
+                          <span key={i} className="text-xs bg-[#0347ED]/10 text-[#0347ED] px-2 py-1 rounded border border-[#0347ED]/20">
+                            {type.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {run.variationCount && (
+                    <div>
+                      <span className="text-xs text-gray-400">Variation Count</span>
+                      <div className="text-white font-semibold mt-1">{run.variationCount} variations</div>
+                    </div>
+                  )}
+                  {run.aspectRatio && (
+                    <div>
+                      <span className="text-xs text-gray-400">Aspect Ratio</span>
+                      <div className="text-white font-semibold mt-1">{run.aspectRatio}</div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {briefData.variations.map((v: any, i: number) => (

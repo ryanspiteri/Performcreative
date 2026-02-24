@@ -885,10 +885,40 @@ Return JSON in this exact format:
             product: input.product,
             audienceTag: input.audienceTag,
             desiredOutputVolume: input.desiredOutputVolume,
-            status: "uploaded",
+            status: "transcribing",
           });
           
           console.log(`[UGC Upload] Database record created: ID ${id}`);
+          
+          // Automatically start extraction in background
+          (async () => {
+            try {
+              const { extractStructureBlueprint } = await import("./services/ugcClone");
+              const { transcribeAudio } = await import("./_core/voiceTranscription");
+              
+              console.log(`[UGC Upload] Starting transcription for upload ${id}`);
+              const transcriptResult = await transcribeAudio({ audioUrl: url });
+              if (!('text' in transcriptResult)) {
+                throw new Error("Transcription failed");
+              }
+              
+              console.log(`[UGC Upload] Transcription complete, extracting structure`);
+              const blueprint = await extractStructureBlueprint(transcriptResult.text, input.product);
+              await db.updateUgcUpload(id, {
+                status: "structure_extracted",
+                transcript: transcriptResult.text,
+                structureBlueprint: blueprint,
+              });
+              console.log(`[UGC Upload] Structure extraction complete for upload ${id}`);
+            } catch (error: any) {
+              console.error(`[UGC Upload] Extraction failed for upload ${id}:`, error);
+              await db.updateUgcUpload(id, {
+                status: "error",
+                errorMessage: error.message,
+              });
+            }
+          })();
+          
           return { id, url };
         } catch (error: any) {
           console.error(`[UGC Upload] Error:`, error);
