@@ -898,3 +898,35 @@ All three fixes implemented and tested:
 - [x] Remove imageCompositing import (ImageSelections, generateStaticAdVariations)
 - [x] Clean up unused ImageSelections object
 - [x] Verify TypeScript compiles without errors
+
+## UGC AUTO-PROGRESSION BUG (Round 30)
+
+### Issue: Upload completes but stays at "uploaded" status
+- [x] Check server logs for errors during background transcription
+- [x] Verify upload endpoint is calling startExtraction in background
+- [x] Check database status field for upload #30003 - status is "uploaded"
+- [x] Found bug: multipart endpoint in server/_core/index.ts has NO auto-trigger logic
+- [x] Add background task trigger to multipart upload endpoint
+- [x] Fix import paths (voiceTranscription, ugcClone)
+- [x] Add error handling for transcription response
+- [x] TypeScript errors resolved
+- [ ] Test end-to-end upload flow
+
+## NAVIGATION REORGANISATION (Round 30)
+
+### Move UGC Clone Engine to PIPELINE section
+- [x] Update AppLayout.tsx navigation config
+- [x] Move UGC Clone Engine from ASSETS to PIPELINE (position 3)
+- [x] Verify routing still works
+
+### Move Headline Bank to ASSETS section
+- [x] Update AppLayout.tsx navigation config
+- [x] Move Headline Bank from PIPELINE to ASSETS (position 4)
+- [x] Verify routing still works
+
+### Audit and Remove Unused Pages
+- [x] Check if Template Tester is being used anywhere - only in nav/routes
+- [x] Check if Backgrounds page is being used anywhere - still in use, keeping it
+- [x] Remove Template Tester from navigation
+- [x] Remove Template Tester route from App.tsx
+- [x] Keep Backgrounds in ASSETS section (user wants it)

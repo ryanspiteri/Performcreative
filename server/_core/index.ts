@@ -84,6 +84,44 @@ async function startServer() {
       });
       
       console.log(`[UGC Upload] Database record created: ID ${id}`);
+      
+      // Trigger background transcription and structure extraction
+      (async () => {
+        try {
+          console.log(`[UGC Upload] Starting background transcription for upload #${id}`);
+          await db.updateUgcUpload(id, { status: "transcribing" });
+          
+          // Import services dynamically to avoid circular dependencies
+          const { transcribeAudio } = await import("../_core/voiceTranscription");
+          const { extractStructureBlueprint } = await import("../services/ugcClone");
+          
+          // Transcribe audio
+          const transcription = await transcribeAudio({ audioUrl: url });
+          
+          if ('error' in transcription) {
+            throw new Error(`Transcription failed: ${transcription.error}`);
+          }
+          
+          console.log(`[UGC Upload] Transcription complete for upload #${id}`);
+          
+          // Extract structure
+          const blueprint = await extractStructureBlueprint(transcription.text, url);
+          console.log(`[UGC Upload] Structure extraction complete for upload #${id}`);
+          
+          // Update database with results
+          await db.updateUgcUpload(id, {
+            transcription: transcription.text,
+            blueprint: JSON.stringify(blueprint),
+            status: "structure_extracted",
+          });
+          
+          console.log(`[UGC Upload] Background processing complete for upload #${id}`);
+        } catch (error: any) {
+          console.error(`[UGC Upload] Background processing failed for upload #${id}:`, error);
+          await db.updateUgcUpload(id, { status: "error" });
+        }
+      })();
+      
       res.json({ id, url });
     } catch (error: any) {
       console.error(`[UGC Upload] Error:`, error);

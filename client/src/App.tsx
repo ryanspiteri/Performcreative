@@ -15,7 +15,7 @@ import ProductRenders from "./pages/ProductRenders";
 import ProductInfoHub from "./pages/ProductInfoHub";
 import Backgrounds from "./pages/Backgrounds";
 import IterateWinners from "./pages/IterateWinners";
-import TemplateTester from "./pages/TemplateTester";
+// Template Tester removed - not in use
 import UgcUpload from "./pages/UgcUpload";
 import UgcDashboard from "./pages/UgcDashboard";
 import HeadlineBank from "./pages/HeadlineBank";
@@ -32,7 +32,7 @@ function AuthenticatedRoutes() {
         <Route path="/renders" component={ProductRenders} />
         <Route path="/backgrounds" component={Backgrounds} />
         <Route path="/iterate" component={IterateWinners} />
-        <Route path="/template-tester" component={TemplateTester} />
+
         <Route path="/ugc" component={UgcUpload} />
         <Route path="/ugc/:id" component={UgcDashboard} />
         <Route path="/headlines" component={HeadlineBank} />

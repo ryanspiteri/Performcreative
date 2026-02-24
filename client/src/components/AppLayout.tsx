@@ -1,15 +1,17 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, TestTube2, Video, BookText } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText } from "lucide-react";
 
 const navItems = [
+  // PIPELINE (0-2)
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
-  { icon: BookText, label: "Headline Bank", path: "/headlines" },
   { icon: Video, label: "UGC Clone Engine", path: "/ugc" },
+  // ASSETS (3-5)
+  { icon: BookText, label: "Headline Bank", path: "/headlines" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
-  { icon: TestTube2, label: "Template Tester", path: "/template-tester" },
+  // SYSTEM (6-7)
   { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -63,7 +65,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Assets</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(3, 7).map((item) => {
+          {navItems.slice(3, 6).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -87,7 +89,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.slice(7).map((item) => {
+          {navItems.slice(6).map((item) => {
             const isActive = location === item.path;
             return (
               <button
