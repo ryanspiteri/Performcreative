@@ -594,8 +594,8 @@ All three fixes implemented and tested:
 - [x] Build UGC Dashboard showing all variants with archetype/tone/energy badges (client/src/pages/UgcDashboard.tsx)
 - [x] Build Approval UI with "Approve All" / "Approve Selected" functionality (bulk actions in UgcDashboard)
 - [ ] Add optional Arcads integration module (actor generation)
-- [ ] Add optional Runway integration module (assembly/captions)
-- [ ] Add ElevenLabs voice generation integration
+- [x] Add Runway API key and integration module (assembly/captions) — validated with API test
+- [x] Add ElevenLabs API key and voice generation integration — validated with API test
 - [x] Add ClickUp push for approved variants (Video Ad Board, Review status) — pushUgcVariantsToClickup in clickup.ts
 - [x] Add sidebar nav item: "UGC Clone Engine" (AppLayout.tsx + App.tsx routing)
 - [x] Write tests for UGC pipeline (server/ugc.test.ts) — 2 tests for structure extraction and variant generation
