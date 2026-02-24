@@ -707,7 +707,8 @@ All three fixes implemented and tested:
 - [ ] Integrate variation type logic with backend
 - [ ] Update iteration pipeline to respect variation types
 - [ ] Integrate Headline Bank with iteration brief generation
-- [ ] Add preview/select UI for variation briefser → micro-variations)
+- [ ] Add preview/select UI for variation briefs
+- [x] Save checkpoint (version e7998112)
 
 ### Hard Constraints + Aspect Ratio
 - [ ] Add lock/unlock toggles for preserve elements
@@ -726,4 +727,61 @@ All three fixes implemented and tested:
 - [ ] Pull headlines from bank ranked by rating
 - [ ] Show headline source in UI
 - [ ] Test end-to-end workflow
+- [ ] Save checkpoint
+
+## CRITICAL BUG FIXES (Round 27)
+
+### UGC Upload Bug (25MB videos fail)
+- [x] Diagnose root cause: base64 encoding through tRPC exceeds payload limits
+- [x] Replace base64 upload with direct S3 upload using storagePut
+- [x] Update UgcUpload.tsx to upload file to S3 first, then pass S3 URL to tRPC
+- [ ] Test with 25MB video upload
+- [ ] Verify upload completes successfully
+
+### Variation Type Multi-Select
+- [x] Change variation type selector from single-select to multi-select
+- [x] Replace card selection UI with checkbox grid
+- [x] Allow selecting multiple variation types simultaneously (e.g., headline_only + background_only + layout_only)
+- [x] Update backend to handle array of variation types
+- [x] Generate variations across all selected types in single batch
+- [ ] Test multi-type selection workflow
+
+## ITERATE WINNERS PIPELINE REBUILD (Round 27B)
+
+### Complete Pipeline Audit - Remove ALL Legacy Code
+- [ ] Audit iterationPipeline.ts - identify all Flux Pro + Bannerbear references
+- [ ] Audit Results page Stage 2 display - remove "Preserve These Elements" UI
+- [ ] Audit brief generation - ensure it uses variation types, not preserve tags
+- [ ] Audit image generation - confirm using Gemini 3 Pro, not Flux Pro
+- [ ] Audit variation count - ensure respecting 1-50 slider, not hardcoded 3
+
+### Backend Integration (iterationPipeline.ts)
+- [x] Accept variationTypes array from frontend
+- [x] Accept variationCount (1-50) from frontend
+- [x] Accept aspectRatio from frontend
+- [ ] Integrate Headline Bank - pull headlines by rating instead of AI generation
+- [x] Generate N variations based on variationCount, not hardcoded 3
+- [x] Respect variation types - only vary selected elements
+- [x] Pass aspectRatio to Gemini API for correct dimensions
+
+### Results Page UI Updates
+- [ ] Remove "Preserve These Elements" section from Stage 2
+- [ ] Show selected variation types instead
+- [ ] Show variation count (e.g., "Generating 15 variations")
+- [ ] Show aspect ratio selection
+- [ ] Update variation gallery to support 1-50 images, not just 3
+- [ ] Add pagination/grid for large variation counts
+
+### Headline Bank Integration
+- [ ] Query headlines table ordered by rating DESC
+- [ ] Use top-rated headlines for variations instead of AI-generated
+- [ ] Show headline source in UI ("From Headline Bank" vs "AI Generated")
+- [ ] Fall back to AI generation if bank is empty
+
+### Testing
+- [ ] Test with 1 variation type, 5 variations
+- [ ] Test with 3 variation types, 20 variations
+- [ ] Test with empty Headline Bank (should fall back to AI)
+- [ ] Test with populated Headline Bank (should use proven winners)
+- [ ] Test all 4 aspect ratios
 - [ ] Save checkpoint

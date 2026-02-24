@@ -33,6 +33,10 @@ export interface IterationPipelineInput {
   priority: string;
   sourceImageUrl: string; // URL of the user's uploaded winning ad
   sourceImageName?: string;
+  creativityLevel?: "SAFE" | "BOLD" | "WILD";
+  variationTypes?: string[];
+  variationCount?: number;
+  aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
 }
 
 /**
@@ -96,7 +100,13 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     const analysis = run?.iterationAnalysis || "";
 
     const brief = await withTimeout(
-      generateIterationBrief(analysis, input.product, productInfoContext),
+      generateIterationBrief(
+        analysis,
+        input.product,
+        productInfoContext,
+        input.variationCount || 3,
+        input.variationTypes
+      ),
       STEP_TIMEOUT,
       "Stage 2: Iteration Brief"
     );
@@ -153,16 +163,21 @@ export async function runIterationStage3(runId: number, run: any) {
 
     console.log(`[Iteration] Using product render: ${productRender.url}`);
 
-    // Generate 3 variations using Gemini
+    // Generate N variations using Gemini (respects variationCount from input)
     const geminiResults: any[] = [];
     
-    // Get creativity level from run config (default to BOLD for best balance)
+    // Get creativity level and aspect ratio from run config
     const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
+    const aspectRatio = run.aspectRatio || "1:1";
+    const variationCount = briefData?.variations?.length || 3;
+    
     console.log(`[Iteration] Using creativity level: ${creativityLevel}`);
+    console.log(`[Iteration] Aspect ratio: ${aspectRatio}`);
+    console.log(`[Iteration] Generating ${variationCount} variations`);
 
     if (briefData?.variations && Array.isArray(briefData.variations)) {
       // Generate each variation with enhanced prompt system
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < variationCount; i++) {
         const v = briefData.variations[i] || {};
         
         // Build enhanced Gemini prompt using headline analysis
@@ -175,13 +190,13 @@ export async function runIterationStage3(runId: number, run: any) {
           targetAudience: briefData.targetAudience || undefined,
         });
 
-        console.log(`[Iteration] Generating variation ${i + 1}/3 with Gemini`);
+        console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Gemini`);
         console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
 
         const geminiImages = await generateProductAd({
           prompt: geminiPrompt,
           productRenderUrl: productRender.url,
-          aspectRatio: "1:1",
+          aspectRatio: aspectRatio as any,
           resolution: "2K",
           variationCount: 1,
         });
@@ -562,7 +577,9 @@ Provide your analysis in these sections:
 async function generateIterationBrief(
   analysis: string,
   product: string,
-  productInfo: string
+  productInfo: string,
+  variationCount: number = 3,
+  variationTypes?: string[]
 ): Promise<string> {
   const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
   const claudeClient = axios.create({
@@ -579,29 +596,37 @@ async function generateIterationBrief(
 
 Return ONLY valid JSON. No markdown, no code blocks, no explanation.`;
 
+  const variationTypeInstructions = variationTypes && variationTypes.length > 0
+    ? `- VARIATION TYPES TO TEST: ${variationTypes.join(", ")}
+- For each type, ONLY vary that element (e.g., if headline_only, keep everything else identical)
+- If multiple types selected, distribute variations across all types`
+    : "- KEEP the same visual layout, colour scheme, typography style, and product placement\n- TEST a different headline, subheadline, and copy angle";
+
   const userPrompt = `Based on this analysis of an ONEST Health winning ad for ${product}:
 
 ${analysis}
 
 ${productInfo ? `\nProduct Information:\n${productInfo}` : ""}
 
-Generate an iteration brief with 3 NEW variations. Each variation should:
-- KEEP the same visual layout, colour scheme, typography style, and product placement
-- TEST a different headline, subheadline, and copy angle
+Generate an iteration brief with ${variationCount} NEW variations. Each variation should:
+${variationTypeInstructions}
 - Be scroll-stopping and benefit-driven
 - Be specific to ${product}'s actual benefits and ingredients
 
-The 3 variations should test DIFFERENT angles:
-1. A benefit-driven angle (what the product does for you)
-2. A curiosity/intrigue angle (make them want to learn more)
-3. A social proof/authority angle (why they should trust this product)
+The ${variationCount} variations should test DIFFERENT angles across these categories:
+- Benefit-driven (what the product does for you)
+- Curiosity/intrigue (make them want to learn more)
+- Social proof/authority (why they should trust this product)
+- Problem-solution (pain point to solution)
+- Transformation (before to after)
+- Urgency/scarcity (limited time, don't miss out)
 
-Return JSON in this exact format:
+Return JSON in this exact format with ${variationCount} variations:
 {
   "originalHeadline": "exact headline from the winning ad",
   "originalAngle": "description of the original ad's angle",
   "preserveElements": ["list of visual elements to keep exactly the same"],
-  "sharedBenefits": "short benefit text that appears on all 3 variations (e.g. 'Clinically Dosed | No Fillers | Australian Made')",
+  "sharedBenefits": "short benefit text that appears on all variations (e.g. 'Clinically Dosed | No Fillers | Australian Made')",
   "variations": [
     {
       "number": 1,
@@ -611,25 +636,8 @@ Return JSON in this exact format:
       "subheadline": "Supporting subheadline (5-12 words)",
       "benefitCallouts": ["Benefit 1", "Benefit 2", "Benefit 3"],
       "backgroundNote": "Any specific background adjustments for this variation"
-    },
-    {
-      "number": 2,
-      "angle": "Curiosity/Intrigue",
-      "angleDescription": "...",
-      "headline": "...",
-      "subheadline": "...",
-      "benefitCallouts": ["...", "...", "..."],
-      "backgroundNote": "..."
-    },
-    {
-      "number": 3,
-      "angle": "Social Proof/Authority",
-      "angleDescription": "...",
-      "headline": "...",
-      "subheadline": "...",
-      "benefitCallouts": ["...", "...", "..."],
-      "backgroundNote": "..."
     }
+    ... (generate ${variationCount} total variations)
   ]
 }`;
 

@@ -26,7 +26,7 @@ export default function IterateWinners() {
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
-  const [variationType, setVariationType] = useState<VariationType>("full_remix");
+  const [variationTypes, setVariationTypes] = useState<VariationType[]>(["full_remix"]);
   const [variationCount, setVariationCount] = useState(3);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
 
@@ -103,6 +103,9 @@ export default function IterateWinners() {
         sourceImageUrl: uploadedImageUrl,
         sourceImageName: uploadedImageName,
         creativityLevel,
+        variationTypes,
+        variationCount,
+        aspectRatio,
       });
       setRunId(result.runId);
       setLocation(`/results/${result.runId}`);
@@ -186,11 +189,17 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* Variation Type Selector */}
+          {/* Variation Type Selector - Multi-Select */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Variation Type</label>
+            <label className="block text-sm font-medium text-gray-300 mb-3">
+              Variation Types (Select Multiple)
+              <span className="ml-2 text-xs text-gray-500">— {variationTypes.length} selected</span>
+            </label>
             <div className="bg-white/5 rounded-xl p-6">
-              <div className="grid grid-cols-2 gap-2 mb-4">
+              <p className="text-xs text-gray-400 mb-4">
+                Select multiple types to generate diverse variations in one batch. Each type tests a different variable.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
                 {([
                   { value: 'headline_only', label: 'Headline Only', desc: 'Test different headlines, keep everything else' },
                   { value: 'background_only', label: 'Background Only', desc: 'Test background colours/styles' },
@@ -199,20 +208,46 @@ export default function IterateWinners() {
                   { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors' },
                   { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models' },
                   { value: 'full_remix', label: 'Full Remix', desc: 'Change everything (current behaviour)' },
-                ] as const).map((type) => (
-                  <button
-                    key={type.value}
-                    onClick={() => setVariationType(type.value)}
-                    className={`px-4 py-3 rounded-lg text-left transition-all ${
-                      variationType === type.value
-                        ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
-                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <div className="font-medium text-sm mb-1">{type.label}</div>
-                    <div className="text-xs opacity-70">{type.desc}</div>
-                  </button>
-                ))}
+                ] as const).map((type) => {
+                  const isSelected = variationTypes.includes(type.value);
+                  return (
+                    <button
+                      key={type.value}
+                      onClick={() => {
+                        if (isSelected) {
+                          // Deselect - but keep at least one selected
+                          if (variationTypes.length > 1) {
+                            setVariationTypes(variationTypes.filter(t => t !== type.value));
+                          } else {
+                            toast.error("At least one variation type must be selected");
+                          }
+                        } else {
+                          // Select
+                          setVariationTypes([...variationTypes, type.value]);
+                        }
+                      }}
+                      className={`px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 ${
+                        isSelected
+                          ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                          : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        isSelected ? "border-white bg-white" : "border-gray-500"
+                      }`}>
+                        {isSelected && (
+                          <svg className="w-3 h-3 text-[#FF3838]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm mb-1">{type.label}</div>
+                        <div className="text-xs opacity-70">{type.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

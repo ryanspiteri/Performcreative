@@ -19,16 +19,7 @@ export default function UgcUpload() {
   const [desiredOutputVolume, setDesiredOutputVolume] = useState<number>(10);
   const [uploading, setUploading] = useState(false);
 
-  const uploadMutation = trpc.ugc.upload.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Video uploaded successfully! Upload ID: ${data.id}`);
-      setLocation(`/ugc/${data.id}`);
-    },
-    onError: (error) => {
-      toast.error(`Upload failed: ${error.message}`);
-      setUploading(false);
-    },
-  });
+  // No longer using tRPC mutation - using direct multipart upload instead
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,20 +53,32 @@ export default function UgcUpload() {
     setUploading(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Data = (reader.result as string).split(",")[1];
-        await uploadMutation.mutateAsync({
-          fileName: videoFile.name,
-          base64Data,
-          mimeType: videoFile.type,
-          product,
-          audienceTag: audienceTag || undefined,
-          desiredOutputVolume,
-        });
-      };
-      reader.readAsDataURL(videoFile);
+      // Use FormData for multipart upload (bypasses tRPC)
+      const formData = new FormData();
+      formData.append("video", videoFile);
+      formData.append("product", product);
+      if (audienceTag) formData.append("audienceTag", audienceTag);
+      formData.append("desiredOutputVolume", desiredOutputVolume.toString());
+      
+      console.log(`[UGC Upload] Uploading ${videoFile.name} (${(videoFile.size / 1024 / 1024).toFixed(2)}MB)...`);
+      
+      const response = await fetch("/api/ugc/upload", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Upload failed");
+      }
+      
+      const data = await response.json();
+      console.log(`[UGC Upload] Success! Upload ID: ${data.id}`);
+      
+      toast.success(`Video uploaded successfully! Upload ID: ${data.id}`);
+      setLocation(`/ugc/${data.id}`);
     } catch (error: any) {
+      console.error(`[UGC Upload] Error:`, error);
       toast.error(`Upload failed: ${error.message}`);
       setUploading(false);
     }
