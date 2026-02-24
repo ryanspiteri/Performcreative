@@ -1,10 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, TestTube2, Video } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, TestTube2, Video, BookText } from "lucide-react";
 
 const navItems = [
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
+  { icon: BookText, label: "Headline Bank", path: "/headlines" },
   { icon: Video, label: "UGC Clone Engine", path: "/ugc" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },

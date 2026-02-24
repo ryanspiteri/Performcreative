@@ -14,6 +14,8 @@ const PRODUCTS = [
 ];
 
 type CreativityLevel = "SAFE" | "BOLD" | "WILD";
+type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
+type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
 
 export default function IterateWinners() {
   const [, setLocation] = useLocation();
@@ -24,6 +26,9 @@ export default function IterateWinners() {
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
+  const [variationType, setVariationType] = useState<VariationType>("full_remix");
+  const [variationCount, setVariationCount] = useState(3);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
@@ -177,6 +182,102 @@ export default function IterateWinners() {
                 {creativityLevel === 'WILD' && (
                   <p><span className="font-medium text-red-400">WILD:</span> Controversial/polarising concepts, highest risk, moonshot potential. May alienate some but deeply resonate with others.</p>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Variation Type Selector */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Variation Type</label>
+            <div className="bg-white/5 rounded-xl p-6">
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {([
+                  { value: 'headline_only', label: 'Headline Only', desc: 'Test different headlines, keep everything else' },
+                  { value: 'background_only', label: 'Background Only', desc: 'Test background colours/styles' },
+                  { value: 'layout_only', label: 'Layout Only', desc: 'Test product placement/text position' },
+                  { value: 'benefit_callouts_only', label: 'Benefits Only', desc: 'Test different benefit copy' },
+                  { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors' },
+                  { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models' },
+                  { value: 'full_remix', label: 'Full Remix', desc: 'Change everything (current behaviour)' },
+                ] as const).map((type) => (
+                  <button
+                    key={type.value}
+                    onClick={() => setVariationType(type.value)}
+                    className={`px-4 py-3 rounded-lg text-left transition-all ${
+                      variationType === type.value
+                        ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <div className="font-medium text-sm mb-1">{type.label}</div>
+                    <div className="text-xs opacity-70">{type.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Variation Count Slider */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Number of Variations: {variationCount}</label>
+            <div className="bg-white/5 rounded-xl p-6">
+              <input
+                type="range"
+                min="1"
+                max="50"
+                value={variationCount}
+                onChange={(e) => setVariationCount(parseInt(e.target.value))}
+                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, #FF3838 0%, #FF3838 ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) 100%)`
+                }}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-2">
+                <span>1 variation</span>
+                <span>50 variations</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Aspect Ratio Selector */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Aspect Ratio</label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['1:1', '4:5', '9:16', '16:9'] as AspectRatio[]).map((ratio) => (
+                <button
+                  key={ratio}
+                  onClick={() => setAspectRatio(ratio)}
+                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                    aspectRatio === ratio
+                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  {ratio}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Cost Calculator */}
+          <div className="mb-8">
+            <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-400 mb-1">Estimated Cost</div>
+                  <div className="text-2xl font-bold text-white">
+                    ${(variationCount * (aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.13 : 0.24)).toFixed(2)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {variationCount} × ${aspectRatio === '1:1' || aspectRatio === '4:5' ? '0.13' : '0.24'} per image (Gemini 3 Pro {aspectRatio === '1:1' || aspectRatio === '4:5' ? '2K' : '4K'})
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-400 mb-2">Resolution</div>
+                  <div className="px-3 py-1 rounded-lg bg-white/5 text-sm font-medium text-gray-300">
+                    {aspectRatio === '1:1' || aspectRatio === '4:5' ? '2048×2048' : '4096×4096'}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

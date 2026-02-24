@@ -58,8 +58,14 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Increase timeout for large file uploads (default is 2 minutes)
+  server.timeout = 10 * 60 * 1000; // 10 minutes
+  server.keepAliveTimeout = 65000; // 65 seconds (slightly higher than typical proxy timeout)
+  server.headersTimeout = 66000; // 66 seconds (must be higher than keepAliveTimeout)
+
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    console.log(`Server timeout: ${server.timeout}ms`);
     // Start auto-sync from Foreplay
     startAutoSync();
   });

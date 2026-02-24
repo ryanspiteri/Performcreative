@@ -207,3 +207,29 @@ export const ugcVariants = mysqlTable("ugc_variants", {
 
 export type UgcVariant = typeof ugcVariants.$inferSelect;
 export type InsertUgcVariant = typeof ugcVariants.$inferInsert;
+
+/**
+ * Headline Bank — Stores proven winning headlines from Motion analytics or manual entry.
+ * Used by Iterate Winners pipeline to generate variations based on YOUR data, not AI guesses.
+ */
+export const headlineBank = mysqlTable("headline_bank", {
+  id: int("id").autoincrement().primaryKey(),
+  headline: text("headline").notNull(),
+  subheadline: text("subheadline"),
+  rating: int("rating").notNull().default(3), // 1-5 stars
+  roas: varchar("roas", { length: 16 }),
+  spend: varchar("spend", { length: 32 }),
+  weeksActive: int("weeksActive"),
+  source: varchar("source", { length: 32 }).notNull().default("manual"), // manual, motion_api, ai_generated
+  motionTaskId: varchar("motionTaskId", { length: 256 }),
+  motionCreativeName: text("motionCreativeName"),
+  product: varchar("product", { length: 64 }),
+  angle: varchar("angle", { length: 64 }),
+  format: varchar("format", { length: 32 }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type HeadlineBank = typeof headlineBank.$inferSelect;
+export type InsertHeadlineBank = typeof headlineBank.$inferInsert;

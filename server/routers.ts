@@ -1064,6 +1064,67 @@ Return JSON in this exact format:
         return { success: true, count: results.length };
       }),
   }),
+
+  headlineBank: router({
+    // List all headlines
+    list: publicProcedure.query(async () => {
+      return db.listHeadlines();
+    }),
+
+    // Get single headline
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const headline = await db.getHeadline(input.id);
+        if (!headline) throw new TRPCError({ code: "NOT_FOUND", message: "Headline not found" });
+        return headline;
+      }),
+
+    // Create headline
+    create: publicProcedure
+      .input(z.object({
+        headline: z.string(),
+        subheadline: z.string().optional(),
+        rating: z.number().min(1).max(5).default(3),
+        roas: z.string().optional(),
+        spend: z.string().optional(),
+        weeksActive: z.number().optional(),
+        product: z.string().optional(),
+        angle: z.string().optional(),
+        format: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return db.createHeadline(input);
+      }),
+
+    // Update headline
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        headline: z.string(),
+        subheadline: z.string().optional(),
+        rating: z.number().min(1).max(5),
+        roas: z.string().optional(),
+        spend: z.string().optional(),
+        weeksActive: z.number().optional(),
+        product: z.string().optional(),
+        angle: z.string().optional(),
+        format: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return db.updateHeadline(input.id, input);
+      }),
+
+    // Delete headline
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteHeadline(input.id);
+        return { success: true };
+      }),
+  }),
 });
 
 // ============================================================

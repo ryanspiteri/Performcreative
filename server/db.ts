@@ -1,6 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -371,4 +371,45 @@ export async function updateUgcVariant(id: number, data: any): Promise<void> {
   if (!db) throw new Error("Database not available");
   
   await db.update(ugcVariants).set(data).where(eq(ugcVariants.id, id));
+}
+
+// ============================================================
+// HEADLINE BANK
+// ============================================================
+
+export async function listHeadlines(): Promise<any[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(headlineBank).orderBy(desc(headlineBank.rating), desc(headlineBank.createdAt));
+}
+
+export async function getHeadline(id: number): Promise<any | null> {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const results = await db.select().from(headlineBank).where(eq(headlineBank.id, id)).limit(1);
+  return results[0] || null;
+}
+
+export async function createHeadline(data: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(headlineBank).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function updateHeadline(id: number, data: any): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(headlineBank).set(data).where(eq(headlineBank.id, id));
+}
+
+export async function deleteHeadline(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(headlineBank).where(eq(headlineBank.id, id));
 }

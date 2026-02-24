@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `headline_bank` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`headline` text NOT NULL,\n\t`subheadline` text,\n\t`rating` int NOT NULL DEFAULT 3,\n\t`roas` varchar(16),\n\t`spend` varchar(32),\n\t`weeksActive` int,\n\t`source` varchar(32) NOT NULL DEFAULT 'manual',\n\t`motionTaskId` varchar(256),\n\t`motionCreativeName` text,\n\t`product` varchar(64),\n\t`angle` varchar(64),\n\t`format` varchar(32),\n\t`notes` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `headline_bank_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute CREATE TABLE `headline_bank` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`headline` text NOT NULL,\n\t`subheadline` text,\n\t`rating` int NOT NULL DEFAULT 3,\n\t`roas` varchar(16),\n\t`spend` varchar(32),\n\t`weeksActive` int,\n\t`source` varchar(32) NOT NULL DEFAULT 'manual',\n\t`motionTaskId` varchar(256),\n\t`motionCreativeName` text,\n\t`product` varchar(64),\n\t`angle` varchar(64),\n\t`format` varchar(32),\n\t`notes` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `headline_bank_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1720
+}

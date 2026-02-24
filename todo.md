@@ -648,3 +648,82 @@ All three fixes implemented and tested:
 - [x] Add detailed error logging to UGC upload mutation
 - [x] Add file size validation and better error handling
 - [ ] Test 25MB video upload with new logging
+
+## ROUND 25 — ITERATE WINNERS REBUILD (OPTION B)
+
+### Phase 1: Variation Matrix Builder
+- [ ] Create variation type selector UI (Headline Only / Background Only / Layout Only / Benefit Callouts Only / Full Remix)
+- [ ] Add variation count slider (1-50 variations)
+- [ ] Update brief generation to support different variation types
+- [ ] Modify `generateIterationBrief()` to accept variationType and count parameters
+
+### Phase 2: Headline Bank System
+- [ ] Create `headline_bank` database table schema
+- [ ] Add headline extraction from existing winning ads
+- [ ] Build headline submission UI (manual entry)
+- [ ] Add headline rating/voting system (1-5 stars)
+- [ ] Modify brief generation to pull 50% from Headline Bank, 30% AI-generated, 20% user-submitted
+
+### Phase 3: Hard Constraints & Aspect Ratio
+- [ ] Make "Preserve These Elements" checkboxes (lock/unlock each element)
+- [ ] Pass locked elements to Gemini as HARD CONSTRAINTS in prompt
+- [ ] Add aspect ratio selector (1:1, 4:5, 9:16, 16:9)
+- [ ] Update Gemini prompt to enforce aspect ratio
+
+### Phase 4: Cost Calculator & Preview/Select UI
+- [ ] Add Gemini cost calculator (2K: $0.13, 4K: $0.24 per image)
+- [ ] Show estimated cost BEFORE generation
+- [ ] Display variation briefs in preview grid
+- [ ] Add "Select variations to generate" checkboxes
+- [ ] Add "Edit brief" button for each variation
+- [ ] Only generate selected variations (not all)
+
+### Phase 5: Testing & Deployment
+- [ ] Test variation type selector with real winning ad
+- [ ] Test headline bank integration
+- [ ] Test hard constraints enforcement
+- [ ] Test aspect ratio selector
+- [ ] Test cost calculator accuracy
+- [ ] Save checkpoint after successful testing
+
+## ROUND 26 — HEADLINE BANK + VARIATION MATRIX BUILDER
+
+### Headline Bank (Manual Entry)
+- [x] Create headline_bank database table schema
+- [x] Add headline entry form UI
+- [x] Add rating system (1-5 stars)
+- [x] Add source tracking (manual/motion/ai)
+- [x] Add performance metadata (ROAS, spend, weeks active)
+- [x] Generate database migration
+- [x] Apply migration
+- [x] Add tRPC endpoints (list, get, create, update, delete)
+- [x] Add database functions in db.ts
+- [x] Add Headline Bank to sidebar navigation
+### Variation Matrix Builder
+- [x] Add variation type selector (7 types: headline_only, background_only, layout_only, benefit_callouts_only, props_only, talent_swap, full_remix)
+- [x] Add variation count slider (1-50)
+- [x] Add aspect ratio selector (1:1, 4:5, 9:16, 16:9)
+- [x] Add cost calculator (real-time cost estimation)
+- [ ] Integrate variation type logic with backend
+- [ ] Update iteration pipeline to respect variation types
+- [ ] Integrate Headline Bank with iteration brief generation
+- [ ] Add preview/select UI for variation briefser → micro-variations)
+
+### Hard Constraints + Aspect Ratio
+- [ ] Add lock/unlock toggles for preserve elements
+- [ ] Enforce locked elements in Gemini prompts
+- [ ] Add aspect ratio selector (1:1, 4:5, 9:16, 16:9)
+- [ ] Update Gemini service to support aspect ratios
+
+### Cost Calculator
+- [ ] Add real-time cost estimation (2K: $0.13, 4K: $0.24 per image)
+- [ ] Show total cost before generation
+- [ ] Add preview/select UI for variation briefs
+- [ ] Add edit brief functionality
+
+### Integration
+- [ ] Integrate Headline Bank with Iterate Winners pipeline
+- [ ] Pull headlines from bank ranked by rating
+- [ ] Show headline source in UI
+- [ ] Test end-to-end workflow
+- [ ] Save checkpoint
