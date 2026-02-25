@@ -1,0 +1,18 @@
+{
+  "query": "SELECT id, product, status, transcript, structureBlueprint, createdAt FROM ugc_uploads WHERE id = 30004;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, product, status, transcript, structureBlueprint, createdAt FROM ugc_uploads WHERE id = 30004;",
+  "rows": [
+    {
+      "id": "30004",
+      "product": "Hyperburn",
+      "status": "transcribing",
+      "transcript": "NULL",
+      "structureBlueprint": "NULL",
+      "createdAt": "2026-02-25 00:03:53"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tproduct\tstatus\ttranscript\tstructureBlueprint\tcreatedAt\n30004\tHyperburn\ttranscribing\tNULL\tNULL\t2026-02-25 00:03:53\n",
+  "stderr": "",
+  "execution_time_ms": 1633
+}

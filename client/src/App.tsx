@@ -34,6 +34,7 @@ function AuthenticatedRoutes() {
         <Route path="/iterate" component={IterateWinners} />
 
         <Route path="/ugc" component={UgcUpload} />
+        <Route path="/ugc-clone" component={UgcUpload} />
         <Route path="/ugc/:id" component={UgcDashboard} />
         <Route path="/headlines" component={HeadlineBank} />
         <Route path="/product-info" component={ProductInfoHub} />

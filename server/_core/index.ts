@@ -110,15 +110,15 @@ async function startServer() {
           
           // Update database with results
           await db.updateUgcUpload(id, {
-            transcription: transcription.text,
-            blueprint: JSON.stringify(blueprint),
+            transcript: transcription.text,
+            structureBlueprint: blueprint,
             status: "structure_extracted",
           });
           
           console.log(`[UGC Upload] Background processing complete for upload #${id}`);
         } catch (error: any) {
           console.error(`[UGC Upload] Background processing failed for upload #${id}:`, error);
-          await db.updateUgcUpload(id, { status: "error" });
+          await db.updateUgcUpload(id, { status: "failed" });
         }
       })();
       

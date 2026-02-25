@@ -930,3 +930,29 @@ All three fixes implemented and tested:
 - [x] Remove Template Tester from navigation
 - [x] Remove Template Tester route from App.tsx
 - [x] Keep Backgrounds in ASSETS section (user wants it)
+
+## UGC TRANSCRIPTION FAILURE (Round 31 - CRITICAL)
+
+### Issue: Status stuck at "transcribing", not progressing to "structure_extracted"
+- [ ] Check server logs for transcription errors
+- [ ] Verify transcribeAudio() function is being called correctly
+- [ ] Check if transcription API is failing
+- [ ] Verify extractStructureBlueprint() is being called after transcription
+- [ ] Check database updates during transcription process
+- [ ] Fix any errors in background task execution
+- [ ] Test complete flow: uploaded → transcribing → structure_extracted → blueprint display
+
+### Document Complete UGC Workflow
+- [ ] Document expected user flow from upload to final variants
+- [ ] Document all status transitions and what triggers them
+- [ ] Document what should be displayed at each stage
+- [ ] Document error handling for each stage
+- [ ] Verify understanding matches user's requirements
+
+### Testing Requirements
+- [ ] Test with real 25MB video upload
+- [ ] Verify automatic status progression
+- [ ] Verify blueprint display with hook/body/CTA
+- [ ] Verify variant generation with correct count
+- [ ] Verify all UI updates correctly
+- [ ] NO CHECKPOINT until all tests pass

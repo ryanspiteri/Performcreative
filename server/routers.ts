@@ -944,15 +944,32 @@ Return JSON in this exact format:
           try {
             const { extractStructureBlueprint } = await import("./services/ugcClone");
             const { transcribeAudio } = await import("./_core/voiceTranscription");
+            const { compressAudioForWhisper } = await import("./services/audioCompression");
+            const { unlink } = await import("fs/promises");
             
-            // Step 1: Transcribe
-            const transcriptResult = await transcribeAudio({ audioUrl: upload.videoUrl });
+            // Step 1: Compress audio to meet Whisper's 16MB limit
+            console.log(`[UGC] Starting audio compression for upload #${input.uploadId}, videoUrl: ${upload.videoUrl}`);
+            const compressedAudioPath = await compressAudioForWhisper(upload.videoUrl);
+            console.log(`[UGC] Audio compressed to: ${compressedAudioPath}`);
+            
+            // Step 2: Transcribe compressed audio
+            console.log(`[UGC] Starting transcription...`);
+            const transcriptResult = await transcribeAudio({ audioPath: compressedAudioPath });
+            
+            // Clean up compressed audio file
+            await unlink(compressedAudioPath).catch(() => {});
+            
+            console.log(`[UGC] Transcription result:`, transcriptResult);
             if (!('text' in transcriptResult)) {
-              throw new Error("Transcription failed");
+              const errorMsg = 'error' in transcriptResult ? transcriptResult.error : 'Unknown error';
+              throw new Error(`Transcription failed: ${errorMsg}`);
             }
+            console.log(`[UGC] Transcription successful, length: ${transcriptResult.text.length} chars`);
             
-            // Step 2: Extract structure
+            // Step 3: Extract structure
+            console.log(`[UGC] Starting structure extraction for upload #${input.uploadId}`);
             const blueprint = await extractStructureBlueprint(transcriptResult.text, upload.product);
+            console.log(`[UGC] Structure extraction complete, blueprint:`, JSON.stringify(blueprint).substring(0, 200));
             await db.updateUgcUpload(input.uploadId, {
               status: "structure_extracted",
               transcript: transcriptResult.text,
@@ -961,7 +978,7 @@ Return JSON in this exact format:
           } catch (error: any) {
             console.error("[UGC] Extraction failed:", error);
             await db.updateUgcUpload(input.uploadId, {
-              status: "error",
+              status: "failed",
               errorMessage: error.message,
             });
           }
@@ -1024,7 +1041,7 @@ Return JSON in this exact format:
           } catch (error: any) {
             console.error("[UGC] Variant generation failed:", error);
             await db.updateUgcUpload(input.uploadId, {
-              status: "error",
+              status: "failed",
               errorMessage: error.message,
             });
           }

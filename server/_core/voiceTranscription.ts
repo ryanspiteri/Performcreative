@@ -28,7 +28,8 @@
 import { ENV } from "./env";
 
 export type TranscribeOptions = {
-  audioUrl: string; // URL to the audio file (e.g., S3 URL)
+  audioUrl?: string; // URL to the audio file (e.g., S3 URL)
+  audioPath?: string; // Local file path (alternative to audioUrl)
   language?: string; // Optional: specify language code (e.g., "en", "es", "zh")
   prompt?: string; // Optional: custom prompt for the transcription
 };
@@ -90,21 +91,44 @@ export async function transcribeAudio(
       };
     }
 
-    // Step 2: Download audio from URL
+    // Step 2: Get audio buffer (from URL or local file)
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
-      const response = await fetch(options.audioUrl);
-      if (!response.ok) {
+      if (options.audioPath) {
+        // Read from local file
+        const { readFile } = await import('fs/promises');
+        audioBuffer = await readFile(options.audioPath);
+        // Detect mime type from extension
+        const ext = options.audioPath.split('.').pop()?.toLowerCase();
+        const extToMime: Record<string, string> = {
+          'mp3': 'audio/mpeg',
+          'wav': 'audio/wav',
+          'webm': 'audio/webm',
+          'ogg': 'audio/ogg',
+          'm4a': 'audio/mp4',
+        };
+        mimeType = extToMime[ext || ''] || 'audio/mpeg';
+      } else if (options.audioUrl) {
+        // Download from URL
+        const response = await fetch(options.audioUrl);
+        if (!response.ok) {
+          return {
+            error: "Failed to download audio file",
+            code: "INVALID_FORMAT",
+            details: `HTTP ${response.status}: ${response.statusText}`
+          };
+        }
+        
+        audioBuffer = Buffer.from(await response.arrayBuffer());
+        mimeType = response.headers.get('content-type') || 'audio/mpeg';
+      } else {
         return {
-          error: "Failed to download audio file",
+          error: "Either audioUrl or audioPath must be provided",
           code: "INVALID_FORMAT",
-          details: `HTTP ${response.status}: ${response.statusText}`
+          details: "No audio source specified"
         };
       }
-      
-      audioBuffer = Buffer.from(await response.arrayBuffer());
-      mimeType = response.headers.get('content-type') || 'audio/mpeg';
       
       // Check file size (16MB limit)
       const sizeMB = audioBuffer.length / (1024 * 1024);

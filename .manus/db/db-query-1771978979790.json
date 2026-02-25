@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, status, errorMessage, LENGTH(transcript) as transcript_length, LENGTH(structureBlueprint) as blueprint_length FROM ugc_uploads WHERE id = 30004;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, status, errorMessage, LENGTH(transcript) as transcript_length, LENGTH(structureBlueprint) as blueprint_length FROM ugc_uploads WHERE id = 30004;",
+  "rows": [
+    {
+      "id": "30004",
+      "status": "structure_extracted",
+      "errorMessage": "NULL",
+      "transcript_length": "502",
+      "blueprint_length": "1658"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\terrorMessage\ttranscript_length\tblueprint_length\n30004\tstructure_extracted\tNULL\t502\t1658\n",
+  "stderr": "",
+  "execution_time_ms": 1574
+}
