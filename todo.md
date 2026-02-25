@@ -1092,3 +1092,11 @@ All three fixes implemented and tested:
 - [x] Filter out thought images and extract only final image
 - [x] Verify API request format matches documentation exactly
 - [ ] Test with real iteration pipeline
+
+
+## NANO BANANA PRO PRODUCTION LIMITS
+- [x] Update variation count dropdown to 3-10 max (remove 20, 50, 100 options)
+- [x] Add prominent warning banner: "⏱️ Nano Banana Pro takes 2-3 minutes per image. Generating 10 variations will take approximately 20-30 minutes."
+- [x] Update cost calculator to show estimated time: "Estimated time: X-Y minutes"
+- [ ] Add progress indicator showing "Generating variation 3 of 10..." during generation
+- [ ] Test complete flow with 5 variations to validate timing

@@ -27,7 +27,7 @@ export default function IterateWinners() {
   const [runId, setRunId] = useState<number | null>(null);
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
   const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Changed to single selection
-  const [variationCount, setVariationCount] = useState(10);
+  const [variationCount, setVariationCount] = useState(5);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [showConfirmation, setShowConfirmation] = useState(false);
 
@@ -167,10 +167,11 @@ export default function IterateWinners() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-gray-400 mb-2">Resolution</div>
-                  <div className="px-3 py-2 rounded-lg bg-white/5 text-sm font-medium text-gray-300">
-                    {aspectRatio === '1:1' ? '2048×2048' : aspectRatio === '4:5' ? '2048×2560' : aspectRatio === '9:16' ? '2304×4096' : '4096×2304'}
+                  <div className="text-xs text-gray-400 mb-2">Estimated Time</div>
+                  <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm font-semibold text-amber-300">
+                    {variationCount * 2}-{variationCount * 3} min
                   </div>
+                  <div className="text-xs text-gray-500 mt-2">Resolution: {aspectRatio === '1:1' ? '2048×2048' : aspectRatio === '4:5' ? '2048×2560' : aspectRatio === '9:16' ? '2304×4096' : '4096×2304'}</div>
                 </div>
               </div>
             </div>
@@ -287,20 +288,28 @@ export default function IterateWinners() {
               Number of Variations
             </label>
             <div className="bg-white/5 rounded-xl p-6">
+              {/* Warning Banner for Nano Banana Pro */}
+              <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-300 mb-1">⏱️ Premium Quality = Longer Wait</p>
+                  <p className="text-xs text-amber-200/90 leading-relaxed">
+                    Nano Banana Pro generates production-quality images with perfect text rendering, but takes <strong>2-3 minutes per image</strong>. Generating {variationCount} variation{variationCount === 1 ? '' : 's'} will take approximately <strong>{variationCount * 2}-{variationCount * 3} minutes</strong>. Please be patient whilst we create your high-quality variations.
+                  </p>
+                </div>
+              </div>
+              
               <select
                 value={variationCount}
                 onChange={(e) => setVariationCount(parseInt(e.target.value))}
                 className="w-full px-4 py-3 rounded-lg bg-white/10 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:border-transparent transition-all"
               >
-                <option value={3}>3 variations</option>
-                <option value={5}>5 variations</option>
-                <option value={10}>10 variations (Recommended)</option>
-                <option value={20}>20 variations</option>
-                <option value={50}>50 variations</option>
-                <option value={100}>100 variations</option>
+                <option value={3}>3 variations (~6-9 minutes)</option>
+                <option value={5}>5 variations (~10-15 minutes)</option>
+                <option value={10}>10 variations (~20-30 minutes)</option>
               </select>
               <p className="text-xs text-gray-400 mt-3">
-                More variations = more testing opportunities, but higher cost. Start with 10 for balanced testing.
+                Limited to 10 variations max due to Nano Banana Pro's generation time. Quality over quantity — each variation is production-ready.
               </p>
             </div>
           </div>
