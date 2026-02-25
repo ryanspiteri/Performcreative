@@ -118,14 +118,23 @@ export default function IterateWinners() {
     <div className="min-h-screen bg-[#01040A] p-6">
       {/* Header */}
       <div className="max-w-4xl mx-auto mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <RefreshCw className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <RefreshCw className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Iterate on Winners</h1>
+              <p className="text-gray-400 text-sm">Upload a winning ad and generate 3 new variations with different copy angles</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Iterate on Winners</h1>
-            <p className="text-gray-400 text-sm">Upload a winning ad and generate 3 new variations with different copy angles</p>
-          </div>
+          <button
+            onClick={() => setLocation("/iterate/generate-children")}
+            className="flex items-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generate Children
+          </button>
         </div>
       </div>
 

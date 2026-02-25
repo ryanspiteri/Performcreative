@@ -19,6 +19,7 @@ import IterateWinners from "./pages/IterateWinners";
 import UgcUpload from "./pages/UgcUpload";
 import UgcDashboard from "./pages/UgcDashboard";
 import HeadlineBank from "./pages/HeadlineBank";
+import ParentSelection from "./pages/ParentSelection";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -32,6 +33,7 @@ function AuthenticatedRoutes() {
         <Route path="/renders" component={ProductRenders} />
         <Route path="/backgrounds" component={Backgrounds} />
         <Route path="/iterate" component={IterateWinners} />
+        <Route path="/iterate/generate-children" component={ParentSelection} />
 
         <Route path="/ugc" component={UgcUpload} />
         <Route path="/ugc-clone" component={UgcUpload} />

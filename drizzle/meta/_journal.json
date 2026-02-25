@@ -99,6 +99,13 @@
       "when": 1771970346917,
       "tag": "0013_rapid_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1771992904688,
+      "tag": "0014_cuddly_tarot",
+      "breakpoints": true
     }
   ]
 }

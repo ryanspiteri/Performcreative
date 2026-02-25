@@ -956,3 +956,46 @@ All three fixes implemented and tested:
 - [ ] Verify variant generation with correct count
 - [ ] Verify all UI updates correctly
 - [ ] NO CHECKPOINT until all tests pass
+
+
+## UGC TALENT VARIATION ENGINE — COMPLETE REBUILD
+
+- [ ] Remove incorrect UGC script variation system (transcription-based)
+- [ ] Create new database schema: ugc_masters table (videoUrl, scriptText, campaignName, adName, desiredVariations)
+- [ ] Create new database schema: ugc_variations table (masterId, talentId, gender, ageRange, videoUrl_4_5, videoUrl_9_16, status, metadata)
+- [ ] Research Runway ML API capabilities for face generation and performance cloning
+- [ ] Build upload interface: video + script text + campaign name + ad name + number of variations
+- [ ] Implement video analysis to extract timing and performance markers
+- [ ] Implement AI face generation (realistic UGC creator per variation)
+- [ ] Implement voice cloning with ElevenLabs (match timing, emotion, gender)
+- [ ] Implement lip sync technology (Runway or alternative)
+- [ ] Implement video assembly pipeline (face + voice + lip sync)
+- [ ] Implement multi-aspect-ratio export (4:5 and 9:16 independently framed)
+- [ ] Build preview generation workflow
+- [ ] Build approval interface (user selects which variations to approve)
+- [ ] Implement ClickUp integration for approved variations with metadata
+- [ ] Add talent metadata tracking (Talent_ID, Gender, Age_Range, Visual_Archetype, Voice_Profile)
+- [ ] Implement naming convention: [Campaign]_[AdName]_[TalentID]_[Gender]_[AspectRatio]_[Version]
+- [ ] Add automatic quality checks (lip sync, timing drift, face stability)
+- [ ] Test complete workflow: upload → generate → preview → approve → export → ClickUp
+
+
+## ITERATE WINNERS - IMAGE GENERATION FIXES
+- [ ] Rebuild Gemini prompt for guaranteed headline rendering
+- [ ] Add product integration instructions (surface placement, lighting, shadows)
+- [ ] Add environmental interaction rules (wrap around, depth layering)
+- [ ] Test new prompts with sample generations
+- [ ] Validate text presence and integration quality
+- [ ] Implement fallback if needed
+
+
+## HIERARCHICAL VARIATION SYSTEM (50+ Creatives)
+- [x] Database: Add parentRunId, variationLayer (parent/child), variationType to iteration_runs
+- [x] Prompt: Build child variation prompt system (color_shift, lighting, typography, product_angle, background_intensity, layout, effect_intensity)
+- [x] Backend: Implement generateChildVariations(parentRunId, variationTypes, childCount)
+- [x] Backend: Update iteration pipeline to support layer selection
+- [x] UI: Layer 1 grid with checkboxes for parent selection
+- [x] UI: "Generate Children" button with count selector (5 or 10)
+- [x] UI: Individual parent child generation on results page
+- [x] UI: Batch parent selection page at /iterate/generate-children
+- [ ] Test: Complete flow from control → 10 parents → select 3 → 30 children = 40 total

@@ -1,8 +1,8 @@
 /**
- * Gemini Prompt Builder - Enhanced prompt system for $100m-scale winning creatives
+ * Gemini Prompt Builder - Reference-Based Image Generation
  * 
- * Analyses headlines and builds scroll-stopping, audience-specific prompts
- * that create visual metaphors and emotional hooks.
+ * Builds prompts that instruct Gemini to study and replicate the style
+ * of a reference image (competitor ad) whilst using new copy.
  */
 
 export type CreativityLevel = "SAFE" | "BOLD" | "WILD";
@@ -11,212 +11,199 @@ export interface HeadlineAnalysis {
   corePromise: string; // What transformation/benefit is claimed?
   emotionalHook: string; // What feeling should this trigger?
   targetAvatar: string; // Who is this speaking to specifically?
-  visualConcepts: string[]; // 2-3 creative directions
-  patternInterrupt: string; // What unexpected element would make this stand out?
+  visualConceptDescription: string; // Description of visual metaphor to use
 }
 
 export interface PromptBuildOptions {
   headline: string;
   subheadline?: string;
   productName: string;
-  backgroundStyle?: string;
-  creativityLevel: CreativityLevel;
-  targetAudience?: string; // e.g., "35-year-old busy mum", "25-year-old gym bro"
+  backgroundStyleDescription: string; // From user's selected background concept
+  aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
+  targetAudience?: string;
 }
 
 /**
  * Analyse headline to extract creative strategy
  */
 export function analyseHeadline(headline: string, productName: string, targetAudience?: string): HeadlineAnalysis {
-  // Extract key concepts from headline
   const lowerHeadline = headline.toLowerCase();
   
   // Detect transformation claims
   const hasTransformation = /transform|change|from.*to|become|turn into|shape|sculpt/i.test(headline);
-  const hasTime = /week|day|month|hour|24\/7|fast|quick|rapid/i.test(headline);
+  const hasTime = /week|day|month|hour|24\/7|fast|quick|rapid|around the clock/i.test(headline);
   const hasSupport = /help|support|boost|enhance|improve/i.test(headline);
   const hasPower = /power|energy|burn|blast|ignite|unleash|unlock/i.test(headline);
-  const hasSpeed = /fast|quick|rapid|instant|immediate/i.test(headline);
+  const hasCravings = /cravings|hunger|appetite|temptation/i.test(headline);
+  const hasEnd = /end|stop|eliminate|destroy|crush/i.test(headline);
   
   // Build analysis
   const analysis: HeadlineAnalysis = {
     corePromise: "",
     emotionalHook: "",
     targetAvatar: targetAudience || "fitness enthusiast aged 25-45",
-    visualConcepts: [],
-    patternInterrupt: "",
+    visualConceptDescription: "",
   };
   
-  // Determine core promise and emotional hook
+  // Determine core promise, emotional hook, and visual concept
   if (hasTransformation) {
     analysis.corePromise = "Body transformation, visible physical change";
     analysis.emotionalHook = "Hope and belief - 'this could actually work for me'";
-    analysis.visualConcepts = [
-      "Use visual metaphors showing before→after progression (e.g., apple→hourglass, caterpillar→butterfly)",
-      "Show transformation through contrasting elements or split composition",
-      "Use time-lapse visual effects suggesting change over time",
-    ];
-    analysis.patternInterrupt = "Literal object metaphors are unexpected in supplement ads - they're bold, clear, and memorable";
+    analysis.visualConceptDescription = "Use visual metaphors showing transformation or progression (e.g., contrasting elements, before→after symbolism, metamorphosis imagery). The visual should suggest change and evolution.";
+  } else if ((hasPower || lowerHeadline.includes("burn")) && hasTime) {
+    analysis.corePromise = "24/7 metabolic power, continuous fat burning";
+    analysis.emotionalHook = "Excitement and empowerment - 'This works even while I sleep'";
+    analysis.visualConceptDescription = "Use fire or energy effects combined with time-based visual elements (clocks, 24/7 symbolism). Fire represents thermogenic burning, time elements represent continuous effect. Create dramatic, powerful imagery suggesting relentless fat-burning power.";
   } else if (hasPower || lowerHeadline.includes("burn")) {
     analysis.corePromise = "Metabolic power, fat burning, energy boost";
     analysis.emotionalHook = "Excitement and empowerment - 'I'll feel unstoppable'";
-    analysis.visualConcepts = [
-      "Use fire, lightning, or explosive energy effects around the product",
-      "Show the product as a power source with radiating energy",
-      "Include visual metaphors of ignition or combustion (match lighting, engine starting)",
-    ];
-    analysis.patternInterrupt = "Dramatic energy effects make the product feel powerful and immediate";
+    analysis.visualConceptDescription = "Use fire, lightning, or explosive energy effects. The product should feel like a power source with dramatic lighting and atmospheric effects. Create bold, energetic imagery suggesting immediate metabolic ignition.";
+  } else if ((hasCravings || lowerHeadline.includes("craving")) && hasEnd) {
+    analysis.corePromise = "Appetite suppression, craving elimination, hunger control";
+    analysis.emotionalHook = "Empowerment and relief - 'I can finally control my cravings'";
+    analysis.visualConceptDescription = "Use fire or destructive imagery to represent 'ending' or 'eliminating' cravings. Fire can symbolize burning away temptation. Create powerful, liberating imagery suggesting freedom from hunger and cravings.";
   } else if (hasSupport) {
     analysis.corePromise = "Support and assistance in achieving goals";
     analysis.emotionalHook = "Relief and confidence - 'I'm not alone in this'";
-    analysis.visualConcepts = [
-      "Use helping hand or support structure metaphors",
-      "Show the product as a foundation or pillar",
-      "Include visual elements suggesting partnership or teamwork",
-    ];
-    analysis.patternInterrupt = "Humanising the product as a supportive partner rather than just a supplement";
+    analysis.visualConceptDescription = "Use supportive visual elements or foundation imagery. The product should feel like a reliable partner. Create confident, reassuring imagery suggesting dependable support.";
   } else if (hasTime) {
     analysis.corePromise = "Fast results, time-efficient transformation";
     analysis.emotionalHook = "Urgency and FOMO - 'I can't wait to start'";
-    analysis.visualConcepts = [
-      "Include clock, hourglass, or calendar visual elements",
-      "Use motion blur or speed lines to suggest rapid change",
-      "Show compressed timeline visually (e.g., seasons changing quickly)",
-    ];
-    analysis.patternInterrupt = "Time-based visual metaphors create urgency and make claims feel concrete";
+    analysis.visualConceptDescription = "Include clock, hourglass, or time-based visual elements. Use motion or speed effects to suggest rapid change. Create urgent, dynamic imagery suggesting quick results.";
   } else {
     // Generic/fallback analysis
     analysis.corePromise = "Premium supplement for fitness and health goals";
     analysis.emotionalHook = "Aspiration and desire - 'I want to be my best self'";
-    analysis.visualConcepts = [
-      "Premium fitness environment with dramatic lighting",
-      "Product as the hero with subtle atmospheric effects",
-      "Clean, aspirational composition suggesting quality and results",
-    ];
-    analysis.patternInterrupt = "Premium aesthetic stands out from generic supplement ads";
+    analysis.visualConceptDescription = "Create premium, aspirational imagery with dramatic lighting and atmospheric effects. The product should feel high-quality and results-driven.";
   }
   
   return analysis;
 }
 
 /**
- * Build creativity-level specific guidelines
+ * Build reference-based Gemini prompt
+ * 
+ * This prompt instructs Gemini to study the reference image and create
+ * a new version that matches its style whilst using new copy.
  */
-function getCreativityGuidelines(level: CreativityLevel): string {
-  switch (level) {
-    case "SAFE":
-      return `
-CREATIVITY LEVEL: SAFE (Proven Patterns)
-- Use established visual metaphors that have worked before
-- Maintain premium but familiar aesthetic
-- Focus on clear, obvious visual storytelling
-- Avoid controversial or polarising elements
-- Keep composition clean and professional
-- Lower risk, proven to convert`;
-      
-    case "BOLD":
-      return `
-CREATIVITY LEVEL: BOLD (Unexpected Concepts)
-- Use surprising visual metaphors that haven't been seen before
-- Push creative boundaries whilst maintaining brand integrity
-- Create "wait, what?" moments that demand attention
-- Balance unexpected elements with premium feel
-- Higher upside potential, moderate risk`;
-      
-    case "WILD":
-      return `
-CREATIVITY LEVEL: WILD (Moonshot Potential)
-- Use controversial, polarising, or provocative visual concepts
-- Break all conventional supplement ad rules
-- Create strong reactions (love it or hate it)
-- Prioritise scroll-stopping power over universal appeal
-- Highest upside potential, highest risk
-- May alienate some viewers but deeply resonate with others`;
-  }
-}
-
-/**
- * Build enhanced Gemini prompt for scroll-stopping product ads
- */
-export function buildEnhancedPrompt(options: PromptBuildOptions): string {
+export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
   const {
     headline,
     subheadline,
     productName,
-    backgroundStyle,
-    creativityLevel,
+    backgroundStyleDescription,
+    aspectRatio = "1:1",
     targetAudience,
   } = options;
   
-  // Analyse headline
+  // Analyse headline to extract creative strategy
   const analysis = analyseHeadline(headline, productName, targetAudience);
   
-  // Build prompt sections
-  const sections: string[] = [];
-  
-  // Opening hook
-  sections.push(
-    `Create a SCROLL-STOPPING product advertisement for this ${productName} supplement that would make a ${analysis.targetAvatar} immediately stop scrolling and feel compelled to learn more.`
-  );
-  
-  // Headline and emotional goal
-  sections.push(
-    `\nHEADLINE: "${headline}"${subheadline ? `\nSUBHEADLINE: "${subheadline}"` : ""}\nEMOTIONAL GOAL: Make them feel ${analysis.emotionalHook}`
-  );
-  
-  // Visual strategy
-  sections.push(
-    `\nVISUAL STRATEGY:\nThe image must achieve THREE goals simultaneously:\n1. STOP THE SCROLL - Create immediate visual intrigue or pattern interrupt\n2. SUPPORT THE CLAIM - Visually prove/demonstrate the headline promise: ${analysis.corePromise}\n3. TRIGGER DESIRE - Make them imagine themselves achieving the result`
-  );
-  
-  // Hero concept (select best visual concept based on creativity level)
-  const conceptIndex = creativityLevel === "SAFE" ? 0 : creativityLevel === "BOLD" ? 1 : 2;
-  const selectedConcept = analysis.visualConcepts[conceptIndex] || analysis.visualConcepts[0];
-  
-  sections.push(
-    `\nHERO CONCEPT:\n${selectedConcept}`
-  );
-  
-  // Composition rules
-  sections.push(
-    `\nCOMPOSITION:\n- ${productName} bottle as the hero element, prominently displayed in centre\n- Use visual metaphors, props, or environmental storytelling to amplify emotional impact\n- Create depth and visual interest - avoid flat, boring product shots\n- Include unexpected elements that create curiosity\n- ${backgroundStyle || "Dramatic lighting with premium aesthetic"}\n- The product label and branding must be preserved exactly as shown`
-  );
-  
-  // Creativity level guidelines
-  sections.push(getCreativityGuidelines(creativityLevel));
-  
-  // Winning creative principles
-  sections.push(
-    `\nWINNING CREATIVE PRINCIPLES:\n✓ Bold, confident, slightly unexpected\n✓ Creates immediate curiosity or emotional response\n✓ Feels premium but relatable (not sterile/clinical)\n✓ Has a clear "hero moment" - one dominant visual idea\n✓ Would stand out in a feed of generic supplement ads\n✓ Makes the benefit feel tangible and achievable`
-  );
-  
-  // Avoid list
-  sections.push(
-    `\nAVOID:\n✗ Generic stock photo aesthetics\n✗ Cluttered compositions with too many elements\n✗ Cliché fitness imagery (dumbbells, tape measures, scales) unless specifically relevant\n✗ Anything that looks "try-hard" or desperate\n✗ Sterile lab/medical vibes unless specifically needed`
-  );
-  
-  // Pattern interrupt
-  sections.push(
-    `\nPATTERN INTERRUPT:\n${analysis.patternInterrupt}`
-  );
-  
-  // Closing
-  sections.push(
-    `\nThe final image should make someone think "I've never seen a supplement ad like this before" whilst still feeling premium and trustworthy. No people in shot. Clean, professional composition that would make someone stop mid-scroll.`
-  );
-  
-  return sections.join("\n");
+  // Build prompt
+  const prompt = `You are creating a premium supplement advertisement image for paid social media advertising (Meta/TikTok).
+
+I am providing you with a REFERENCE IMAGE (the competitor ad). Study this reference carefully and replicate its:
+- Overall layout and composition
+- Text placement, size, and styling approach
+- Color palette and mood
+- Lighting style and direction
+- Product placement approach (floating, grounded, centered, offset, etc.)
+- Background style and depth
+- Visual effects and overlays
+- Typography hierarchy
+- Overall aesthetic and vibe
+
+Your goal is to create a NEW version of this ad for ${productName} that MATCHES the visual style of the reference whilst using the new copy below.
+
+=== NEW COPY FOR THIS VERSION ===
+Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
+
+Render the headline${subheadline ? ' and subheadline' : ''} in the SAME STYLE as the reference image:
+- Match the text placement from the reference (top, center, bottom, overlaying product, etc.)
+- Match the text size proportions from the reference
+- Match the typography style (bold/regular, uppercase/mixed case, font weight) from the reference
+- Match the text color and effects (stroke, shadow, glow, outline) from the reference
+- If the reference has text at the top, put it at the top
+- If the reference has text overlaying the product, do the same
+- Replicate whatever text approach the reference uses
+
+=== VISUAL CONCEPT ===
+${analysis.visualConceptDescription}
+
+This concept should create a visual metaphor that supports the headline claim: ${analysis.corePromise}
+
+The background and composition should trigger this emotional response: ${analysis.emotionalHook}
+
+=== BACKGROUND & ATMOSPHERE ===
+${backgroundStyleDescription}
+
+The background should:
+- Match the mood and energy level of the reference image
+- Use a similar approach to color, lighting, and depth
+- Create similar visual impact and drama
+- Include visual elements that support the headline concept described above
+
+=== PRODUCT INTEGRATION ===
+The ${productName} supplement bottle must be integrated into the scene in a similar way to how the reference image integrates its product.
+
+Study the reference image carefully:
+- Is the product floating or grounded? Match that approach.
+- How do background elements interact with the product (wrapping around, behind, in front)? Replicate that relationship.
+- What lighting effects are used on the product? Apply similar lighting to our product.
+- Are there shadows, reflections, or depth cues? Add similar effects.
+- How prominent is the product in the frame? Match that prominence level.
+- Where is the product positioned (center, left, right, offset)? Use similar positioning.
+
+CRITICAL: The product label and branding on the bottle must be preserved and clearly visible. Do not obscure or alter the product's existing design.
+
+=== QUALITY STANDARDS ===
+- Match the production quality of the reference image
+- If the reference looks premium and cinematic, make this premium and cinematic
+- If the reference is bold and dramatic, make this bold and dramatic
+- If the reference is clean and minimal, make this clean and minimal
+- Replicate the "vibe" and energy level of the reference whilst telling a new story with the new headline
+
+=== COMPOSITION ===
+- Aspect ratio: ${aspectRatio}
+- Follow the same compositional approach as the reference (centered, rule of thirds, symmetrical, asymmetrical, etc.)
+- Maintain similar visual hierarchy: study what the eye sees first in the reference and replicate that priority
+- Leave appropriate breathing room around text and product
+- Ensure nothing important is cut off at edges
+- Balance the frame similarly to how the reference balances its elements
+
+=== AVOID ===
+✗ Ignoring the reference image's style and creating something completely different
+✗ Making it look like a different campaign or brand aesthetic
+✗ Generic stock photo aesthetics (unless the reference uses that style)
+✗ Obscuring the product label or branding
+✗ Text that's illegible, poorly contrasted, or hard to read
+✗ Anything that looks "photoshopped" or artificially composited
+✗ Completely different color palette from the reference
+✗ Different mood or energy level from the reference
+
+=== FINAL GOAL ===
+Someone should look at your output and the reference image side-by-side and think:
+"These are clearly from the same campaign/brand/style - just with different headlines"
+
+The new version should feel like a natural variation of the reference, not a completely different creative direction. Match the reference's aesthetic whilst bringing the new headline to life visually.`;
+
+  return prompt;
 }
 
 /**
  * Example usage:
  * 
- * const prompt = buildEnhancedPrompt({
- *   headline: "From Apple Shaped to Hour Glass in Weeks",
- *   subheadline: "Transform your body composition",
+ * const prompt = buildReferenceBasedPrompt({
+ *   headline: "THIS IS THE END OF CRAVINGS",
+ *   subheadline: undefined,
  *   productName: "ONEST Health Hyperburn",
- *   backgroundStyle: "Warm amber lighting with soft background blur",
- *   creativityLevel: "BOLD",
- *   targetAudience: "35-year-old busy mum who's frustrated with midsection weight"
+ *   backgroundStyleDescription: "Dramatic fire and flames in warm orange, red, and yellow tones against dark background. Embers, sparks, and smoke particles creating atmospheric depth.",
+ *   aspectRatio: "1:1",
+ *   targetAudience: "35-year-old busy mum struggling with cravings"
  * });
+ * 
+ * Then call Gemini API with:
+ * - The prompt above
+ * - Reference image (competitor ad) as inline data
+ * - Product render as inline data
  */

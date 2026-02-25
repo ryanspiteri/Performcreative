@@ -1,0 +1,26 @@
+{
+  "query": "SELECT * FROM ugc_uploads WHERE id = 30006;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT * FROM ugc_uploads WHERE id = 30006;",
+  "rows": [
+    {
+      "id": "30006",
+      "fileName": "candice 2.mp4",
+      "fileKey": "ugc-uploads/hyperburn/candice 2.mp4-yqna0z4q",
+      "videoUrl": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/ugc-uploads/hyperburn/candice 2.mp4-yqna0z4q",
+      "product": "Hyperburn",
+      "audienceTag": "NULL",
+      "desiredOutputVolume": "1",
+      "status": "failed",
+      "transcript": "NULL",
+      "structureBlueprint": "NULL",
+      "blueprintApprovedAt": "NULL",
+      "errorMessage": "NULL",
+      "createdAt": "2026-02-25 00:45:43",
+      "updatedAt": "2026-02-25 00:46:11"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfileName\tfileKey\tvideoUrl\tproduct\taudienceTag\tdesiredOutputVolume\tstatus\ttranscript\tstructureBlueprint\tblueprintApprovedAt\terrorMessage\tcreatedAt\tupdatedAt\n30006\tcandice 2.mp4\tugc-uploads/hyperburn/candice 2.mp4-yqna0z4q\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/ugc-uploads/hyperburn/candice 2.mp4-yqna0z4q\tHyperburn\tNULL\t1\tfailed\tNULL\tNULL\tNULL\tNULL\t2026-02-25 00:45:43\t2026-02-25 00:46:11\n",
+  "stderr": "",
+  "execution_time_ms": 1524
+}

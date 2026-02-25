@@ -1,0 +1,163 @@
+/**
+ * Child Variation Generation Service
+ * 
+ * Generates tactical child variations from completed parent runs.
+ * Each child maintains the parent's strategic direction but varies tactical elements.
+ */
+
+import * as db from "../db";
+import { generateProductAd } from "./geminiImage";
+import { buildChildVariationPrompt, getDiverseVariationTypes, type ChildVariationType } from "./childVariationPrompts";
+
+/**
+ * Generate child variations for multiple parent runs
+ */
+export async function generateChildVariationsForParents(
+  parentRunIds: number[],
+  childCountPerParent: number
+): Promise<void> {
+  console.log(`[ChildGen] Starting child generation for ${parentRunIds.length} parents, ${childCountPerParent} children each`);
+
+  for (const parentRunId of parentRunIds) {
+    try {
+      await generateChildVariationsForSingleParent(parentRunId, childCountPerParent);
+    } catch (err: any) {
+      console.error(`[ChildGen] Failed to generate children for parent #${parentRunId}:`, err);
+      // Continue with other parents even if one fails
+    }
+  }
+
+  console.log(`[ChildGen] Completed child generation for all parents`);
+}
+
+/**
+ * Generate child variations for a single parent run
+ */
+async function generateChildVariationsForSingleParent(
+  parentRunId: number,
+  childCount: number
+): Promise<void> {
+  console.log(`[ChildGen] Generating ${childCount} children for parent #${parentRunId}`);
+
+  // Get parent run
+  const parent = await db.getPipelineRun(parentRunId);
+  if (!parent) {
+    throw new Error(`Parent run #${parentRunId} not found`);
+  }
+
+  // Extract parent data
+  const product = parent.product;
+  const aspectRatio = parent.aspectRatio || "1:1";
+  const iterationVariations = parent.iterationVariations as any;
+  
+  if (!iterationVariations || !Array.isArray(iterationVariations) || iterationVariations.length === 0) {
+    throw new Error(`Parent run #${parentRunId} has no variations to use as base`);
+  }
+
+  // Use the first variation as the parent image
+  const parentVariation = iterationVariations[0];
+  const parentImageUrl = parentVariation.url;
+  const headline = parentVariation.headline || `${product.toUpperCase()} VARIATION`;
+  const subheadline = parentVariation.subheadline || undefined;
+
+  // Get diverse variation types for children
+  const variationTypes = getDiverseVariationTypes(childCount);
+
+  // Get product render
+  const productRenders = await db.listProductRenders(product);
+  if (productRenders.length === 0) {
+    throw new Error(`No product renders found for ${product}`);
+  }
+  const productRender = productRenders[0];
+
+  // Generate each child
+  for (let i = 0; i < childCount; i++) {
+    const variationType = variationTypes[i];
+    
+    try {
+      console.log(`[ChildGen] Generating child ${i + 1}/${childCount} for parent #${parentRunId} (type: ${variationType})`);
+
+      // Create child run in database
+      const childRunId = await db.createPipelineRun({
+        pipelineType: "iteration",
+        status: "running",
+        product,
+        priority: parent.priority,
+        triggerSource: "child_generation",
+        iterationSourceUrl: parentImageUrl,
+        creativityLevel: parent.creativityLevel,
+        aspectRatio,
+        parentRunId: parentRunId,
+        variationLayer: "child",
+        variationType: variationType,
+        iterationStage: "generating_child",
+      });
+
+      // Build child variation prompt
+      const prompt = buildChildVariationPrompt({
+        parentImageUrl,
+        variationType,
+        productName: `ONEST Health ${product}`,
+        headline,
+        subheadline,
+        aspectRatio,
+      });
+
+      console.log(`[ChildGen] Prompt for child #${childRunId}: ${prompt.substring(0, 150)}...`);
+
+      // Generate image with Gemini
+      const geminiImages = await generateProductAd({
+        prompt,
+        productRenderUrl: productRender.url,
+        aspectRatio: aspectRatio as any,
+        resolution: "2K",
+        variationCount: 1,
+      });
+
+      const childImageUrl = geminiImages[0].url;
+      const childImageS3Key = geminiImages[0].s3Key;
+
+      // Update child run with result
+      await db.updatePipelineRun(childRunId, {
+        status: "completed",
+        iterationStage: "child_complete",
+        iterationVariations: [
+          {
+            url: childImageUrl,
+            s3Key: childImageS3Key,
+            headline,
+            subheadline,
+            variationType,
+            parentRunId,
+          }
+        ],
+        completedAt: new Date(),
+      });
+
+      console.log(`[ChildGen] Child #${childRunId} completed: ${childImageUrl}`);
+    } catch (err: any) {
+      console.error(`[ChildGen] Failed to generate child ${i + 1} for parent #${parentRunId}:`, err);
+      // Continue with next child even if one fails
+    }
+  }
+
+  console.log(`[ChildGen] Completed ${childCount} children for parent #${parentRunId}`);
+}
+
+/**
+ * Get all children for a parent run
+ */
+export async function getChildrenForParent(parentRunId: number) {
+  const allRuns = await db.listPipelineRuns();
+  return allRuns.filter(run => run.parentRunId === parentRunId && run.variationLayer === "child");
+}
+
+/**
+ * Example usage:
+ * 
+ * // Generate 5 children for parent runs #123, #124, #125
+ * await generateChildVariationsForParents([123, 124, 125], 5);
+ * 
+ * // Result: 15 total child variations (5 per parent)
+ * // Each child has a different tactical variation (color, lighting, typography, etc.)
+ */

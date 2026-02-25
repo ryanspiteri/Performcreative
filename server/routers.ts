@@ -712,6 +712,50 @@ Return JSON in this exact format:
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: err.message });
         }
       }),
+
+    // Generate child variations from selected parent runs
+    generateChildren: publicProcedure
+      .input(z.object({
+        parentRunIds: z.array(z.number()).min(1).max(10),
+        childCount: z.number().min(1).max(10).default(5),
+      }))
+      .mutation(async ({ input }) => {
+        // Validate all parent runs exist and are completed
+        const parents = await Promise.all(
+          input.parentRunIds.map(id => db.getPipelineRun(id))
+        );
+        
+        for (const parent of parents) {
+          if (!parent) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "One or more parent runs not found" });
+          }
+          if (parent.status !== "completed" || parent.iterationStage !== "stage_4_clickup_complete") {
+            throw new TRPCError({ 
+              code: "BAD_REQUEST", 
+              message: `Parent run #${parent.id} is not completed. Only completed parent variations can generate children.` 
+            });
+          }
+          if (parent.variationLayer === "child") {
+            throw new TRPCError({ 
+              code: "BAD_REQUEST", 
+              message: `Run #${parent.id} is already a child variation. Cannot generate children from children.` 
+            });
+          }
+        }
+
+        // Start child generation for all selected parents
+        const { generateChildVariationsForParents } = await import("./services/childVariationGeneration");
+        
+        generateChildVariationsForParents(input.parentRunIds, input.childCount).catch((err: any) => {
+          console.error("[Pipeline] Child generation failed:", err);
+        });
+
+        return { 
+          success: true, 
+          message: `Generating ${input.childCount} children for each of ${input.parentRunIds.length} parents (${input.parentRunIds.length * input.childCount} total)`,
+          totalChildren: input.parentRunIds.length * input.childCount
+        };
+      }),
   }),
 
   // ============================================================

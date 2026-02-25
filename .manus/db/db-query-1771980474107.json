@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, status, errorMessage, product, videoUrl FROM ugc_uploads WHERE id = 30006;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, status, errorMessage, product, videoUrl FROM ugc_uploads WHERE id = 30006;",
+  "rows": [
+    {
+      "id": "30006",
+      "status": "failed",
+      "errorMessage": "NULL",
+      "product": "Hyperburn",
+      "videoUrl": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/ugc-uploads/hyperburn/candice 2.mp4-yqna0z4q"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\terrorMessage\tproduct\tvideoUrl\n30006\tfailed\tNULL\tHyperburn\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/ugc-uploads/hyperburn/candice 2.mp4-yqna0z4q\n",
+  "stderr": "",
+  "execution_time_ms": 1616
+}

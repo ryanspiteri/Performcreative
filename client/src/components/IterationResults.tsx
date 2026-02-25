@@ -2,6 +2,7 @@ import { Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, Ext
 import { toast } from "sonner";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { ChildGenerationControls } from "./ChildGenerationControls";
 
 export function IterationResults({ run }: { run: any }) {
   const isRunning = run.status === "running" || run.status === "pending";
@@ -439,6 +440,20 @@ export function IterationResults({ run }: { run: any }) {
               );
             })}
           </div>
+
+          {/* Child Generation Section - Show after variations are complete */}
+          {(iterationStage === "completed" || iterationStage === "stage_4_clickup_complete") && run.variationLayer === "parent" && (
+            <div className="mt-6 border-t border-white/10 pt-4">
+              <h3 className="text-white font-medium mb-2 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#FF3838]" />
+                Generate Child Variations
+              </h3>
+              <p className="text-gray-400 text-xs mb-4">
+                Create 5-10 tactical variations of this parent (color shifts, lighting changes, typography tweaks, etc.) to expand your creative library.
+              </p>
+              <ChildGenerationControls parentRunId={run.id} />
+            </div>
+          )}
 
           {/* Variation Approval Gate */}
           {iterationStage === "stage_3b_variation_approval" && (

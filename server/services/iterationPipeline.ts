@@ -3,7 +3,7 @@ import { analyzeStaticAd } from "./claude";
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { createScriptTask } from "./clickup";
 import { generateProductAd } from "./geminiImage";
-import { buildEnhancedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
+import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import axios from "axios";
 import { ENV } from "../_core/env";
 
@@ -180,13 +180,13 @@ export async function runIterationStage3(runId: number, run: any) {
       for (let i = 0; i < variationCount; i++) {
         const v = briefData.variations[i] || {};
         
-        // Build enhanced Gemini prompt using headline analysis
-        const geminiPrompt = buildEnhancedPrompt({
+        // Build reference-based Gemini prompt
+        const geminiPrompt = buildReferenceBasedPrompt({
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: v.subheadline || undefined,
           productName: `ONEST Health ${product}`,
-          backgroundStyle: v.backgroundNote || undefined,
-          creativityLevel,
+          backgroundStyleDescription: v.backgroundNote || "Dramatic lighting with premium aesthetic",
+          aspectRatio: aspectRatio as any,
           targetAudience: briefData.targetAudience || undefined,
         });
 
@@ -227,11 +227,11 @@ export async function runIterationStage3(runId: number, run: any) {
       for (let i = 0; i < 3; i++) {
         console.log(`[Iteration] Generating fallback variation ${i + 1}/3 with Gemini`);
         
-        const fallbackPrompt = buildEnhancedPrompt({
+        const fallbackPrompt = buildReferenceBasedPrompt({
           headline: fallbackHeadlines[i],
           productName: `ONEST Health ${product}`,
-          backgroundStyle: fallbackBackgrounds[i],
-          creativityLevel,
+          backgroundStyleDescription: fallbackBackgrounds[i],
+          aspectRatio: aspectRatio as any,
         });
         
         const geminiImages = await generateProductAd({
@@ -383,13 +383,13 @@ export async function regenerateIterationVariation(
   const aspectRatio = run.aspectRatio || "1:1";
   const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
 
-  // Build enhanced prompt using same logic as Stage 3
-  const geminiPrompt = buildEnhancedPrompt({
+  // Build reference-based prompt using same logic as Stage 3
+  const geminiPrompt = buildReferenceBasedPrompt({
     headline,
     subheadline: subheadline || undefined,
     productName: `ONEST Health ${product}`,
-    backgroundStyle: bgPrompt,
-    creativityLevel,
+    backgroundStyleDescription: bgPrompt,
+    aspectRatio: aspectRatio as any,
     targetAudience: briefData?.targetAudience || "fitness-conscious adults",
   });
 

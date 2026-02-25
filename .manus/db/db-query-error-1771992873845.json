@@ -1,0 +1,8 @@
+{
+  "query": "\nALTER TABLE iteration_runs \nADD COLUMN parent_run_id INT NULL,\nADD COLUMN variation_layer ENUM('parent', 'child') DEFAULT 'parent',\nADD COLUMN variation_type VARCHAR(64) NULL,\nADD CONSTRAINT fk_parent_run FOREIGN KEY (parent_run_id) REFERENCES iteration_runs(id) ON DELETE CASCADE;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute \nALTER TABLE iteration_runs \nADD COLUMN parent_run_id INT NULL,\nADD COLUMN variation_layer ENUM('parent', 'child') DEFAULT 'parent',\nADD COLUMN variation_type VARCHAR(64) NULL,\nADD CONSTRAINT fk_parent_run FOREIGN KEY (parent_run_id) REFERENCES iteration_runs(id) ON DELETE CASCADE;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 2: Table 'iRMuHk7nYQvS4BtpbvEbBz.iteration_runs' doesn't exist"
+  ]
+}
