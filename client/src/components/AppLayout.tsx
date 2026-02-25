@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X } from "lucide-react";
+import { useState } from "react";
 
 const navItems = [
   // PIPELINE (0-2)
@@ -20,11 +21,39 @@ const navItems = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleNavClick = (path: string) => {
+    setLocation(path);
+    setSidebarOpen(false); // Close sidebar on mobile after navigation
+  };
 
   return (
     <div className="min-h-screen bg-[#01040A] flex">
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 rounded-lg bg-[#0D0F12] border border-white/10 flex items-center justify-center text-white hover:bg-white/5 transition-colors"
+        aria-label="Toggle menu"
+      >
+        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+
+      {/* Mobile overlay backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-56 bg-[#0D0F12] border-r border-white/5 flex flex-col shrink-0 fixed h-screen z-30">
+      <aside className={`
+        w-56 bg-[#0D0F12] border-r border-white/5 flex flex-col shrink-0 h-screen z-40
+        fixed lg:fixed
+        transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
         {/* Logo */}
         <div className="p-4 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-[#FF3838] flex items-center justify-center text-white font-bold text-sm">
@@ -46,7 +75,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <button
                 key={item.path}
-                onClick={() => setLocation(item.path)}
+                onClick={() => handleNavClick(item.path)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-white/10 text-white"
@@ -70,7 +99,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <button
                 key={item.path}
-                onClick={() => setLocation(item.path)}
+                onClick={() => handleNavClick(item.path)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-white/10 text-white"
@@ -94,7 +123,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <button
                 key={item.path}
-                onClick={() => setLocation(item.path)}
+                onClick={() => handleNavClick(item.path)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-white/10 text-white"
@@ -121,7 +150,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 ml-56 min-h-screen">
+      <main className="flex-1 lg:ml-56 min-h-screen">
         {children}
       </main>
     </div>
