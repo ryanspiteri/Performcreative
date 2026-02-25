@@ -15,6 +15,7 @@ if (!GOOGLE_AI_API_KEY) {
 
 export interface GeminiImageOptions {
   prompt: string;
+  controlImageUrl?: string; // Optional control/reference image to match style
   productRenderUrl?: string; // Optional product render to composite into the scene
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
   resolution?: "1K" | "2K" | "4K";
@@ -57,6 +58,7 @@ export async function generateProductAd(
 ): Promise<GeminiImageResult[]> {
   const {
     prompt,
+    controlImageUrl,
     productRenderUrl,
     aspectRatio = "1:1",
     resolution = "2K",
@@ -65,6 +67,7 @@ export async function generateProductAd(
 
   console.log(`[Gemini] Generating ${variationCount} product ad(s) with Gemini 3 Pro Image`);
   console.log(`[Gemini] Prompt: ${prompt}`);
+  console.log(`[Gemini] Control image: ${controlImageUrl || "None"}`);  
   console.log(`[Gemini] Product render: ${productRenderUrl || "None (text-only generation)"}`);
   console.log(`[Gemini] Aspect ratio: ${aspectRatio}, Resolution: ${resolution}`);
 
@@ -88,8 +91,22 @@ export async function generateProductAd(
         ],
         generationConfig: {
           responseModalities: ["Text", "Image"],
+          temperature: 1.0, // Maximum creativity/randomness
+          topP: 0.95,
+          topK: 40,
         },
       };
+
+      // If control image is provided, add it FIRST as visual reference
+      if (controlImageUrl) {
+        const controlBase64 = await fetchImageAsBase64(controlImageUrl);
+        requestBody.contents[0].parts.push({
+          inlineData: {
+            mimeType: controlBase64.split(";")[0].split(":")[1],
+            data: controlBase64.split(",")[1],
+          },
+        });
+      }
 
       // If product render is provided, add it as an image part (image editing mode)
       if (productRenderUrl) {

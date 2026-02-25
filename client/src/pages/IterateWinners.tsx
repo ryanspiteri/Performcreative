@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink } from "lucide-react";
+import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const PRODUCTS = [
@@ -26,9 +26,10 @@ export default function IterateWinners() {
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
-  const [variationTypes, setVariationTypes] = useState<VariationType[]>(["full_remix"]);
+  const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Changed to single selection
   const [variationCount, setVariationCount] = useState(3);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
@@ -89,6 +90,9 @@ export default function IterateWinners() {
     e.preventDefault();
   }, []);
 
+  // Calculate cost
+  const estimatedCost = variationCount * (aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.13 : 0.24);
+
   // Start the iteration pipeline
   const handleStartPipeline = async () => {
     if (!uploadedImageUrl) {
@@ -96,14 +100,21 @@ export default function IterateWinners() {
       return;
     }
 
+    // Show confirmation dialog
+    setShowConfirmation(true);
+  };
+
+  const confirmAndStart = async () => {
+    setShowConfirmation(false);
+    
     try {
       const result = await triggerIteration.mutateAsync({
         product,
         priority: "Medium",
-        sourceImageUrl: uploadedImageUrl,
+        sourceImageUrl: uploadedImageUrl!,
         sourceImageName: uploadedImageName,
         creativityLevel,
-        variationTypes,
+        variationTypes: [variationType], // Now single selection
         variationCount,
         aspectRatio,
       });
@@ -125,12 +136,12 @@ export default function IterateWinners() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white">Iterate on Winners</h1>
-              <p className="text-gray-400 text-sm">Upload a winning ad and generate 3 new variations with different copy angles</p>
+              <p className="text-gray-400 text-sm">Upload a winning ad and generate new variations with different copy angles</p>
             </div>
           </div>
           <button
             onClick={() => setLocation("/iterate/generate-children")}
-            className="flex items-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            className="flex items-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-5 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#01040A]"
           >
             <Sparkles className="w-4 h-4" />
             Generate Children
@@ -141,18 +152,42 @@ export default function IterateWinners() {
       <div className="max-w-4xl mx-auto">
         {/* Step 1: Upload & Configure */}
         <div className="bg-[#0D0F12] border border-white/5 rounded-2xl p-8">
+          
+          {/* MOVED UP: Cost Calculator - Now First */}
+          <div className="mb-8">
+            <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-400 mb-1">Estimated Cost</div>
+                  <div className="text-3xl font-bold text-white">
+                    ${estimatedCost.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {variationCount} variation{variationCount === 1 ? '' : 's'} × ${aspectRatio === '1:1' || aspectRatio === '4:5' ? '0.13' : '0.24'} per image
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-400 mb-2">Resolution</div>
+                  <div className="px-3 py-2 rounded-lg bg-white/5 text-sm font-medium text-gray-300">
+                    {aspectRatio === '1:1' ? '2048×2048' : aspectRatio === '4:5' ? '2048×2560' : aspectRatio === '9:16' ? '2304×4096' : '4096×2304'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Product Selection */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Select Product</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-3">
               {PRODUCTS.map((p) => (
                 <button
                   key={p}
                   onClick={() => setProduct(p)}
-                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  className={`min-h-[48px] px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
                     product === p
-                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
-                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
                   }`}
                 >
                   {p}
@@ -165,94 +200,79 @@ export default function IterateWinners() {
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Creative Risk Level</label>
             <div className="bg-white/5 rounded-xl p-6">
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-3 mb-4">
                 {(['SAFE', 'BOLD', 'WILD'] as CreativityLevel[]).map((level) => (
                   <button
                     key={level}
                     onClick={() => setCreativityLevel(level)}
-                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex-1 min-h-[48px] px-4 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
                       creativityLevel === level
                         ? level === 'SAFE'
-                          ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20"
+                          ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 focus:ring-blue-400"
                           : level === 'BOLD'
-                          ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                          : "bg-red-500 text-white shadow-lg shadow-red-500/20"
-                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                          ? "bg-[#A78BFA] text-white shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
+                          : "bg-red-500 text-white shadow-lg shadow-red-500/20 focus:ring-red-400"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
                     }`}
                   >
                     {level}
                   </button>
                 ))}
               </div>
-              <div className="text-xs text-gray-400">
+              <div className="text-sm text-gray-300 leading-relaxed">
                 {creativityLevel === 'SAFE' && (
-                  <p><span className="font-medium text-blue-400">SAFE:</span> Proven visual patterns, lower risk, familiar aesthetics. Best for testing budgets.</p>
+                  <p><span className="font-semibold text-blue-400">SAFE:</span> Minor headline tweaks, same visual style. Low risk, proven patterns. Example: "30 Days to Shredded" → "Transform in 30 Days"</p>
                 )}
                 {creativityLevel === 'BOLD' && (
-                  <p><span className="font-medium text-purple-400">BOLD:</span> Unexpected concepts, moderate risk, higher upside. Balanced creativity for scale. (Recommended)</p>
+                  <p><span className="font-semibold text-purple-400">BOLD:</span> New headlines + background variations. Moderate risk, higher upside. Example: Fire background → Ice/transformation theme. <span className="text-purple-300">(Recommended)</span></p>
                 )}
                 {creativityLevel === 'WILD' && (
-                  <p><span className="font-medium text-red-400">WILD:</span> Controversial/polarising concepts, highest risk, moonshot potential. May alienate some but deeply resonate with others.</p>
+                  <p><span className="font-semibold text-red-400">WILD:</span> Completely different concepts. High risk, moonshot potential. Example: Product-focused → Lifestyle/aspirational scene. May polarise but deeply resonate.</p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Variation Type Selector - Multi-Select */}
+          {/* FIXED: Variation Type Selector - Single Select Radio Buttons */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">
-              Variation Types (Select Multiple)
-              <span className="ml-2 text-xs text-gray-500">— {variationTypes.length} selected</span>
+              Variation Strategy
             </label>
             <div className="bg-white/5 rounded-xl p-6">
-              <p className="text-xs text-gray-400 mb-4">
-                Select multiple types to generate diverse variations in one batch. Each type tests a different variable.
+              <p className="text-sm text-gray-300 mb-4">
+                Choose which element to test. The system will generate {variationCount} variation{variationCount === 1 ? '' : 's'} testing this variable whilst keeping other elements similar to your control ad.
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 {([
-                  { value: 'headline_only', label: 'Headline Only', desc: 'Test different headlines, keep everything else' },
-                  { value: 'background_only', label: 'Background Only', desc: 'Test background colours/styles' },
-                  { value: 'layout_only', label: 'Layout Only', desc: 'Test product placement/text position' },
-                  { value: 'benefit_callouts_only', label: 'Benefits Only', desc: 'Test different benefit copy' },
-                  { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors' },
-                  { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models' },
-                  { value: 'full_remix', label: 'Full Remix', desc: 'Change everything (current behaviour)' },
+                  { value: 'full_remix', label: 'Full Remix', desc: 'Test everything — headlines, backgrounds, layouts, benefits. Maximum creative diversity.' },
+                  { value: 'headline_only', label: 'Headline Only', desc: 'Test different headlines whilst keeping background, layout, and benefits consistent.' },
+                  { value: 'background_only', label: 'Background Only', desc: 'Test different background colours/styles whilst keeping headline and layout consistent.' },
+                  { value: 'layout_only', label: 'Layout Only', desc: 'Test product placement and text positioning whilst keeping headline and background consistent.' },
+                  { value: 'benefit_callouts_only', label: 'Benefits Only', desc: 'Test different benefit copy whilst keeping headline and visual style consistent.' },
+                  { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors/props whilst keeping headline and layout consistent.' },
+                  { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models whilst keeping headline and composition consistent.' },
                 ] as const).map((type) => {
-                  const isSelected = variationTypes.includes(type.value);
+                  const isSelected = variationType === type.value;
                   return (
                     <button
                       key={type.value}
-                      onClick={() => {
-                        if (isSelected) {
-                          // Deselect - but keep at least one selected
-                          if (variationTypes.length > 1) {
-                            setVariationTypes(variationTypes.filter(t => t !== type.value));
-                          } else {
-                            toast.error("At least one variation type must be selected");
-                          }
-                        } else {
-                          // Select
-                          setVariationTypes([...variationTypes, type.value]);
-                        }
-                      }}
-                      className={`px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 ${
+                      onClick={() => setVariationType(type.value)}
+                      className={`w-full min-h-[56px] px-5 py-4 rounded-lg text-left transition-all flex items-start gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
                         isSelected
-                          ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
-                          : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                          ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
+                          : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
                       }`}
                     >
-                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
                         isSelected ? "border-white bg-white" : "border-gray-500"
                       }`}>
                         {isSelected && (
-                          <svg className="w-3 h-3 text-[#FF3838]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#FF3838]" />
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="font-medium text-sm mb-1">{type.label}</div>
-                        <div className="text-xs opacity-70">{type.desc}</div>
+                        <div className="font-semibold text-sm mb-1">{type.label}</div>
+                        <div className="text-xs opacity-90 leading-relaxed">{type.desc}</div>
                       </div>
                     </button>
                   );
@@ -263,20 +283,36 @@ export default function IterateWinners() {
 
           {/* Variation Count Slider */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Number of Variations: {variationCount}</label>
+            <label className="block text-sm font-medium text-gray-300 mb-3">
+              Number of Variations: <span className="text-white font-bold">{variationCount}</span>
+            </label>
             <div className="bg-white/5 rounded-xl p-6">
-              <input
-                type="range"
-                min="1"
-                max="50"
-                value={variationCount}
-                onChange={(e) => setVariationCount(parseInt(e.target.value))}
-                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                style={{
-                  background: `linear-gradient(to right, #FF3838 0%, #FF3838 ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) 100%)`
-                }}
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-2">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setVariationCount(Math.max(1, variationCount - 1))}
+                  className="min-w-[48px] min-h-[48px] rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
+                >
+                  −
+                </button>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={variationCount}
+                  onChange={(e) => setVariationCount(parseInt(e.target.value))}
+                  className="flex-1 h-3 bg-white/10 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF3838]"
+                  style={{
+                    background: `linear-gradient(to right, #FF3838 0%, #FF3838 ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) 100%)`
+                  }}
+                />
+                <button
+                  onClick={() => setVariationCount(Math.min(50, variationCount + 1))}
+                  className="min-w-[48px] min-h-[48px] rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
+                >
+                  +
+                </button>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mt-3">
                 <span>1 variation</span>
                 <span>50 variations</span>
               </div>
@@ -286,43 +322,20 @@ export default function IterateWinners() {
           {/* Aspect Ratio Selector */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Aspect Ratio</label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-3">
               {(['1:1', '4:5', '9:16', '16:9'] as AspectRatio[]).map((ratio) => (
                 <button
                   key={ratio}
                   onClick={() => setAspectRatio(ratio)}
-                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  className={`min-h-[48px] px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
                     aspectRatio === ratio
-                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
-                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
                   }`}
                 >
                   {ratio}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Cost Calculator */}
-          <div className="mb-8">
-            <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-gray-400 mb-1">Estimated Cost</div>
-                  <div className="text-2xl font-bold text-white">
-                    ${(variationCount * (aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.13 : 0.24)).toFixed(2)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {variationCount} × ${aspectRatio === '1:1' || aspectRatio === '4:5' ? '0.13' : '0.24'} per image (Gemini 3 Pro {aspectRatio === '1:1' || aspectRatio === '4:5' ? '2K' : '4K'})
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-400 mb-2">Resolution</div>
-                  <div className="px-3 py-1 rounded-lg bg-white/5 text-sm font-medium text-gray-300">
-                    {aspectRatio === '1:1' || aspectRatio === '4:5' ? '2048×2048' : '4096×4096'}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -332,10 +345,19 @@ export default function IterateWinners() {
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
-              className={`relative border-2 border-dashed rounded-2xl transition-all ${
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  document.getElementById('file-input')?.click();
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label="Upload winning ad image"
+              className={`relative border-2 border-dashed rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
                 uploadedImageUrl
                   ? "border-green-500/30 bg-green-500/5"
-                  : "border-white/10 hover:border-white/20 bg-white/[0.02]"
+                  : "border-white/10 hover:border-white/20 bg-white/[0.02] cursor-pointer"
               }`}
             >
               {uploading ? (
@@ -360,10 +382,11 @@ export default function IterateWinners() {
                       </div>
                       <p className="text-white font-medium mb-1">{uploadedImageName}</p>
                       <p className="text-gray-500 text-xs mb-4">Click or drag to replace</p>
-                      <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-300 text-sm cursor-pointer hover:bg-white/10 transition-colors w-fit">
+                      <label className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-lg bg-white/5 text-gray-300 text-sm cursor-pointer hover:bg-white/10 transition-colors w-fit focus-within:ring-2 focus-within:ring-white/30">
                         <Upload className="w-4 h-4" />
                         Replace Image
                         <input
+                          id="file-input-replace"
                           type="file"
                           accept="image/*"
                           className="hidden"
@@ -383,11 +406,12 @@ export default function IterateWinners() {
                   </div>
                   <p className="text-white font-medium mb-1">Drop your winning ad here</p>
                   <p className="text-gray-500 text-sm mb-4">or click to browse (PNG, JPG, up to 10MB)</p>
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF3838]/10 text-[#FF3838] text-sm font-medium">
+                  <div className="flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-lg bg-[#FF3838]/10 text-[#FF3838] text-sm font-medium">
                     <Upload className="w-4 h-4" />
                     Choose File
                   </div>
                   <input
+                    id="file-input"
                     type="file"
                     accept="image/*"
                     className="hidden"
@@ -411,8 +435,8 @@ export default function IterateWinners() {
               {[
                 { step: "1", title: "Upload", desc: "Your winning ad" },
                 { step: "2", title: "Analyse", desc: "AI extracts visual DNA" },
-                { step: "3", title: "Brief", desc: "3 new copy angles" },
-                { step: "4", title: "Generate", desc: "3 variation images" },
+                { step: "3", title: "Brief", desc: "New copy angles" },
+                { step: "4", title: "Generate", desc: "Variation images" },
               ].map((s) => (
                 <div key={s.step} className="text-center">
                   <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-400 text-sm font-bold flex items-center justify-center mx-auto mb-2">
@@ -428,10 +452,10 @@ export default function IterateWinners() {
           {/* Start Button */}
           <button
             onClick={handleStartPipeline}
-            disabled={!uploadedImageUrl || triggerIteration.isPending || variationTypes.length === 0}
-            className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${
+            disabled={!uploadedImageUrl || triggerIteration.isPending}
+            className={`w-full min-h-[56px] py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
               uploadedImageUrl && !triggerIteration.isPending
-                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-500/20"
+                ? "bg-gradient-to-r from-[#A78BFA] to-pink-600 text-white hover:from-[#9F7AEA] hover:to-pink-500 shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
                 : "bg-white/5 text-gray-600 cursor-not-allowed"
             }`}
           >
@@ -450,48 +474,145 @@ export default function IterateWinners() {
           </button>
         </div>
 
-        {/* Recent Iteration Runs */}
-        <RecentIterationRuns />
+        {/* Recent Iterations */}
+        <RecentIterations />
       </div>
+
+      {/* Confirmation Dialog */}
+      {showConfirmation && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0D0F12] border border-white/10 rounded-2xl p-8 max-w-md w-full">
+            <div className="flex items-start gap-4 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-[#FF3838]/10 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-6 h-6 text-[#FF3838]" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white mb-2">Confirm Generation</h3>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  You're about to generate <span className="text-white font-semibold">{variationCount} variation{variationCount === 1 ? '' : 's'}</span> at <span className="text-white font-semibold">${estimatedCost.toFixed(2)}</span>. This will start the pipeline immediately.
+                </p>
+              </div>
+            </div>
+            <div className="bg-white/5 rounded-xl p-4 mb-6 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Product:</span>
+                <span className="text-white font-medium">{product}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Variation Strategy:</span>
+                <span className="text-white font-medium capitalize">{variationType.replace('_', ' ')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Creativity Level:</span>
+                <span className="text-white font-medium">{creativityLevel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Aspect Ratio:</span>
+                <span className="text-white font-medium">{aspectRatio}</span>
+              </div>
+              <div className="border-t border-white/10 pt-2 mt-2 flex justify-between">
+                <span className="text-gray-300 font-medium">Total Cost:</span>
+                <span className="text-[#FF3838] font-bold text-lg">${estimatedCost.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmation(false)}
+                className="flex-1 min-h-[48px] px-4 py-3 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-all font-medium focus:outline-none focus:ring-2 focus:ring-white/20"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAndStart}
+                disabled={triggerIteration.isPending}
+                className="flex-1 min-h-[48px] px-4 py-3 rounded-lg bg-[#FF3838] text-white hover:bg-[#FF3838]/90 transition-all font-bold focus:outline-none focus:ring-2 focus:ring-[#FF3838] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {triggerIteration.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Confirm & Generate
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function RecentIterationRuns() {
+// Recent Iterations Component
+function RecentIterations() {
+  const { data: runs, isLoading } = trpc.pipeline.list.useQuery();
   const [, setLocation] = useLocation();
-  const { data: runs } = trpc.pipeline.list.useQuery();
 
-  const iterationRuns = runs?.filter((r: any) => r.pipelineType === "iteration") || [];
+  if (isLoading) {
+    return (
+      <div className="mt-8 bg-[#0D0F12] border border-white/5 rounded-2xl p-8">
+        <h2 className="text-lg font-bold text-white mb-4">Recent Iterations</h2>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
-  if (iterationRuns.length === 0) return null;
+  if (!runs || runs.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="mt-8">
-      <h2 className="text-white font-semibold text-lg mb-4">Recent Iterations</h2>
-      <div className="space-y-3">
-        {iterationRuns.slice(0, 10).map((run: any) => (
+    <div className="mt-8 bg-[#0D0F12] border border-white/5 rounded-2xl p-8">
+      <h2 className="text-lg font-bold text-white mb-4">Recent Iterations</h2>
+      <div className="space-y-2">
+        {runs.slice(0, 10).map((run: any) => (
           <button
             key={run.id}
             onClick={() => setLocation(`/results/${run.id}`)}
-            className="w-full bg-[#0D0F12] border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:bg-white/[0.03] transition-colors text-left"
+            className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all text-left focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#0D0F12]"
           >
-            {run.iterationSourceUrl && (
-              <div className="w-12 h-12 rounded-lg overflow-hidden bg-black/50 shrink-0">
-                <img src={run.iterationSourceUrl} alt="" className="w-full h-full object-cover" />
-              </div>
-            )}
-            <div className="flex-1">
-              <p className="text-white text-sm font-medium">{run.foreplayAdTitle || "Iteration"}</p>
-              <p className="text-gray-500 text-xs">{run.product} · {new Date(run.createdAt).toLocaleDateString()}</p>
+            <div className="w-16 h-16 rounded-lg overflow-hidden bg-black/50 shrink-0">
+              {run.sourceImageUrl ? (
+                <img src={run.sourceImageUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-gray-600" />
+                </div>
+              )}
             </div>
-            <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-              run.status === "completed" ? "bg-green-500/10 text-green-400" :
-              run.status === "running" ? "bg-blue-500/10 text-blue-400" :
-              "bg-red-500/10 text-red-400"
-            }`}>
-              {run.status === "completed" ? "Completed" :
-               run.status === "running" ? (run.iterationStage === "stage_2b_approval" ? "Awaiting Approval" : "Processing") :
-               "Failed"}
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-medium text-sm truncate mb-1">
+                {run.iterationBrief?.originalHeadline || run.sourceImageName || `Run #${run.id}`}
+              </p>
+              <p className="text-gray-500 text-xs">
+                {run.product} · {new Date(run.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+            <div>
+              {run.status === 'completed' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-medium">
+                  <CheckCircle className="w-3 h-3" />
+                  Completed
+                </span>
+              )}
+              {run.status === 'running' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-medium">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Processing
+                </span>
+              )}
+              {run.status === 'failed' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-xs font-medium">
+                  <XCircle className="w-3 h-3" />
+                  Failed
+                </span>
+              )}
             </div>
           </button>
         ))}

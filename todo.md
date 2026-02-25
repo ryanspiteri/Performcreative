@@ -999,3 +999,43 @@ All three fixes implemented and tested:
 - [x] UI: Individual parent child generation on results page
 - [x] UI: Batch parent selection page at /iterate/generate-children
 - [ ] Test: Complete flow from control → 10 parents → select 3 → 30 children = 40 total
+
+
+## ITERATE WINNERS - IMAGE GENERATION FIXES
+- [x] Implement reference-based prompt that uses control image as visual guide
+- [x] Update geminiImage.ts to accept and send control image to Gemini API
+- [x] Update iterationPipeline.ts to pass control image URL to generation
+- [x] Fix duplicate generation issue (added temperature=1.0, topP=0.95, topK=40 + variation-specific uniqueness instructions)
+- [x] Ensure headline consistency across all outputs (reference-based prompt explicitly instructs text rendering)
+- [x] Ensure product integration (reference-based prompt instructs matching product placement approach from control)
+- [ ] Test with real control ad and validate quality
+
+
+## ITERATE WINNERS - UI/UX COMPREHENSIVE FIXES
+
+### P0 Critical Issues (Landing Page)
+- [x] Fix variation types confusion - changed to radio buttons with clear single-selection behaviour
+- [x] Fix accessibility - improved contrast ratios for purple buttons (#8B5CF6 → #A78BFA)
+- [x] Fix accessibility - added visible keyboard focus indicators to all interactive elements
+- [x] Fix accessibility - increased touch target sizes to 48×48px minimum
+- [x] Move cost visibility above the fold
+- [x] Add loading states - enhanced with disabled states and confirmation dialog
+- [x] Add confirmation dialog before generating variations
+
+### P1 High Priority
+- [x] Implement mobile-first responsive design (grid layouts with responsive classes)
+- [x] Add error messages explaining why iterations failed (comprehensive error banner with retry/back options)
+- [x] Add confirmation dialog before generating variations (shows cost, config summary)
+- [x] Implement auto-refresh for results page when stages complete (already implemented with refetchInterval)
+
+### P2 Medium Priority
+- [ ] Expand Creative Risk Level descriptions with examples
+- [ ] Show headlines instead of filenames in Recent Iterations
+- [ ] Add icons to status badges for colour-blind users
+- [ ] Increase button sizes for better touch targets
+
+### P3 Low Priority
+- [ ] Add Quick Start option with sensible defaults
+- [ ] Add example gallery showing before/after results
+- [ ] Implement guided tour for first-time users
+- [ ] Add bulk actions (archive/delete) to Recent Iterations

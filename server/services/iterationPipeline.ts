@@ -181,7 +181,7 @@ export async function runIterationStage3(runId: number, run: any) {
         const v = briefData.variations[i] || {};
         
         // Build reference-based Gemini prompt
-        const geminiPrompt = buildReferenceBasedPrompt({
+        const basePrompt = buildReferenceBasedPrompt({
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: v.subheadline || undefined,
           productName: `ONEST Health ${product}`,
@@ -189,12 +189,16 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
           targetAudience: briefData.targetAudience || undefined,
         });
+        
+        // Add variation-specific uniqueness instruction
+        const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
 
         console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Gemini`);
         console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
 
         const geminiImages = await generateProductAd({
           prompt: geminiPrompt,
+          controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           resolution: "2K",
@@ -236,6 +240,7 @@ export async function runIterationStage3(runId: number, run: any) {
         
         const geminiImages = await generateProductAd({
           prompt: fallbackPrompt,
+          controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           resolution: aspectRatio === "1:1" || aspectRatio === "4:5" ? "2K" : "4K",
@@ -394,8 +399,10 @@ export async function regenerateIterationVariation(
   });
 
   // Generate with Gemini
+  const sourceUrl = run.iterationSourceUrl || "";
   const geminiImages = await generateProductAd({
     prompt: geminiPrompt,
+    controlImageUrl: sourceUrl, // Pass control image as visual reference
     productRenderUrl: productRender.url,
     aspectRatio: aspectRatio as any,
     resolution: aspectRatio === "1:1" || aspectRatio === "4:5" ? "2K" : "4K",

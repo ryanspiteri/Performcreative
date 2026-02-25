@@ -1,4 +1,4 @@
-import { Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X } from "lucide-react";
+import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -91,6 +91,50 @@ export function IterationResults({ run }: { run: any }) {
 
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {run.status === "failed" && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <XCircle className="w-5 h-5 text-red-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-red-400 font-semibold text-lg mb-2">Pipeline Failed</h3>
+              <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                The iteration pipeline encountered an error and could not complete. This may be due to:
+              </p>
+              <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside mb-4">
+                <li>Image generation service timeout or rate limits</li>
+                <li>Invalid input image format or size</li>
+                <li>API connectivity issues</li>
+                <li>Insufficient credits or quota</li>
+              </ul>
+              {run.errorMessage && (
+                <div className="bg-black/30 rounded-lg p-3 border border-red-500/20 mb-4">
+                  <span className="text-xs text-gray-500 block mb-1">Error Details:</span>
+                  <p className="text-red-300 text-sm font-mono">{run.errorMessage}</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-all text-sm font-medium"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Retry Pipeline
+                </button>
+                <button
+                  onClick={() => window.history.back()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-all text-sm font-medium"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Go Back
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Stage Progress Bar */}
       <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
         <h2 className="text-white font-semibold mb-4">Iteration Pipeline Progress</h2>
