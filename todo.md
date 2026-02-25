@@ -1045,3 +1045,34 @@ All three fixes implemented and tested:
 - [x] Reduce button min-height from 48px to 40px (keep accessibility but more compact)
 - [x] Reduce padding and gaps to match original spacing (gap-3 → gap-2)
 - [x] Keep all functional improvements (single-select, cost visibility, confirmation, error messages)
+
+
+## NANO BANANA PRO INTEGRATION
+- [ ] Research Nano Banana Pro API/SDK documentation
+- [ ] Create comprehensive Iterate Winners pipeline flow map for approval
+- [ ] Design Nano Banana Pro integration architecture (replace Gemini)
+- [ ] Implement Nano Banana Pro image generation service
+- [ ] Update iteration pipeline to use Nano Banana Pro instead of Gemini
+- [ ] Test image generation quality with Nano Banana Pro
+
+
+## VARIATION COUNT SELECTOR
+- [x] Add "Number of Variations" dropdown to landing page (options: 3, 5, 10, 20, 50, 100)
+- [x] Update database schema to store variationCount in pipeline_runs (already exists)
+- [x] Update backend to generate exactly N variations as specified (already implemented)
+- [x] Update cost calculator to reflect selected variation count (already implemented)
+- [ ] Update child generation to respect parent variation count
+
+## NANO BANANA PRO INTEGRATION
+- [x] Create nanoBananaPro.ts service with Imagen 3 API integration
+- [x] Implement reference-based prompt builder for Nano Banana Pro (uses existing geminiPromptBuilder)
+- [x] Update iterationPipeline.ts to use Nano Banana Pro instead of Gemini
+- [x] Update cost calculator ($0.02 → $0.12 per image for Nano Banana Pro)
+- [ ] Test image generation quality (headlines, product integration, consistency)
+- [ ] Update flow map documentation with Nano Banana Pro integration
+
+
+## PRODUCT INFO INTEGRATION CHECK
+- [ ] Verify iteration pipeline pulls product info from product_info database
+- [ ] Ensure product benefits, ingredients, claims are used in image generation prompts
+- [ ] Test that product info changes reflect in generated variations

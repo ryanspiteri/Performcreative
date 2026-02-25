@@ -2,7 +2,7 @@ import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { createScriptTask } from "./clickup";
-import { generateProductAd } from "./geminiImage";
+import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import axios from "axios";
 import { ENV } from "../_core/env";
@@ -149,9 +149,9 @@ export async function runIterationStage3(runId: number, run: any) {
       briefData = null;
     }
 
-    // Use Gemini 3 Pro Image for high-quality product ad generation
-    // Replaces the old Flux Pro + Bannerbear two-step process with single-API generation
-    console.log("[Iteration] Using Gemini 3 Pro Image for variation generation");
+    // Use Nano Banana Pro (Imagen 3) for production-quality product ad generation
+    // Provides high-fidelity text rendering and better product integration
+    console.log("[Iteration] Using Nano Banana Pro (Imagen 3) for variation generation");
 
     // Get product render from database
     const renders = await db.listProductRenders(product);
@@ -193,17 +193,17 @@ export async function runIterationStage3(runId: number, run: any) {
         // Add variation-specific uniqueness instruction
         const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
 
-        console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Gemini`);
+        console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
         console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
 
-        const geminiImages = await generateProductAd({
+        const result = await generateProductAdWithNanoBananaPro({
           prompt: geminiPrompt,
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
-          resolution: "2K",
-          variationCount: 1,
         });
+
+        const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
 
         geminiResults.push({
           url: geminiImages[0].url,
@@ -229,7 +229,7 @@ export async function runIterationStage3(runId: number, run: any) {
       ];
 
       for (let i = 0; i < 3; i++) {
-        console.log(`[Iteration] Generating fallback variation ${i + 1}/3 with Gemini`);
+        console.log(`[Iteration] Generating fallback variation ${i + 1}/3 with Nano Banana Pro`);
         
         const fallbackPrompt = buildReferenceBasedPrompt({
           headline: fallbackHeadlines[i],
@@ -238,14 +238,14 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
         });
         
-        const geminiImages = await generateProductAd({
+        const result = await generateProductAdWithNanoBananaPro({
           prompt: fallbackPrompt,
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
-          resolution: aspectRatio === "1:1" || aspectRatio === "4:5" ? "2K" : "4K",
-          variationCount: 1,
         });
+        
+        const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
 
         geminiResults.push({
           url: geminiImages[0].url,
@@ -398,18 +398,16 @@ export async function regenerateIterationVariation(
     targetAudience: briefData?.targetAudience || "fitness-conscious adults",
   });
 
-  // Generate with Gemini
+  // Generate with Nano Banana Pro
   const sourceUrl = run.iterationSourceUrl || "";
-  const geminiImages = await generateProductAd({
+  const result = await generateProductAdWithNanoBananaPro({
     prompt: geminiPrompt,
     controlImageUrl: sourceUrl, // Pass control image as visual reference
     productRenderUrl: productRender.url,
     aspectRatio: aspectRatio as any,
-    resolution: aspectRatio === "1:1" || aspectRatio === "4:5" ? "2K" : "4K",
-    variationCount: 1,
   });
 
-  const finalUrl = geminiImages[0].url;
+  const finalUrl = result.imageUrl;
 
   // Update the specific variation in the array
   const variationLabel = variationIndex === 0 ? "Control" : `Variation ${variationIndex + 1}`;

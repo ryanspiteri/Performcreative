@@ -27,7 +27,7 @@ export default function IterateWinners() {
   const [runId, setRunId] = useState<number | null>(null);
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
   const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Changed to single selection
-  const [variationCount, setVariationCount] = useState(3);
+  const [variationCount, setVariationCount] = useState(10);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [showConfirmation, setShowConfirmation] = useState(false);
 
@@ -90,8 +90,8 @@ export default function IterateWinners() {
     e.preventDefault();
   }, []);
 
-  // Calculate cost
-  const estimatedCost = variationCount * (aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.13 : 0.24);
+  // Calculate cost (Nano Banana Pro pricing: $0.12 per image for 1:1/4:5, $0.24 for 9:16/16:9)
+  const estimatedCost = variationCount * (aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.12 : 0.24);
 
   // Start the iteration pipeline
   const handleStartPipeline = async () => {
@@ -163,7 +163,7 @@ export default function IterateWinners() {
                     ${estimatedCost.toFixed(2)}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {variationCount} variation{variationCount === 1 ? '' : 's'} × ${aspectRatio === '1:1' || aspectRatio === '4:5' ? '0.13' : '0.24'} per image
+                    {variationCount} variation{variationCount === 1 ? '' : 's'} × ${aspectRatio === '1:1' || aspectRatio === '4:5' ? '0.12' : '0.24'} per image
                   </div>
                 </div>
                 <div className="text-right">
@@ -281,41 +281,27 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* Variation Count Slider */}
+          {/* Variation Count Dropdown */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">
-              Number of Variations: <span className="text-white font-bold">{variationCount}</span>
+              Number of Variations
             </label>
             <div className="bg-white/5 rounded-xl p-6">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setVariationCount(Math.max(1, variationCount - 1))}
-                  className="w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
-                >
-                  −
-                </button>
-                <input
-                  type="range"
-                  min="1"
-                  max="50"
-                  value={variationCount}
-                  onChange={(e) => setVariationCount(parseInt(e.target.value))}
-                  className="flex-1 h-3 bg-white/10 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF3838]"
-                  style={{
-                    background: `linear-gradient(to right, #FF3838 0%, #FF3838 ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) ${(variationCount / 50) * 100}%, rgba(255,255,255,0.1) 100%)`
-                  }}
-                />
-                <button
-                  onClick={() => setVariationCount(Math.min(50, variationCount + 1))}
-                  className="w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
-                >
-                  +
-                </button>
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-3">
-                <span>1 variation</span>
-                <span>50 variations</span>
-              </div>
+              <select
+                value={variationCount}
+                onChange={(e) => setVariationCount(parseInt(e.target.value))}
+                className="w-full px-4 py-3 rounded-lg bg-white/10 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:border-transparent transition-all"
+              >
+                <option value={3}>3 variations</option>
+                <option value={5}>5 variations</option>
+                <option value={10}>10 variations (Recommended)</option>
+                <option value={20}>20 variations</option>
+                <option value={50}>50 variations</option>
+                <option value={100}>100 variations</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-3">
+                More variations = more testing opportunities, but higher cost. Start with 10 for balanced testing.
+              </p>
             </div>
           </div>
 
