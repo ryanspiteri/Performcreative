@@ -99,15 +99,19 @@ export async function generateProductAdWithNanoBananaPro(
     // Build generation config
     const generationConfig: any = {
       response_modalities: ["IMAGE"],
-      image_config: {
+    };
+
+    // Only add image_config if we're generating images (not editing)
+    if (!controlImageUrl) {
+      generationConfig.image_config = {
         aspect_ratio: aspectRatio,
         image_size: resolution,
-      },
-    };
+      };
+    }
 
     const requestBody = {
       contents,
-      generationConfig,
+      generation_config: generationConfig, // Note: snake_case for REST API
     };
 
     console.log(`[NanoBananaPro] Sending request to Gemini API...`);
@@ -120,11 +124,12 @@ export async function generateProductAdWithNanoBananaPro(
         headers: {
           "Content-Type": "application/json",
         },
-        timeout: 60000, // 60 second timeout for Nano Banana Pro (slower than Flash)
+        timeout: 180000, // 180 second timeout for Nano Banana Pro (Thinking mode with complex prompts can take 90-120s)
       }
     );
 
     console.log(`[NanoBananaPro] Received response from Gemini API`);
+    console.log(`[NanoBananaPro] Full response:`, JSON.stringify(response.data, null, 2));
 
     // Extract generated image from response
     const candidates = response.data.candidates;
@@ -137,14 +142,19 @@ export async function generateProductAdWithNanoBananaPro(
       throw new Error("No parts in Gemini API response");
     }
 
-    // Find the image part
-    const imagePart = parts.find((p: any) => p.inline_data);
-    if (!imagePart) {
-      throw new Error("No image in Gemini API response");
+    // Filter out thought images and find the final image
+    // Thought images have "thought": true, final images don't
+    const finalImageParts = parts.filter((p: any) => p.inlineData && !p.thought);
+    
+    if (finalImageParts.length === 0) {
+      console.error("[NanoBananaPro] No final image found, all parts:", JSON.stringify(parts, null, 2));
+      throw new Error("No final image in Gemini API response (only thought images found)");
     }
 
-    const imageData = imagePart.inline_data.data;
-    const mimeType = imagePart.inline_data.mime_type;
+    // Use the last final image (in case there are multiple)
+    const imagePart = finalImageParts[finalImageParts.length - 1];
+    const imageData = imagePart.inlineData.data;
+    const mimeType = imagePart.inlineData.mimeType;
 
     console.log(`[NanoBananaPro] Image generated successfully, uploading to S3...`);
 

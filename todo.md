@@ -1084,3 +1084,11 @@ All three fixes implemented and tested:
 - [x] Format request with prompt + reference images using Gemini API format
 - [x] Handle response parts to extract generated image
 - [ ] Test with real iteration pipeline
+
+
+## NANO BANANA PRO TIMEOUT FIX
+- [x] Increase timeout from 60s to 180s (Thinking mode takes 90-120s)
+- [x] Fix response parsing - use inlineData (camelCase) not inline_data
+- [x] Filter out thought images and extract only final image
+- [x] Verify API request format matches documentation exactly
+- [ ] Test with real iteration pipeline
