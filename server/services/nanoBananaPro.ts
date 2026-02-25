@@ -1,21 +1,24 @@
 /**
- * Nano Banana Pro (Imagen 3) Image Generation Service
+ * Nano Banana Pro Image Generation Service
  * 
- * Uses Google's Imagen 3 model via Gemini API for production-quality image generation.
+ * Uses Gemini 3 Pro Image Preview (gemini-3-pro-image-preview) for production-quality
+ * image generation with high-fidelity text rendering and advanced reasoning.
  * 
- * Key advantages over Gemini 2.0 Flash:
- * - High-fidelity text rendering (headlines always visible and crisp)
- * - Advanced reasoning for complex composition
+ * Key Features:
+ * - High-fidelity text rendering (headlines always visible and accurate)
+ * - Advanced reasoning ("Thinking") for complex compositions
  * - Better product integration (lighting, shadows, depth)
- * - 4K resolution professional quality
- * - Can study control ad and replicate style accurately
+ * - Up to 4K resolution support
+ * - Up to 14 reference images for style matching
  * 
- * Trade-offs:
+ * Trade-offs vs Gemini 2.5 Flash Image:
  * - 10x more expensive (~$0.12 vs $0.02 per image)
  * - Slower generation (~10-15s vs 3-5s per image)
+ * - But produces professional-grade outputs worth the cost
  */
 
 import axios from "axios";
+import { storagePut } from "../storage";
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
 if (!GOOGLE_AI_API_KEY) {
@@ -25,139 +28,157 @@ if (!GOOGLE_AI_API_KEY) {
 export interface NanoBananaProOptions {
   prompt: string;
   controlImageUrl?: string; // Reference image for style matching
-  aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
-  negativePrompt?: string;
+  productRenderUrl?: string; // Product render to composite
+  aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "4:5" | "5:4";
+  resolution?: "1K" | "2K" | "4K";
 }
 
 export interface NanoBananaProResult {
   imageUrl: string;
-  mimeType: string;
+  s3Key: string;
 }
 
 /**
- * Generate image using Nano Banana Pro (Imagen 3)
+ * Generate a product ad image using Nano Banana Pro (Gemini 3 Pro Image)
  */
-export async function generateWithNanoBananaPro(
+export async function generateProductAdWithNanoBananaPro(
   options: NanoBananaProOptions
 ): Promise<NanoBananaProResult> {
-  const { prompt, controlImageUrl, aspectRatio = "1:1", negativePrompt } = options;
+  const {
+    prompt,
+    controlImageUrl,
+    productRenderUrl,
+    aspectRatio = "1:1",
+    resolution = "2K",
+  } = options;
 
-  console.log(`[NanoBananaPro] Generating image with Imagen 3...`);
-  console.log(`[NanoBananaPro] Aspect ratio: ${aspectRatio}`);
-  console.log(`[NanoBananaPro] Control image: ${controlImageUrl ? "Yes" : "No"}`);
-
-  // Map aspect ratios to Imagen 3 format
-  const aspectRatioMap: Record<string, string> = {
-    "1:1": "1:1",
-    "4:5": "4:5",
-    "9:16": "9:16",
-    "16:9": "16:9",
-  };
+  console.log("[NanoBananaPro] Generating image with Gemini 3 Pro Image Preview");
+  console.log(`[NanoBananaPro] Aspect ratio: ${aspectRatio}, Resolution: ${resolution}`);
 
   try {
-    // Build request body
-    const requestBody: any = {
-      model: "imagen-3.0-generate-001",
-      prompt,
-      number_of_images: 1,
-      aspect_ratio: aspectRatioMap[aspectRatio],
-      safety_filter_level: "block_only_high",
-      person_generation: "allow_adult",
+    // Build request body for Gemini API
+    const contents: any[] = [];
+
+    // Add control image as reference (if provided)
+    if (controlImageUrl) {
+      console.log(`[NanoBananaPro] Using control image: ${controlImageUrl}`);
+      const controlImageData = await fetchImageAsBase64(controlImageUrl);
+      contents.push({
+        parts: [
+          {
+            inline_data: {
+              mime_type: "image/jpeg",
+              data: controlImageData,
+            },
+          },
+        ],
+      });
+    }
+
+    // Add product render (if provided)
+    if (productRenderUrl) {
+      console.log(`[NanoBananaPro] Using product render: ${productRenderUrl}`);
+      const productImageData = await fetchImageAsBase64(productRenderUrl);
+      contents.push({
+        parts: [
+          {
+            inline_data: {
+              mime_type: "image/png",
+              data: productImageData,
+            },
+          },
+        ],
+      });
+    }
+
+    // Add text prompt
+    contents.push({
+      parts: [{ text: prompt }],
+    });
+
+    // Build generation config
+    const generationConfig: any = {
+      response_modalities: ["IMAGE"],
+      image_config: {
+        aspect_ratio: aspectRatio,
+        image_size: resolution,
+      },
     };
 
-    // Add negative prompt if provided
-    if (negativePrompt) {
-      requestBody.negative_prompt = negativePrompt;
-    }
+    const requestBody = {
+      contents,
+      generationConfig,
+    };
 
-    // Add reference image if provided (for style matching)
-    if (controlImageUrl) {
-      // Download control image and convert to base64
-      const imageResponse = await axios.get(controlImageUrl, {
-        responseType: "arraybuffer",
-        timeout: 30000,
-      });
-      const base64Image = Buffer.from(imageResponse.data).toString("base64");
-      const mimeType = imageResponse.headers["content-type"] || "image/jpeg";
+    console.log(`[NanoBananaPro] Sending request to Gemini API...`);
 
-      requestBody.reference_images = [
-        {
-          image: {
-            bytes_base64_encoded: base64Image,
-          },
-          reference_type: "STYLE", // Use control image for style reference
-        },
-      ];
-      console.log(`[NanoBananaPro] Added control image as style reference`);
-    }
-
-    // Call Imagen 3 API via Google AI
+    // Call Gemini API
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GOOGLE_AI_API_KEY}`,
       requestBody,
       {
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": GOOGLE_AI_API_KEY,
         },
-        timeout: 60000, // 60 second timeout
+        timeout: 60000, // 60 second timeout for Nano Banana Pro (slower than Flash)
       }
     );
 
-    if (!response.data?.predictions?.[0]?.bytes_base64_encoded) {
-      throw new Error("No image data returned from Imagen 3 API");
+    console.log(`[NanoBananaPro] Received response from Gemini API`);
+
+    // Extract generated image from response
+    const candidates = response.data.candidates;
+    if (!candidates || candidates.length === 0) {
+      throw new Error("No candidates in Gemini API response");
     }
 
-    // Get base64 image from response
-    const base64Image = response.data.predictions[0].bytes_base64_encoded;
-    const mimeType = response.data.predictions[0].mime_type || "image/png";
+    const parts = candidates[0].content.parts;
+    if (!parts || parts.length === 0) {
+      throw new Error("No parts in Gemini API response");
+    }
+
+    // Find the image part
+    const imagePart = parts.find((p: any) => p.inline_data);
+    if (!imagePart) {
+      throw new Error("No image in Gemini API response");
+    }
+
+    const imageData = imagePart.inline_data.data;
+    const mimeType = imagePart.inline_data.mime_type;
+
+    console.log(`[NanoBananaPro] Image generated successfully, uploading to S3...`);
 
     // Upload to S3
-    const { storagePut } = await import("../storage");
-    const imageBuffer = Buffer.from(base64Image, "base64");
-    const fileKey = `iteration-outputs/${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
-    const { url: imageUrl } = await storagePut(fileKey, imageBuffer, mimeType);
+    const imageBuffer = Buffer.from(imageData, "base64");
+    const fileExtension = mimeType === "image/png" ? "png" : "jpg";
+    const s3Key = `nano-banana-pro/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
+    
+    const { url: imageUrl } = await storagePut(s3Key, imageBuffer, mimeType);
 
-    console.log(`[NanoBananaPro] Image generated successfully: ${imageUrl}`);
+    console.log(`[NanoBananaPro] Image uploaded to S3: ${imageUrl}`);
 
     return {
       imageUrl,
-      mimeType,
+      s3Key,
     };
-  } catch (err: any) {
-    console.error(`[NanoBananaPro] Generation failed:`, err.message);
-    if (err.response?.data) {
-      console.error(`[NanoBananaPro] API error details:`, JSON.stringify(err.response.data, null, 2));
-    }
-    throw new Error(`Nano Banana Pro generation failed: ${err.message}`);
+  } catch (error: any) {
+    console.error("[NanoBananaPro] Error generating image:", error.response?.data || error.message);
+    throw new Error(`Nano Banana Pro generation failed: ${error.response?.data?.error?.message || error.message}`);
   }
 }
 
 /**
- * Generate product ad using Nano Banana Pro
- * This is the main entry point for the iteration pipeline
+ * Fetch image from URL and convert to base64
  */
-export async function generateProductAdWithNanoBananaPro(options: {
-  prompt: string;
-  productRenderUrl?: string;
-  controlImageUrl?: string;
-  aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
-}): Promise<NanoBananaProResult> {
-  const { prompt, productRenderUrl, controlImageUrl, aspectRatio } = options;
-
-  // Enhanced prompt with product render instructions if provided
-  let enhancedPrompt = prompt;
-  if (productRenderUrl) {
-    enhancedPrompt = `${prompt}\n\nIMPORTANT: The product bottle/container must be prominently featured in the composition. Ensure proper lighting, shadows, and integration with the background scene.`;
+async function fetchImageAsBase64(url: string): Promise<string> {
+  try {
+    const response = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 30000,
+    });
+    return Buffer.from(response.data).toString("base64");
+  } catch (error: any) {
+    console.error(`[NanoBananaPro] Error fetching image from ${url}:`, error.message);
+    throw new Error(`Failed to fetch image: ${error.message}`);
   }
-
-  // Negative prompt to avoid common issues
-  const negativePrompt = "blurry text, illegible text, distorted text, floating text, generic stock photo, cluttered composition, amateur quality, low resolution";
-
-  return generateWithNanoBananaPro({
-    prompt: enhancedPrompt,
-    controlImageUrl,
-    aspectRatio,
-    negativePrompt,
-  });
 }

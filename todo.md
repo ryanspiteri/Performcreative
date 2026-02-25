@@ -1076,3 +1076,11 @@ All three fixes implemented and tested:
 - [ ] Verify iteration pipeline pulls product info from product_info database
 - [ ] Ensure product benefits, ingredients, claims are used in image generation prompts
 - [ ] Test that product info changes reflect in generated variations
+
+
+## NANO BANANA PRO API FIX
+- [x] Rewrite nanoBananaPro.ts to use Gemini generate_content endpoint (not Imagen endpoint)
+- [x] Use model: gemini-3-pro-image-preview
+- [x] Format request with prompt + reference images using Gemini API format
+- [x] Handle response parts to extract generated image
+- [ ] Test with real iteration pipeline
