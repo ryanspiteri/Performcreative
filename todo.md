@@ -1039,3 +1039,9 @@ All three fixes implemented and tested:
 - [ ] Add example gallery showing before/after results
 - [ ] Implement guided tour for first-time users
 - [ ] Add bulk actions (archive/delete) to Recent Iterations
+
+
+## ITERATE WINNERS - RESTORE COMPACT LAYOUT
+- [x] Reduce button min-height from 48px to 40px (keep accessibility but more compact)
+- [x] Reduce padding and gaps to match original spacing (gap-3 → gap-2)
+- [x] Keep all functional improvements (single-select, cost visibility, confirmation, error messages)

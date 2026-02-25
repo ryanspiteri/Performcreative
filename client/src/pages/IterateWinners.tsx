@@ -179,12 +179,12 @@ export default function IterateWinners() {
           {/* Product Selection */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Select Product</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {PRODUCTS.map((p) => (
                 <button
                   key={p}
                   onClick={() => setProduct(p)}
-                  className={`min-h-[48px] px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
                     product === p
                       ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
                       : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
@@ -200,12 +200,12 @@ export default function IterateWinners() {
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Creative Risk Level</label>
             <div className="bg-white/5 rounded-xl p-6">
-              <div className="flex gap-3 mb-4">
+              <div className="flex gap-2 mb-4">
                 {(['SAFE', 'BOLD', 'WILD'] as CreativityLevel[]).map((level) => (
                   <button
                     key={level}
                     onClick={() => setCreativityLevel(level)}
-                    className={`flex-1 min-h-[48px] px-4 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
                       creativityLevel === level
                         ? level === 'SAFE'
                           ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 focus:ring-blue-400"
@@ -257,7 +257,7 @@ export default function IterateWinners() {
                     <button
                       key={type.value}
                       onClick={() => setVariationType(type.value)}
-                      className={`w-full min-h-[56px] px-5 py-4 rounded-lg text-left transition-all flex items-start gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
+                      className={`w-full px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
                         isSelected
                           ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
                           : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
@@ -290,7 +290,7 @@ export default function IterateWinners() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setVariationCount(Math.max(1, variationCount - 1))}
-                  className="min-w-[48px] min-h-[48px] rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
+                  className="w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
                 >
                   −
                 </button>
@@ -307,7 +307,7 @@ export default function IterateWinners() {
                 />
                 <button
                   onClick={() => setVariationCount(Math.min(50, variationCount + 1))}
-                  className="min-w-[48px] min-h-[48px] rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
+                  className="w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xl transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
                 >
                   +
                 </button>
@@ -322,12 +322,12 @@ export default function IterateWinners() {
           {/* Aspect Ratio Selector */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Aspect Ratio</label>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-4 gap-2">
               {(['1:1', '4:5', '9:16', '16:9'] as AspectRatio[]).map((ratio) => (
                 <button
                   key={ratio}
                   onClick={() => setAspectRatio(ratio)}
-                  className={`min-h-[48px] px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
                     aspectRatio === ratio
                       ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
                       : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
@@ -382,7 +382,7 @@ export default function IterateWinners() {
                       </div>
                       <p className="text-white font-medium mb-1">{uploadedImageName}</p>
                       <p className="text-gray-500 text-xs mb-4">Click or drag to replace</p>
-                      <label className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-lg bg-white/5 text-gray-300 text-sm cursor-pointer hover:bg-white/10 transition-colors w-fit focus-within:ring-2 focus-within:ring-white/30">
+                      <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-300 text-sm cursor-pointer hover:bg-white/10 transition-colors w-fit focus-within:ring-2 focus-within:ring-white/30">
                         <Upload className="w-4 h-4" />
                         Replace Image
                         <input
@@ -406,7 +406,7 @@ export default function IterateWinners() {
                   </div>
                   <p className="text-white font-medium mb-1">Drop your winning ad here</p>
                   <p className="text-gray-500 text-sm mb-4">or click to browse (PNG, JPG, up to 10MB)</p>
-                  <div className="flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-lg bg-[#FF3838]/10 text-[#FF3838] text-sm font-medium">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF3838]/10 text-[#FF3838] text-sm font-medium">
                     <Upload className="w-4 h-4" />
                     Choose File
                   </div>
@@ -453,7 +453,7 @@ export default function IterateWinners() {
           <button
             onClick={handleStartPipeline}
             disabled={!uploadedImageUrl || triggerIteration.isPending}
-            className={`w-full min-h-[56px] py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+            className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
               uploadedImageUrl && !triggerIteration.isPending
                 ? "bg-gradient-to-r from-[#A78BFA] to-pink-600 text-white hover:from-[#9F7AEA] hover:to-pink-500 shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
                 : "bg-white/5 text-gray-600 cursor-not-allowed"
@@ -518,14 +518,14 @@ export default function IterateWinners() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmation(false)}
-                className="flex-1 min-h-[48px] px-4 py-3 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-all font-medium focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="flex-1 px-4 py-3 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-all font-medium focus:outline-none focus:ring-2 focus:ring-white/20"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmAndStart}
                 disabled={triggerIteration.isPending}
-                className="flex-1 min-h-[48px] px-4 py-3 rounded-lg bg-[#FF3838] text-white hover:bg-[#FF3838]/90 transition-all font-bold focus:outline-none focus:ring-2 focus:ring-[#FF3838] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-3 rounded-lg bg-[#FF3838] text-white hover:bg-[#FF3838]/90 transition-all font-bold focus:outline-none focus:ring-2 focus:ring-[#FF3838] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {triggerIteration.isPending ? (
                   <>
