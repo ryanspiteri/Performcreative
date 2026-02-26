@@ -413,3 +413,33 @@ export async function deleteHeadline(id: number): Promise<void> {
   
   await db.delete(headlineBank).where(eq(headlineBank.id, id));
 }
+
+// Canva token management
+export async function updateUserCanvaTokens(openId: string, accessToken: string, refreshToken: string, expiresAt: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(users)
+    .set({
+      canvaAccessToken: accessToken,
+      canvaRefreshToken: refreshToken,
+      canvaTokenExpiresAt: expiresAt,
+    })
+    .where(eq(users.openId, openId));
+}
+
+export async function getUserCanvaTokens(openId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.select({
+    accessToken: users.canvaAccessToken,
+    refreshToken: users.canvaRefreshToken,
+    expiresAt: users.canvaTokenExpiresAt,
+  })
+  .from(users)
+  .where(eq(users.openId, openId))
+  .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}

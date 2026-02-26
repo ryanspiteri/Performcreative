@@ -1,7 +1,8 @@
-import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle } from "lucide-react";
+import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
 import { ChildGenerationControls } from "./ChildGenerationControls";
 
 export function IterationResults({ run }: { run: any }) {
@@ -12,8 +13,25 @@ export function IterationResults({ run }: { run: any }) {
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [regenOverrides, setRegenOverrides] = useState<{ headline?: string; subheadline?: string; backgroundPrompt?: string }>({});
   const [showRegenForm, setShowRegenForm] = useState<number | null>(null);
+  const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
+  const [canvaDesignUrls, setCanvaDesignUrls] = useState<Record<number, string>>({});
 
   const utils = trpc.useUtils();
+  const { data: canvaStatus } = trpc.canva.isConnected.useQuery();
+  const uploadToCanva = trpc.canva.uploadAndCreateDesign.useMutation();
+  
+  const handleUploadToCanva = async (index: number, imageUrl: string, title: string, width: number, height: number) => {
+    setUploadingToCanva(index);
+    try {
+      const result = await uploadToCanva.mutateAsync({ imageUrl, title, width, height });
+      setCanvaDesignUrls(prev => ({ ...prev, [index]: result.editUrl }));
+      toast.success("Uploaded to Canva! Click 'Edit in Canva' to open.");
+    } catch (err: any) {
+      toast.error(`Canva upload failed: ${err.message}`);
+    } finally {
+      setUploadingToCanva(null);
+    }
+  };
 
   const approveBrief = trpc.pipeline.approveIterationBrief.useMutation({
     onSuccess: () => { toast.success("Brief approved! Generating variations..."); utils.pipeline.get.invalidate(); utils.pipeline.list.invalidate(); },
@@ -393,22 +411,63 @@ export function IterationResults({ run }: { run: any }) {
                     {iterationStage === "stage_3b_variation_approval" && !isRegenerating && (
                       <div className="space-y-2 pt-2">
                         {v.url && !v.url.includes("placeholder") && (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(v.url); toast.success("URL copied!"); }}
-                              className="flex-1 bg-[#FF3838]/10 hover:bg-[#FF3838]/20 text-[#FF3838] px-3 py-2 rounded-lg text-xs font-medium"
-                            >
-                              Copy URL
-                            </button>
-                            <a
-                              href={v.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 bg-white/5 hover:bg-white/10 text-white px-3 py-2 rounded-lg text-xs font-medium text-center"
-                            >
-                              Open
-                            </a>
-                          </div>
+                          <>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => { navigator.clipboard.writeText(v.url); toast.success("URL copied!"); }}
+                                className="flex-1 bg-[#FF3838]/10 hover:bg-[#FF3838]/20 text-[#FF3838] px-3 py-2 rounded-lg text-xs font-medium"
+                              >
+                                Copy URL
+                              </button>
+                              <a
+                                href={v.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 bg-white/5 hover:bg-white/10 text-white px-3 py-2 rounded-lg text-xs font-medium text-center"
+                              >
+                                Open
+                              </a>
+                            </div>
+                            
+                            {/* Canva Upload Button */}
+                            {canvaStatus?.connected && (
+                              <div className="border-t border-white/5 pt-2">
+                                {canvaDesignUrls[i] ? (
+                                  <a
+                                    href={canvaDesignUrls[i]}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-center gap-2 w-full bg-[#7D2AE7] hover:bg-[#6B23C7] text-white px-3 py-2 rounded-lg text-xs font-medium"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    Edit in Canva
+                                  </a>
+                                ) : uploadingToCanva === i ? (
+                                  <button
+                                    disabled
+                                    className="flex items-center justify-center gap-2 w-full bg-[#7D2AE7]/50 text-white px-3 py-2 rounded-lg text-xs font-medium"
+                                  >
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    Uploading...
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      const aspectRatio = run.aspectRatio || "1:1";
+                                      const [w, h] = aspectRatio.split(":").map(Number);
+                                      const width = w === 1 && h === 1 ? 2048 : w === 4 && h === 5 ? 2048 : w === 9 && h === 16 ? 2304 : 4096;
+                                      const height = w === 1 && h === 1 ? 2048 : w === 4 && h === 5 ? 2560 : w === 9 && h === 16 ? 4096 : 2304;
+                                      handleUploadToCanva(i, v.url, briefVariation?.headline || `Variation ${i + 1}`, width, height);
+                                    }}
+                                    className="flex items-center justify-center gap-2 w-full bg-[#7D2AE7]/10 hover:bg-[#7D2AE7]/20 border border-[#7D2AE7]/30 text-[#7D2AE7] px-3 py-2 rounded-lg text-xs font-medium"
+                                  >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    Upload to Canva
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
 
                         {/* Regenerate button */}

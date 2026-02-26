@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startAutoSync } from "../services/foreplaySync";
+import { handleCanvaCallback } from "../routers/canva";
 import multer from "multer";
 import * as db from "../db";
 import { storagePut } from "../storage";
@@ -45,6 +46,9 @@ async function startServer() {
   });
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  
+  // Canva OAuth callback
+  app.get("/api/canva/callback", handleCanvaCallback);
   
   // UGC video upload endpoint (multipart, bypasses tRPC)
   app.post("/api/ugc/upload", upload.single("video"), async (req, res) => {

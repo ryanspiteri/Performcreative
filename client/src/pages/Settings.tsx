@@ -1,11 +1,85 @@
-import { Settings as SettingsIcon } from "lucide-react";
+import { SettingsIcon, ExternalLink } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { useEffect } from "react";
 
 export default function Settings() {
+  const { data: canvaStatus, refetch } = trpc.canva.isConnected.useQuery();
+  const disconnectMutation = trpc.canva.disconnect.useMutation({
+    onSuccess: () => {
+      toast.success("Canva disconnected");
+      refetch();
+    },
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("canva") === "connected") {
+      toast.success("Canva connected successfully!");
+      refetch();
+      window.history.replaceState({}, "", "/settings");
+    } else if (params.get("canva") === "error") {
+      toast.error("Canva connection failed");
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, [refetch]);
+
+  const getAuthUrl = trpc.canva.getAuthUrl.useQuery(undefined, {
+    enabled: !!canvaStatus && !canvaStatus.connected,
+  });
+
+  const handleConnectCanva = () => {
+    if (getAuthUrl.data?.authUrl) {
+      window.location.href = getAuthUrl.data.authUrl;
+    } else {
+      toast.error("Failed to generate Canva authorization URL");
+    }
+  };
+
   return (
     <div className="p-6 max-w-2xl">
       <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
 
       <div className="space-y-4">
+        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-6">
+          <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <SettingsIcon className="w-4 h-4" />
+            Canva Integration
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white font-medium">Canva Account</p>
+                <p className="text-sm text-gray-400">
+                  {canvaStatus?.connected
+                    ? "Connected - Generated variations will upload to Canva"
+                    : "Not connected - Connect to enable automatic design creation"}
+                </p>
+              </div>
+              {canvaStatus?.connected ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                >
+                  Disconnect
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleConnectCanva}
+                  className="bg-[#7D2AE7] hover:bg-[#6B23C7] text-white"
+                  size="sm"
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Connect Canva
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-6">
           <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
             <SettingsIcon className="w-4 h-4" />

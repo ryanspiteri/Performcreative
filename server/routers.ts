@@ -17,6 +17,7 @@ import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
 import { storagePut } from "./storage";
 import { ACTIVE_PRODUCTS } from "../drizzle/schema";
+import { canvaRouter } from "./routers/canva";
 
 const VALID_USERNAME = "ONEST";
 const VALID_PASSWORD = "UnlockGrowth";
@@ -35,6 +36,7 @@ const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls ca
 
 export const appRouter = router({
   system: systemRouter,
+  canva: canvaRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

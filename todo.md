@@ -1110,3 +1110,17 @@ All three fixes implemented and tested:
 - [x] Animate sidebar slide-in/slide-out transitions
 - [x] Add overlay backdrop when sidebar is open on mobile
 - [x] Test on mobile viewport sizes
+
+
+## CANVA INTEGRATION
+- [x] Add Canva API credentials to secrets (Client ID, Client Secret)
+- [x] Create Canva OAuth configuration and callback route
+- [x] Implement OAuth token storage in database
+- [x] Create Canva API client helper functions (upload asset, create design)
+- [x] Integrate Canva upload into iteration pipeline after Nano Banana Pro generation
+- [x] Add "Edit in Canva" buttons to Results page for each variation
+- [ ] Create folder organization per pipeline run
+- [ ] Test OAuth flow and token refresh
+- [ ] Test asset upload with generated variations
+- [ ] Test design creation and edit URLs
+- [ ] Handle Canva API errors gracefully

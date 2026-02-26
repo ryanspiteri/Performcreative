@@ -11,4 +11,6 @@ export const ENV = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   clickupApiKey: process.env.CLICKUP_API_KEY ?? "",
+  CANVA_CLIENT_ID: process.env.CANVA_CLIENT_ID ?? "",
+  CANVA_CLIENT_SECRET: process.env.CANVA_CLIENT_SECRET ?? "",
 };
