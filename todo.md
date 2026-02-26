@@ -1140,3 +1140,12 @@ All three fixes implemented and tested:
 - [ ] Create 3 Canva Brand Templates (1:1, 4:5, 9:16) once Enterprise access approved
 - [ ] Update frontend to show "Create Editable Design" option
 - [ ] Test end-to-end editable design workflow
+
+## PSD EXPORT FEATURE — EDITABLE LAYERS
+
+- [x] Install ag-psd npm package for PSD generation
+- [x] Create PSD builder service with layer generation
+- [x] Implement generatePSD endpoint in backend
+- [x] Add "Download PSD" button to Iterate Winners results
+- [ ] Test PSD generation with all layer types
+- [ ] Verify PSD opens correctly in Photoshop

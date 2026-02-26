@@ -1,0 +1,103 @@
+import { publicProcedure, router } from "../_core/trpc";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { generateIterationPSD } from "../services/psdBuilder";
+import { storagePut } from "../storage";
+import * as db from "../db";
+
+/**
+ * PSD Export Router
+ * Handles generation and download of PSD files with editable layers
+ */
+
+export const psdRouter = router({
+  /**
+   * Generate PSD from iteration variation
+   * Returns a download URL for the PSD file
+   */
+  generateFromIteration: publicProcedure
+    .input(
+      z.object({
+        runId: z.number(),
+        variationIndex: z.number(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Must be logged in" });
+      }
+
+      try {
+        // Get the pipeline run
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Pipeline run not found" });
+        }
+
+        // Get variation data
+        const variations = run.iterationVariations as any[];
+        if (!variations || variations.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "No variations found" });
+        }
+
+        const variation = variations[input.variationIndex];
+        if (!variation) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Variation not found" });
+        }
+
+        // Extract image URLs
+        const compositeImageUrl = variation.imageUrl;
+        const productImageUrl = variation.productImageUrl || run.iterationSourceUrl; // Fallback to source
+        const backgroundImageUrl = variation.backgroundImageUrl;
+
+        if (!compositeImageUrl || !backgroundImageUrl) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Missing required image URLs for PSD generation",
+          });
+        }
+
+        // Get dimensions from aspect ratio
+        const aspectRatio = run.aspectRatio || "1:1";
+        let width = 1080;
+        let height = 1080;
+
+        if (aspectRatio === "4:5") {
+          width = 1080;
+          height = 1350;
+        } else if (aspectRatio === "9:16") {
+          width = 1080;
+          height = 1920;
+        }
+
+        // Generate PSD
+        console.log(`[PSD] Generating PSD for run ${input.runId}, variation ${input.variationIndex}`);
+        const psdBuffer = await generateIterationPSD(
+          compositeImageUrl,
+          productImageUrl || compositeImageUrl, // Use composite if no product image
+          backgroundImageUrl,
+          width,
+          height
+        );
+
+        // Upload to S3
+        const fileName = `psd-${run.id}-${input.variationIndex}-${Date.now()}.psd`;
+        const fileKey = `psd-exports/${ctx.user.openId}/${fileName}`;
+        const { url } = await storagePut(fileKey, psdBuffer, "application/octet-stream");
+
+        console.log(`[PSD] Generated and uploaded PSD: ${url}`);
+
+        return {
+          url,
+          fileName,
+          fileSize: psdBuffer.length,
+        };
+      } catch (error) {
+        console.error("[PSD] Generation failed:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `PSD generation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        });
+      }
+    }),
+});

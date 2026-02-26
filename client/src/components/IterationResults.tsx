@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle, Upload } from "lucide-react";
+import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -15,6 +15,9 @@ export function IterationResults({ run }: { run: any }) {
   const [showRegenForm, setShowRegenForm] = useState<number | null>(null);
   const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
   const [canvaDesignUrls, setCanvaDesignUrls] = useState<Record<number, string>>({});
+  const [generatingPSD, setGeneratingPSD] = useState<number | null>(null);
+  
+  const generatePSD = trpc.psd.generateFromIteration.useMutation();
 
   const utils = trpc.useUtils();
   const { data: canvaStatus } = trpc.canva.isConnected.useQuery();
@@ -427,6 +430,49 @@ export function IterationResults({ run }: { run: any }) {
                               >
                                 Open
                               </a>
+                            </div>
+                            
+                            {/* Download Buttons */}
+                            <div className="flex gap-2">
+                              <a
+                                href={v.url}
+                                download
+                                className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 text-white px-3 py-2 rounded-lg text-xs font-medium"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                PNG
+                              </a>
+                              {generatingPSD === i ? (
+                                <button
+                                  disabled
+                                  className="flex-1 flex items-center justify-center gap-1.5 bg-blue-500/50 text-white px-3 py-2 rounded-lg text-xs font-medium"
+                                >
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  Generating...
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={async () => {
+                                    setGeneratingPSD(i);
+                                    try {
+                                      const result = await generatePSD.mutateAsync({ runId: run.id, variationIndex: i });
+                                      const a = document.createElement('a');
+                                      a.href = result.url;
+                                      a.download = result.fileName;
+                                      a.click();
+                                      toast.success("PSD generated! Download started.");
+                                    } catch (err: any) {
+                                      toast.error(`PSD generation failed: ${err.message}`);
+                                    } finally {
+                                      setGeneratingPSD(null);
+                                    }
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 px-3 py-2 rounded-lg text-xs font-medium"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  PSD
+                                </button>
+                              )}
                             </div>
                             
                             {/* Canva Upload Button */}
