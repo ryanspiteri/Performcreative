@@ -2,21 +2,28 @@ import { describe, it, expect } from "vitest";
 
 describe("Product Renders & Info", () => {
   describe("Active Products", () => {
-    it("should have exactly 5 active products", async () => {
+    it("should have exactly 12 active products (5 hero + 7 extended)", async () => {
       const { ACTIVE_PRODUCTS } = await import("../drizzle/schema");
-      expect(ACTIVE_PRODUCTS).toHaveLength(5);
+      expect(ACTIVE_PRODUCTS).toHaveLength(12);
+      // Hero products
       expect(ACTIVE_PRODUCTS).toContain("Hyperburn");
       expect(ACTIVE_PRODUCTS).toContain("Thermosleep");
       expect(ACTIVE_PRODUCTS).toContain("Hyperload");
+      expect(ACTIVE_PRODUCTS).toContain("Protein + Collagen");
+      expect(ACTIVE_PRODUCTS).toContain("Creatine");
+      // Extended products
       expect(ACTIVE_PRODUCTS).toContain("Thermoburn");
       expect(ACTIVE_PRODUCTS).toContain("Carb Control");
+      expect(ACTIVE_PRODUCTS).toContain("HyperPump");
+      expect(ACTIVE_PRODUCTS).toContain("AminoLoad");
+      expect(ACTIVE_PRODUCTS).toContain("Marine Collagen");
+      expect(ACTIVE_PRODUCTS).toContain("SuperGreens");
+      expect(ACTIVE_PRODUCTS).toContain("Whey ISO Pro");
     });
 
-    it("should NOT contain removed products", async () => {
+    it("should NOT contain removed or invalid products", async () => {
       const { ACTIVE_PRODUCTS } = await import("../drizzle/schema");
-      expect(ACTIVE_PRODUCTS).not.toContain("SuperGreens");
       expect(ACTIVE_PRODUCTS).not.toContain("EAA");
-      expect(ACTIVE_PRODUCTS).not.toContain("Creatine");
       expect(ACTIVE_PRODUCTS).not.toContain("Pre-Workout");
       expect(ACTIVE_PRODUCTS).not.toContain("HB");
     });

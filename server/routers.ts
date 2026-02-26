@@ -89,11 +89,14 @@ export const appRouter = router({
       .input(z.object({
         product: z.string(),
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
-        foreplayAdId: z.string(),
+        foreplayAdId: z.string().optional(),
         foreplayAdTitle: z.string(),
         foreplayAdBrand: z.string(),
         mediaUrl: z.string(),
         thumbnailUrl: z.string().optional(),
+        sourceType: z.enum(["competitor", "winning_ad"]).optional(),
+        duration: z.number().optional(),
+        styleConfig: z.record(z.string(), z.number()).optional(),
       }))
       .mutation(async ({ input }) => {
         const runId = await db.createPipelineRun({
@@ -102,18 +105,46 @@ export const appRouter = router({
           product: input.product,
           priority: input.priority,
           triggerSource: "manual",
-          foreplayAdId: input.foreplayAdId,
+          foreplayAdId: input.foreplayAdId || "",
           foreplayAdTitle: input.foreplayAdTitle,
           foreplayAdBrand: input.foreplayAdBrand,
           videoUrl: input.mediaUrl,
           thumbnailUrl: input.thumbnailUrl || "",
           videoStage: "stage_1_transcription",
+          videoSourceType: input.sourceType || "competitor",
+          videoDuration: input.duration || 60,
+          videoStyleConfig: input.styleConfig || { direct_response: 2, ugc_testimonial: 2 },
         });
-        runVideoPipelineStages1to3(runId, input).catch(err => {
+        runVideoPipelineStages1to3(runId, {
+          ...input,
+          foreplayAdId: input.foreplayAdId || "",
+          sourceType: input.sourceType || "competitor",
+          duration: input.duration || 60,
+          styleConfig: input.styleConfig || { direct_response: 2, ugc_testimonial: 2 },
+        }).catch(err => {
           console.error("[Pipeline] Video pipeline stages 1-3 failed:", err);
           db.updatePipelineRun(runId, { status: "failed", errorMessage: err.message || "Pipeline failed" });
         });
         return { runId, status: "running" };
+      }),
+
+    // Upload video for "Our Winning Ad" mode
+    uploadWinningAdVideo: publicProcedure
+      .input(z.object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const maxSize = 100 * 1024 * 1024; // 100MB
+        if (buffer.length > maxSize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "File too large. Maximum size is 100MB." });
+        }
+        const suffix = Math.random().toString(36).substring(2, 10);
+        const fileKey = `winning-ads/${Date.now()}-${suffix}-${input.fileName}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        return { url, fileKey };
       }),
 
     fetchForeplayVideos: publicProcedure.query(async () => {

@@ -22,7 +22,7 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 /** Active ONEST products */
-export const ACTIVE_PRODUCTS = ["Hyperburn", "Thermosleep", "Hyperload", "Thermoburn", "Carb Control"] as const;
+export const ACTIVE_PRODUCTS = ["Hyperburn", "Thermosleep", "Hyperload", "Thermoburn", "Carb Control", "Protein + Collagen", "Creatine", "HyperPump", "AminoLoad", "Marine Collagen", "SuperGreens", "Whey ISO Pro"] as const;
 export type ActiveProduct = typeof ACTIVE_PRODUCTS[number];
 
 export const pipelineRuns = mysqlTable("pipeline_runs", {
@@ -57,6 +57,10 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoBriefReview: json("videoBriefReview"),
   videoStage: varchar("videoStage", { length: 64 }),
   videoBriefOptions: json("videoBriefOptions"),
+  videoSourceType: mysqlEnum("videoSourceType", ["competitor", "winning_ad"]).default("competitor"),
+  videoDuration: int("videoDuration").default(60),
+  videoStyleConfig: json("videoStyleConfig"),
+  videoUploadUrl: text("videoUploadUrl"),
   iterationSourceUrl: text("iterationSourceUrl"),
   iterationAnalysis: text("iterationAnalysis"),
   iterationBrief: text("iterationBrief"),
