@@ -1,5 +1,9 @@
-import { writePsd, Psd, Layer } from "ag-psd";
+import { writePsd, Psd, Layer, initializeCanvas } from "ag-psd";
 import sharp from "sharp";
+import { createCanvas } from "canvas";
+
+// Initialize ag-psd with node-canvas
+initializeCanvas(createCanvas as any);
 
 /**
  * PSD Builder Service

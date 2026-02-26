@@ -46,16 +46,19 @@ export const psdRouter = router({
         }
 
         // Extract image URLs
-        const compositeImageUrl = variation.imageUrl;
-        const productImageUrl = variation.productImageUrl || run.iterationSourceUrl; // Fallback to source
-        const backgroundImageUrl = variation.backgroundImageUrl;
+        const compositeImageUrl = variation.url; // The final composited image
+        const productImageUrl = variation.productImageUrl || run.iterationSourceUrl; // Product render
+        const controlImageUrl = variation.controlImageUrl || run.iterationSourceUrl; // Control/source image
 
-        if (!compositeImageUrl || !backgroundImageUrl) {
+        if (!compositeImageUrl) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Missing required image URLs for PSD generation",
+            message: "Missing composite image URL for PSD generation",
           });
         }
+
+        // For PSD, we use the control image as background since we don't have separate background
+        const backgroundImageUrl = controlImageUrl;
 
         // Get dimensions from aspect ratio
         const aspectRatio = run.aspectRatio || "1:1";

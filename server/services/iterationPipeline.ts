@@ -212,6 +212,8 @@ export async function runIterationStage3(runId: number, run: any) {
           subheadline: v.subheadline || null,
           angle: v.angle || null,
           backgroundNote: v.backgroundNote || null,
+          productImageUrl: productRender.url,
+          controlImageUrl: sourceUrl,
         });
       }
     } else {
@@ -254,6 +256,8 @@ export async function runIterationStage3(runId: number, run: any) {
           subheadline: null,
           angle: null,
           backgroundNote: null,
+          productImageUrl: productRender.url,
+          controlImageUrl: sourceUrl,
         });
       }
     }

@@ -1149,3 +1149,45 @@ All three fixes implemented and tested:
 - [x] Add "Download PSD" button to Iterate Winners results
 - [ ] Test PSD generation with all layer types
 - [ ] Verify PSD opens correctly in Photoshop
+
+## PSD GENERATION BUG FIX
+
+- [x] Fix PSD generation error "Missing required image URLs"
+- [x] Check variation data structure for available image URLs
+- [x] Adjust PSD builder to work with actual variation data
+- [x] Update iteration pipeline to save productImageUrl and controlImageUrl
+- [x] Fix Canvas initialization error by installing canvas package
+- [ ] Test PSD download with newly generated variations (requires fresh pipeline run)
+
+## PER-VARIATION STRATEGY SELECTION
+
+- [x] Change UI to select quantity first, then strategy per variation
+- [x] Add mode toggle (All Same vs Custom Per Variation)
+- [x] Add preset shortcuts (All Full Remix, All Headlines, All Backgrounds)
+- [x] Add individual dropdowns for each variation in custom mode
+- [x] Update frontend to send array of strategies when in custom mode
+- [ ] Update backend to accept and use per-variation strategies in brief generation
+- [ ] Test generating variations with mixed strategies
+
+## EDITABLE BRIEF APPROVAL
+
+- [ ] Add Stage 2b: Brief Review & Edit between brief generation and image generation
+- [ ] Create editable cards for each variation showing headline, subheadline, benefits, visual prompt
+- [ ] Add inline editing for all text fields
+- [ ] Add visual prompt editing for background descriptions
+- [ ] Add "Remove Variation" button to exclude variations before generation
+- [ ] Add "Regenerate Brief" button to ask AI for new brief
+- [ ] Add "Approve & Generate" button to proceed with edited brief
+- [ ] Update backend to accept edited brief data
+- [ ] Test editing and generating with modified briefs
+
+## CHILD GENERATION SYSTEM (PARENT-CHILD VARIATIONS)
+
+- [ ] Add "Generate Children" button to completed parent variations
+- [ ] Create child generation modal with parent selection checkboxes
+- [ ] Add child count selector (3, 5, 10 children per parent)
+- [ ] Add per-child strategy selection
+- [ ] Update backend to generate child variations from selected parents
+- [ ] Link child variations to parent in database (parentRunId)
+- [ ] Display parent-child relationship in results UI
+- [ ] Test generating 3 children from 2 parents

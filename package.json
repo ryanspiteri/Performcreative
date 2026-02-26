@@ -125,6 +125,7 @@
       "@ffmpeg-installer/linux-x64"
     ],
     "onlyBuiltDependencies": [
+      "canvas",
       "ffmpeg-static"
     ]
   }

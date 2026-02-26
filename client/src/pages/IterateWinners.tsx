@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle } from "lucide-react";
@@ -26,13 +26,27 @@ export default function IterateWinners() {
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
-  const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Changed to single selection
+  const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Legacy single selection
   const [variationCount, setVariationCount] = useState(5);
+  const [perVariationStrategies, setPerVariationStrategies] = useState<VariationType[]>(Array(5).fill('full_remix'));
+  const [usePerVariationMode, setUsePerVariationMode] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
+
+  // Sync per-variation strategies array when variation count changes
+  useEffect(() => {
+    setPerVariationStrategies(prev => {
+      const newArray = Array(variationCount).fill('full_remix');
+      // Preserve existing selections up to the new count
+      for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
+        newArray[i] = prev[i];
+      }
+      return newArray;
+    });
+  }, [variationCount]);
 
   // File upload handler
   const handleFileUpload = useCallback(async (file: File) => {
@@ -114,7 +128,7 @@ export default function IterateWinners() {
         sourceImageUrl: uploadedImageUrl!,
         sourceImageName: uploadedImageName,
         creativityLevel,
-        variationTypes: [variationType], // Now single selection
+        variationTypes: usePerVariationMode ? perVariationStrategies : [variationType], // Per-variation or single
         variationCount,
         aspectRatio,
       });
@@ -234,51 +248,128 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* FIXED: Variation Type Selector - Single Select Radio Buttons */}
+          {/* Variation Strategy Selector with Per-Variation Mode */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">
               Variation Strategy
             </label>
             <div className="bg-white/5 rounded-xl p-6">
-              <p className="text-sm text-gray-300 mb-4">
-                Choose which element to test. The system will generate {variationCount} variation{variationCount === 1 ? '' : 's'} testing this variable whilst keeping other elements similar to your control ad.
-              </p>
-              <div className="space-y-2">
-                {([
-                  { value: 'full_remix', label: 'Full Remix', desc: 'Test everything — headlines, backgrounds, layouts, benefits. Maximum creative diversity.' },
-                  { value: 'headline_only', label: 'Headline Only', desc: 'Test different headlines whilst keeping background, layout, and benefits consistent.' },
-                  { value: 'background_only', label: 'Background Only', desc: 'Test different background colours/styles whilst keeping headline and layout consistent.' },
-                  { value: 'layout_only', label: 'Layout Only', desc: 'Test product placement and text positioning whilst keeping headline and background consistent.' },
-                  { value: 'benefit_callouts_only', label: 'Benefits Only', desc: 'Test different benefit copy whilst keeping headline and visual style consistent.' },
-                  { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors/props whilst keeping headline and layout consistent.' },
-                  { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models whilst keeping headline and composition consistent.' },
-                ] as const).map((type) => {
-                  const isSelected = variationType === type.value;
-                  return (
-                    <button
-                      key={type.value}
-                      onClick={() => setVariationType(type.value)}
-                      className={`w-full px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
-                        isSelected
-                          ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
-                          : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
-                      }`}
-                    >
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                        isSelected ? "border-white bg-white" : "border-gray-500"
-                      }`}>
-                        {isSelected && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-[#FF3838]" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold text-sm mb-1">{type.label}</div>
-                        <div className="text-xs opacity-90 leading-relaxed">{type.desc}</div>
-                      </div>
-                    </button>
-                  );
-                })}
+              {/* Mode Toggle */}
+              <div className="flex gap-2 mb-6">
+                <button
+                  onClick={() => setUsePerVariationMode(false)}
+                  className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                    !usePerVariationMode
+                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  All Same Strategy
+                </button>
+                <button
+                  onClick={() => setUsePerVariationMode(true)}
+                  className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                    usePerVariationMode
+                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  Custom Per Variation
+                </button>
               </div>
+
+              {!usePerVariationMode ? (
+                <>
+                  <p className="text-sm text-gray-300 mb-4">
+                    All {variationCount} variations will use the same strategy.
+                  </p>
+                  <div className="space-y-2">
+                    {([
+                      { value: 'full_remix', label: 'Full Remix', desc: 'Test everything — headlines, backgrounds, layouts, benefits.' },
+                      { value: 'headline_only', label: 'Headline Only', desc: 'Test different headlines only.' },
+                      { value: 'background_only', label: 'Background Only', desc: 'Test different backgrounds only.' },
+                      { value: 'layout_only', label: 'Layout Only', desc: 'Test product placement and positioning.' },
+                      { value: 'benefit_callouts_only', label: 'Benefits Only', desc: 'Test different benefit copy.' },
+                      { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors.' },
+                      { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models.' },
+                    ] as const).map((type) => {
+                      const isSelected = variationType === type.value;
+                      return (
+                        <button
+                          key={type.value}
+                          onClick={() => setVariationType(type.value)}
+                          className={`w-full px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 ${
+                            isSelected
+                              ? "bg-[#FF3838]/10 border-2 border-[#FF3838] text-white"
+                              : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-2 border-transparent"
+                          }`}
+                        >
+                          <div className="flex-1">
+                            <div className="font-semibold text-sm mb-1">{type.label}</div>
+                            <div className="text-xs opacity-75">{type.desc}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-300 mb-4">
+                    Choose a strategy for each variation individually. Test multiple hypotheses in one run.
+                  </p>
+                  
+                  {/* Quick Presets */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setPerVariationStrategies(Array(variationCount).fill('full_remix'))}
+                      className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      All Full Remix
+                    </button>
+                    <button
+                      onClick={() => setPerVariationStrategies(Array(variationCount).fill('headline_only'))}
+                      className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      All Headlines
+                    </button>
+                    <button
+                      onClick={() => setPerVariationStrategies(Array(variationCount).fill('background_only'))}
+                      className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      All Backgrounds
+                    </button>
+                  </div>
+
+                  {/* Individual Variation Selectors */}
+                  <div className="space-y-3">
+                    {Array.from({ length: variationCount }).map((_, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-4">
+                        <label className="block text-xs font-medium text-gray-400 mb-2">
+                          Variation {index + 1} Strategy
+                        </label>
+                        <select
+                          value={perVariationStrategies[index]}
+                          onChange={(e) => {
+                            const newStrategies = [...perVariationStrategies];
+                            newStrategies[index] = e.target.value as VariationType;
+                            setPerVariationStrategies(newStrategies);
+                          }}
+                          className="w-full px-3 py-2 rounded-lg bg-white/10 text-white text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:border-transparent"
+                        >
+                          <option value="full_remix">Full Remix</option>
+                          <option value="headline_only">Headline Only</option>
+                          <option value="background_only">Background Only</option>
+                          <option value="layout_only">Layout Only</option>
+                          <option value="benefit_callouts_only">Benefits Only</option>
+                          <option value="props_only">Props Only</option>
+                          <option value="talent_swap">Talent Swap</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

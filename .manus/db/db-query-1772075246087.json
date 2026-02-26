@@ -1,0 +1,15 @@
+{
+  "query": "SELECT id, iterationVariations, iterationSourceUrl FROM pipeline_runs WHERE pipelineType = 'iteration' AND status = 'completed' AND iterationVariations IS NOT NULL LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, iterationVariations, iterationSourceUrl FROM pipeline_runs WHERE pipelineType = 'iteration' AND status = 'completed' AND iterationVariations IS NOT NULL LIMIT 1;",
+  "rows": [
+    {
+      "id": "300002",
+      "iterationVariations": "[{\"url\": \"https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+1+Failed\", \"variation\": \"Control (failed)\"}, {\"url\": \"https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+2+Failed\", \"variation\": \"Variation 2 (failed)\"}, {\"url\": \"https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+3+Failed\", \"variation\": \"Variation 3 (failed)\"}]",
+      "iterationSourceUrl": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\titerationVariations\titerationSourceUrl\n300002\t[{\"url\": \"https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+1+Failed\", \"variation\": \"Control (failed)\"}, {\"url\": \"https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+2+Failed\", \"variation\": \"Variation 2 (failed)\"}, {\"url\": \"https://via.placeholder.com/1080x1080/01040A/FF3838?text=Image+3+Failed\", \"variation\": \"Variation 3 (failed)\"}]\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d\n",
+  "stderr": "",
+  "execution_time_ms": 1682
+}
