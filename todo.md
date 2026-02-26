@@ -1207,3 +1207,28 @@ All three fixes implemented and tested:
 - [x] Re-add PSD download button to frontend
 - [ ] Test PNG and PSD downloads with fresh pipeline run
 - [ ] Verify PSD opens correctly in Photoshop
+
+## REMOVE PSD FEATURE
+
+- [x] Remove PSD router and endpoint
+- [x] Remove psdBuilder service
+- [x] Remove PSD button from frontend
+- [x] Remove ag-psd package dependency
+- [x] Clean up related imports and types
+
+## EDITABLE BRIEF APPROVAL
+
+- [ ] Add brief review/edit UI between Stage 2 and Stage 3
+- [ ] Show editable cards for each variation with headline, subheadline, benefits, visual prompt
+- [ ] Add "Approve & Generate", "Regenerate Brief", "Generate Selected" buttons
+- [ ] Update backend to accept edited brief data
+- [ ] Test brief editing and generation with modified content
+
+## CHILD GENERATION SYSTEM
+
+- [ ] Add "Generate Children" button to completed variation cards
+- [ ] Create child generation modal with quantity selector (3-10 children)
+- [ ] Implement backend endpoint for child generation from parent variation
+- [ ] Store parent-child relationships in database (parentRunId, variationLayer fields)
+- [ ] Display parent-child hierarchy in results view
+- [ ] Test generating 5 parents → 3 children each → 15 total unique variations

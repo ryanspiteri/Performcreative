@@ -118,9 +118,6 @@ importers:
       '@trpc/server':
         specifier: ^11.6.0
         version: 11.6.0(typescript@5.9.3)
-      ag-psd:
-        specifier: ^30.1.0
-        version: 30.1.0
       axios:
         specifier: ^1.12.0
         version: 1.12.2
@@ -2610,9 +2607,6 @@ packages:
   add@2.0.6:
     resolution: {integrity: sha512-j5QzrmsokwWWp6kUcJQySpbG+xfOBqqKnup3OIk1pz+kB/80SLorZ9V8zHFLO92Lcd+hbvq8bT+zOGoPkmBV0Q==}
 
-  ag-psd@30.1.0:
-    resolution: {integrity: sha512-1ce6o84aC+oVyl83A35HHUniGjwA3piHmGem3J2odBOFRq5p7i4htaco94vePLfOcingZu4fsyospJLwPagkhg==}
-
   agent-base@6.0.2:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
@@ -2718,9 +2712,6 @@ packages:
 
   bare-url@2.3.2:
     resolution: {integrity: sha512-ZMq4gd9ngV5aTMa5p9+UfY0b3skwhHELaDkhEHetMdX0LRkW9kzaym4oo/Eh+Ghm0CCDuMTsRIGM/ytUc1ZYmw==}
-
-  base64-js@1.5.1:
-    resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
   baseline-browser-mapping@2.8.12:
     resolution: {integrity: sha512-vAPMQdnyKCBtkmQA6FMCBvU9qFIppS3nzyXnEM+Lo2IAhG4Mpjv9cCxMudhgV3YdNNJv6TNqXy97dfRVL2LmaQ==}
@@ -4143,9 +4134,6 @@ packages:
 
   package-manager-detector@1.5.0:
     resolution: {integrity: sha512-uBj69dVlYe/+wxj8JOpr97XfsxH/eumMt6HqjNTmJDf/6NO9s+0uxeOneIz3AsPt2m6y9PqzDzd3ATcU17MNfw==}
-
-  pako@2.1.0:
-    resolution: {integrity: sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -7569,11 +7557,6 @@ snapshots:
 
   add@2.0.6: {}
 
-  ag-psd@30.1.0:
-    dependencies:
-      base64-js: 1.5.1
-      pako: 2.1.0
-
   agent-base@6.0.2:
     dependencies:
       debug: 4.4.3
@@ -7669,8 +7652,6 @@ snapshots:
     dependencies:
       bare-path: 3.0.0
     optional: true
-
-  base64-js@1.5.1: {}
 
   baseline-browser-mapping@2.8.12: {}
 
@@ -9361,8 +9342,6 @@ snapshots:
       netmask: 2.0.2
 
   package-manager-detector@1.5.0: {}
-
-  pako@2.1.0: {}
 
   parent-module@1.0.1:
     dependencies:
