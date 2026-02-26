@@ -1245,3 +1245,11 @@ All three fixes implemented and tested:
 - [x] Add "Push to ClickUp" button to frontend results page
 - [x] Add pushToClickUp mutation to IterationResults component
 - [ ] Test ClickUp push with real variation
+
+## REGENERATION FIX - PRESERVE BACKGROUND
+
+- [x] Update regenerateIterationVariation to detect text-only changes
+- [x] Use existing variation as control image when only text changes
+- [x] Only do full regeneration when backgroundPrompt is provided
+- [ ] Test regeneration with headline-only change (background should stay similar)
+- [ ] Test regeneration with background prompt (should generate new background)

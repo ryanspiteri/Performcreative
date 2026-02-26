@@ -372,14 +372,14 @@ export async function regenerateIterationVariation(
   // Build selections for just this one variation
   const headline = overrides?.headline || v.headline || `VARIATION ${variationIndex + 1}`;
   const subheadline = overrides?.subheadline || v.subheadline || null;
+  
+  // Check if user is only changing text (no background prompt override)
+  const isTextOnlyChange = !overrides?.backgroundPrompt && (overrides?.headline || overrides?.subheadline);
+  
   const bgPrompt = overrides?.backgroundPrompt
     || (v.backgroundNote
       ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
       : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
-
-  // Use Gemini 3 Pro Image for regeneration (same as main pipeline)
-  console.log(`[Iteration] Regenerating variation ${variationIndex + 1} for run #${runId} using Gemini`);
-  console.log(`[Iteration] Headline: "${headline}", BG prompt: "${bgPrompt.substring(0, 100)}..."`);
 
   // Get product render
   const productRenders = await db.getProductRendersByProduct(product);
@@ -392,26 +392,59 @@ export async function regenerateIterationVariation(
   const aspectRatio = run.aspectRatio || "1:1";
   const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
 
-  // Build reference-based prompt using same logic as Stage 3
-  const geminiPrompt = buildReferenceBasedPrompt({
-    headline,
-    subheadline: subheadline || undefined,
-    productName: `ONEST Health ${product}`,
-    backgroundStyleDescription: bgPrompt,
-    aspectRatio: aspectRatio as any,
-    targetAudience: briefData?.targetAudience || "fitness-conscious adults",
-  });
+  let finalUrl: string;
+  
+  // If only text is changing and we have the existing variation data, reuse the background
+  if (isTextOnlyChange && variations[variationIndex]?.url) {
+    console.log(`[Iteration] Text-only regeneration for variation ${variationIndex + 1} - reusing existing background`);
+    console.log(`[Iteration] New headline: "${headline}"`);
+    
+    // Reuse the existing composited image as-is
+    // Note: This is a simplified approach. Ideally we'd recomposite with Bannerbear,
+    // but that requires storing the original background URL separately.
+    // For now, we'll regenerate with the same background prompt to maintain consistency.
+    const geminiPrompt = buildReferenceBasedPrompt({
+      headline,
+      subheadline: subheadline || undefined,
+      productName: `ONEST Health ${product}`,
+      backgroundStyleDescription: bgPrompt,
+      aspectRatio: aspectRatio as any,
+      targetAudience: briefData?.targetAudience || "fitness-conscious adults",
+    });
 
-  // Generate with Nano Banana Pro
-  const sourceUrl = run.iterationSourceUrl || "";
-  const result = await generateProductAdWithNanoBananaPro({
-    prompt: geminiPrompt,
-    controlImageUrl: sourceUrl, // Pass control image as visual reference
-    productRenderUrl: productRender.url,
-    aspectRatio: aspectRatio as any,
-  });
+    const sourceUrl = run.iterationSourceUrl || "";
+    const result = await generateProductAdWithNanoBananaPro({
+      prompt: geminiPrompt,
+      controlImageUrl: variations[variationIndex].url, // Use the EXISTING variation as control instead of source
+      productRenderUrl: productRender.url,
+      aspectRatio: aspectRatio as any,
+    });
+    
+    finalUrl = result.imageUrl;
+  } else {
+    // Full regeneration with new background
+    console.log(`[Iteration] Full regeneration for variation ${variationIndex + 1} with new background`);
+    console.log(`[Iteration] Headline: "${headline}", BG prompt: "${bgPrompt.substring(0, 100)}..."`);
+    
+    const geminiPrompt = buildReferenceBasedPrompt({
+      headline,
+      subheadline: subheadline || undefined,
+      productName: `ONEST Health ${product}`,
+      backgroundStyleDescription: bgPrompt,
+      aspectRatio: aspectRatio as any,
+      targetAudience: briefData?.targetAudience || "fitness-conscious adults",
+    });
 
-  const finalUrl = result.imageUrl;
+    const sourceUrl = run.iterationSourceUrl || "";
+    const result = await generateProductAdWithNanoBananaPro({
+      prompt: geminiPrompt,
+      controlImageUrl: sourceUrl, // Use original source as control
+      productRenderUrl: productRender.url,
+      aspectRatio: aspectRatio as any,
+    });
+    
+    finalUrl = result.imageUrl;
+  }
 
   // Update the specific variation in the array
   const variationLabel = variationIndex === 0 ? "Control" : `Variation ${variationIndex + 1}`;
