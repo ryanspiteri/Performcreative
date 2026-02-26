@@ -1,7 +1,7 @@
 import { publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
-import { generatePKCE, getCanvaAuthUrl, exchangeCodeForToken, refreshAccessToken, uploadAssetToCanva, createDesignFromAsset } from "../services/canva";
+import { generatePKCE, getCanvaAuthUrl, exchangeCodeForToken, refreshAccessToken, uploadAssetToCanva, pollAssetUploadJob, createDesignFromAsset } from "../services/canva";
 import { TRPCError } from "@trpc/server";
 
 // Store PKCE verifiers temporarily (in production, use Redis or database)
@@ -27,7 +27,8 @@ export const canvaRouter = router({
 
     const { verifier, challenge } = generatePKCE();
     const state = `${ctx.user.openId}-${Date.now()}`;
-    const redirectUri = `${ctx.req.protocol}://${ctx.req.get("host")}/api/canva/callback`;
+    // Use fixed redirect URI to match Canva portal configuration
+    const redirectUri = "https://3000-ilfzg47vdtu2vrhca80ig-263dd919.sg1.manus.computer/api/canva/callback";
     
     // Store verifier for 10 minutes
     pkceStore.set(state, { verifier, expiresAt: Date.now() + 10 * 60 * 1000 });
@@ -84,19 +85,26 @@ export const canvaRouter = router({
         if (!tokens.accessToken) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Canva token missing" });
         }
-        const asset = await uploadAssetToCanva(tokens.accessToken, input.imageUrl, input.title);
+        const uploadJob = await uploadAssetToCanva(tokens.accessToken, input.imageUrl, input.title);
+        
+        // Poll until upload completes
+        const completedJob = await pollAssetUploadJob(tokens.accessToken, uploadJob.job.id);
+        
+        if (!completedJob.job.asset) {
+          throw new Error("Asset upload completed but no asset returned");
+        }
         
         // Create design from asset
         const design = await createDesignFromAsset(
           tokens.accessToken,
-          asset.asset.id,
+          completedJob.job.asset.id,
           input.title,
           input.width,
           input.height
         );
 
         return {
-          assetId: asset.asset.id,
+          assetId: completedJob.job.asset.id,
           designId: design.design.id,
           editUrl: design.design.urls.edit_url,
           viewUrl: design.design.urls.view_url,
@@ -120,7 +128,13 @@ export const canvaRouter = router({
 
 // Express route handler for OAuth callback (not tRPC)
 export async function handleCanvaCallback(req: any, res: any) {
-  const { code, state } = req.query;
+  const { code, state, error, error_description } = req.query;
+
+  // Handle Canva errors
+  if (error) {
+    console.error(`[Canva] OAuth error: ${error} - ${error_description}`);
+    return res.redirect(`/settings?canva=error&message=${encodeURIComponent(error_description || error)}`);
+  }
 
   if (!code || !state) {
     return res.status(400).send("Missing code or state");
@@ -133,7 +147,8 @@ export async function handleCanvaCallback(req: any, res: any) {
   }
 
   const openId = (state as string).split("-")[0];
-  const redirectUri = `${req.protocol}://${req.get("host")}/api/canva/callback`;
+  // Use same fixed redirect URI as authorization
+  const redirectUri = "https://3000-ilfzg47vdtu2vrhca80ig-263dd919.sg1.manus.computer/api/canva/callback";
 
   try {
     const tokenResponse = await exchangeCodeForToken(code as string, redirectUri, pkceData.verifier);

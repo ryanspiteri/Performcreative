@@ -1,0 +1,17 @@
+{
+  "query": "SELECT openId, name, canvaAccessToken, canvaRefreshToken, canvaTokenExpiresAt FROM users WHERE openId = 'ZYDxUkaEhTFUWfowmfu9zu';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT openId, name, canvaAccessToken, canvaRefreshToken, canvaTokenExpiresAt FROM users WHERE openId = 'ZYDxUkaEhTFUWfowmfu9zu';",
+  "rows": [
+    {
+      "openId": "ZYDxUkaEhTFUWfowmfu9zu",
+      "name": "rspiteri125",
+      "canvaAccessToken": "NULL",
+      "canvaRefreshToken": "NULL",
+      "canvaTokenExpiresAt": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "openId\tname\tcanvaAccessToken\tcanvaRefreshToken\tcanvaTokenExpiresAt\nZYDxUkaEhTFUWfowmfu9zu\trspiteri125\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1635
+}

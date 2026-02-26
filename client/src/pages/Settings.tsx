@@ -26,14 +26,19 @@ export default function Settings() {
   }, [refetch]);
 
   const getAuthUrl = trpc.canva.getAuthUrl.useQuery(undefined, {
-    enabled: !!canvaStatus && !canvaStatus.connected,
+    enabled: false, // Don't auto-fetch, only fetch on button click
   });
 
-  const handleConnectCanva = () => {
-    if (getAuthUrl.data?.authUrl) {
-      window.location.href = getAuthUrl.data.authUrl;
-    } else {
-      toast.error("Failed to generate Canva authorization URL");
+  const handleConnectCanva = async () => {
+    try {
+      const result = await getAuthUrl.refetch();
+      if (result.data?.authUrl) {
+        window.location.href = result.data.authUrl;
+      } else {
+        toast.error("Failed to generate Canva authorization URL");
+      }
+    } catch (err: any) {
+      toast.error(`Connection failed: ${err.message}`);
     }
   };
 
