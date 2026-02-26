@@ -1,7 +1,7 @@
 import { publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
-import { generatePKCE, getCanvaAuthUrl, exchangeCodeForToken, refreshAccessToken, uploadAssetToCanva, pollAssetUploadJob, createDesignFromAsset } from "../services/canva";
+import { generatePKCE, getCanvaAuthUrl, exchangeCodeForToken, refreshAccessToken, uploadAssetToCanva, pollAssetUploadJob, createDesignFromAsset, getBrandTemplateDataset, createAutofillJob, pollAutofillJob } from "../services/canva";
 import { TRPCError } from "@trpc/server";
 
 // Store PKCE verifiers temporarily (in production, use Redis or database)
@@ -112,6 +112,103 @@ export const canvaRouter = router({
       } catch (error) {
         console.error("[Canva] Upload/create failed:", error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Canva upload failed" });
+      }
+    }),
+
+  // Create editable design using Autofill API
+  createEditableDesign: publicProcedure
+    .input(z.object({
+      templateId: z.string(),
+      headline: z.string(),
+      subheadline: z.string().optional(),
+      benefit1: z.string(),
+      benefit2: z.string(),
+      benefit3: z.string(),
+      cta: z.string(),
+      productImageUrl: z.string(),
+      backgroundImageUrl: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Must be logged in" });
+      }
+
+      let tokens = await db.getUserCanvaTokens(ctx.user.openId);
+      if (!tokens?.accessToken || !tokens?.refreshToken) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canva not connected" });
+      }
+
+      // Check if token is expired and refresh if needed
+      if (tokens.expiresAt && new Date(tokens.expiresAt) < new Date()) {
+        try {
+          const refreshed = await refreshAccessToken(tokens.refreshToken);
+          const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
+          await db.updateUserCanvaTokens(
+            ctx.user.openId,
+            refreshed.access_token,
+            refreshed.refresh_token,
+            expiresAt
+          );
+          tokens = { accessToken: refreshed.access_token, refreshToken: refreshed.refresh_token, expiresAt };
+        } catch (error) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Canva token refresh failed" });
+        }
+      }
+
+      try {
+        if (!tokens.accessToken) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Canva token missing" });
+        }
+
+        // Upload product image as asset
+        const productUploadJob = await uploadAssetToCanva(tokens.accessToken, input.productImageUrl, "Product");
+        const productJob = await pollAssetUploadJob(tokens.accessToken, productUploadJob.job.id);
+        
+        if (!productJob.job.asset) {
+          throw new Error("Product upload completed but no asset returned");
+        }
+
+        // Upload background image as asset
+        const backgroundUploadJob = await uploadAssetToCanva(tokens.accessToken, input.backgroundImageUrl, "Background");
+        const backgroundJob = await pollAssetUploadJob(tokens.accessToken, backgroundUploadJob.job.id);
+        
+        if (!backgroundJob.job.asset) {
+          throw new Error("Background upload completed but no asset returned");
+        }
+
+        // Create autofill data
+        const autofillData: Record<string, any> = {
+          HEADLINE: { type: "text", text: input.headline },
+          BENEFIT_1: { type: "text", text: input.benefit1 },
+          BENEFIT_2: { type: "text", text: input.benefit2 },
+          BENEFIT_3: { type: "text", text: input.benefit3 },
+          CTA: { type: "text", text: input.cta },
+          PRODUCT_IMAGE: { type: "image", asset_id: productJob.job.asset.id },
+          BACKGROUND: { type: "image", asset_id: backgroundJob.job.asset.id },
+        };
+
+        // Add optional subheadline if provided
+        if (input.subheadline) {
+          autofillData.SUBHEADLINE = { type: "text", text: input.subheadline };
+        }
+
+        // Create autofill job
+        const autofillJob = await createAutofillJob(tokens.accessToken, input.templateId, autofillData);
+        
+        // Poll until autofill completes
+        const completedJob = await pollAutofillJob(tokens.accessToken, autofillJob.job.id);
+
+        if (!completedJob.job.result?.design) {
+          throw new Error("Autofill completed but no design returned");
+        }
+
+        return {
+          designUrl: completedJob.job.result.design.url,
+          thumbnailUrl: completedJob.job.result.design.thumbnail?.url,
+        };
+      } catch (error) {
+        console.error("[Canva] Autofill failed:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Canva autofill failed" });
       }
     }),
 

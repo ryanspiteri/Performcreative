@@ -230,6 +230,81 @@ export async function pollAssetUploadJob(accessToken: string, jobId: string, max
 }
 
 /**
+ * Get brand template dataset (list of autofillable fields)
+ */
+export async function getBrandTemplateDataset(accessToken: string, templateId: string): Promise<any> {
+  const response = await fetch(`${CANVA_API_BASE}/brand-templates/${templateId}/dataset`, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Canva get template dataset failed: ${response.status} ${error}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Create autofill job to generate design from brand template
+ */
+export async function createAutofillJob(accessToken: string, templateId: string, data: Record<string, any>): Promise<any> {
+  const response = await fetch(`${CANVA_API_BASE}/autofills`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      brand_template_id: templateId,
+      data,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Canva create autofill job failed: ${response.status} ${error}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Poll autofill job until completion
+ */
+export async function pollAutofillJob(accessToken: string, jobId: string, maxAttempts = 30): Promise<any> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await fetch(`${CANVA_API_BASE}/autofills/${jobId}`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Canva autofill job status check failed: ${response.status} ${error}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.job.status === "success") {
+      return result;
+    } else if (result.job.status === "failed") {
+      throw new Error(`Autofill job failed: ${result.job.error?.message || "Unknown error"}`);
+    }
+    
+    // Still in progress, wait 2 seconds before next poll
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  
+  throw new Error("Autofill job timed out after 60 seconds");
+}
+
+/**
  * Get user's Canva profile
  */
 export async function getCanvaProfile(accessToken: string): Promise<{ id: string; display_name: string; email: string }> {

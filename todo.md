@@ -1130,3 +1130,13 @@ All three fixes implemented and tested:
 - [x] Fix "Missing code or state" error in OAuth callback
 - [x] Verify redirect URL matches Canva portal configuration
 - [ ] Test OAuth authorization flow end-to-end
+
+## CANVA AUTOFILL API — EDITABLE LAYERS
+
+- [x] Research Canva Autofill API and Brand Templates documentation
+- [x] Request Enterprise dev access from Canva (submitted, waiting approval)
+- [x] Create template design guide with specifications
+- [x] Implement Autofill API integration in backend services
+- [ ] Create 3 Canva Brand Templates (1:1, 4:5, 9:16) once Enterprise access approved
+- [ ] Update frontend to show "Create Editable Design" option
+- [ ] Test end-to-end editable design workflow
