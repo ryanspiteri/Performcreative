@@ -1191,3 +1191,11 @@ All three fixes implemented and tested:
 - [ ] Link child variations to parent in database (parentRunId)
 - [ ] Display parent-child relationship in results UI
 - [ ] Test generating 3 children from 2 parents
+
+## DEPLOYMENT FIX - CANVAS PACKAGE
+
+- [x] Remove canvas package dependency (causes deployment failure)
+- [x] Remove canvas import from psdBuilder.ts
+- [ ] Test deployment after removing canvas
+- [ ] Verify PSD generation still works (ag-psd should work without canvas for basic PSDs)
+- [ ] If PSD generation fails, implement alternative approach (simplified single-layer PSD or client-side generation)
