@@ -75,25 +75,20 @@ export const psdRouter = router({
 
         // Generate PSD
         console.log(`[PSD] Generating PSD for run ${input.runId}, variation ${input.variationIndex}`);
-        const psdBuffer = await generateIterationPSD(
-          compositeImageUrl,
-          productImageUrl || compositeImageUrl, // Use composite if no product image
-          backgroundImageUrl,
+        const result = await generateIterationPSD({
+          runId: input.runId,
+          variationIndex: input.variationIndex,
+          variationData: variation,
           width,
-          height
-        );
+          height,
+        });
 
-        // Upload to S3
-        const fileName = `psd-${run.id}-${input.variationIndex}-${Date.now()}.psd`;
-        const fileKey = `psd-exports/${ctx.user.openId}/${fileName}`;
-        const { url } = await storagePut(fileKey, psdBuffer, "application/octet-stream");
-
-        console.log(`[PSD] Generated and uploaded PSD: ${url}`);
+        console.log(`[PSD] Generated and uploaded PSD: ${result.url}`);
 
         return {
-          url,
-          fileName,
-          fileSize: psdBuffer.length,
+          url: result.url,
+          fileName: result.fileName,
+          fileSize: 0, // Size not available in simplified approach
         };
       } catch (error) {
         console.error("[PSD] Generation failed:", error);

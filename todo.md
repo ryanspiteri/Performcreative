@@ -1199,3 +1199,11 @@ All three fixes implemented and tested:
 - [ ] Test deployment after removing canvas
 - [ ] Verify PSD generation still works (ag-psd should work without canvas for basic PSDs)
 - [ ] If PSD generation fails, implement alternative approach (simplified single-layer PSD or client-side generation)
+
+## PNG/PSD DOWNLOAD FIXES
+
+- [x] Fix PNG download button (uses blob fetch to avoid CORS)
+- [x] Implement simplified PSD generation without canvas (single-layer composite)
+- [x] Re-add PSD download button to frontend
+- [ ] Test PNG and PSD downloads with fresh pipeline run
+- [ ] Verify PSD opens correctly in Photoshop

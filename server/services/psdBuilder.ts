@@ -1,13 +1,13 @@
-import { writePsd, Psd, Layer } from "ag-psd";
+import { writePsd } from "ag-psd";
 import sharp from "sharp";
 
 /**
  * PSD Builder Service
- * Generates Photoshop files with separate image layers from ad variation data
+ * Generates Photoshop files from ad variation data
  * 
- * Note: ag-psd has limited text layer support, so we generate each text element
- * as a separate image layer. This still allows moving, resizing, and replacing
- * layers in Photoshop, which is better than a flat PNG.
+ * Note: ag-psd requires canvas for multi-layer PSDs which breaks deployment.
+ * This simplified version creates a single-layer PSD with the composited image,
+ * which still opens in Photoshop and is better than PNG for some workflows.
  */
 
 interface PSDLayerData {
@@ -36,26 +36,8 @@ async function downloadImage(url: string): Promise<Buffer> {
 }
 
 /**
- * Convert image buffer to RGBA pixel data for ag-psd
- */
-async function bufferToImageData(buffer: Buffer): Promise<{
-  width: number;
-  height: number;
-  data: Uint8ClampedArray;
-}> {
-  const image = sharp(buffer);
-  const { data, info } = await image.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-
-  return {
-    width: info.width,
-    height: info.height,
-    data: new Uint8ClampedArray(data),
-  };
-}
-
-/**
- * Generate PSD file with separate image layers
- * Each layer is a separate image that can be moved/resized in Photoshop
+ * Generate simplified PSD file with single composited layer
+ * This avoids canvas dependency while still providing a valid PSD file
  */
 export async function generatePSD(data: PSDLayerData): Promise<Buffer> {
   try {
@@ -65,69 +47,69 @@ export async function generatePSD(data: PSDLayerData): Promise<Buffer> {
       downloadImage(data.productImageUrl),
     ]);
 
-    // Convert to image data
-    const backgroundImage = await bufferToImageData(backgroundBuffer);
-    const productImage = await bufferToImageData(productBuffer);
+    // Get image dimensions
+    const productMeta = await sharp(productBuffer).metadata();
 
     // Calculate product dimensions (40% of canvas width)
     const productWidth = Math.floor(data.width * 0.4);
-    const productHeight = Math.floor((productImage.height / productImage.width) * productWidth);
+    const productHeight = Math.floor(((productMeta.height || 1) / (productMeta.width || 1)) * productWidth);
 
     // Resize product image
     const resizedProductBuffer = await sharp(productBuffer)
       .resize(productWidth, productHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer();
+
+    // Position product on right side, centered vertically
+    const productX = data.width - productWidth - Math.floor(data.width * 0.05);
+    const productY = Math.floor((data.height - productHeight) / 2);
+
+    // Composite background + product into single image
+    const compositedBuffer = await sharp(backgroundBuffer)
+      .resize(data.width, data.height, { fit: "cover" })
+      .composite([
+        {
+          input: resizedProductBuffer,
+          left: productX,
+          top: productY,
+        },
+      ])
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    const resizedProduct = {
-      width: resizedProductBuffer.info.width,
-      height: resizedProductBuffer.info.height,
-      data: new Uint8ClampedArray(resizedProductBuffer.data),
-    };
+    // Convert raw buffer to RGBA Uint8Array
+    const pixelData = new Uint8Array(compositedBuffer.data);
 
-    // Position product on right side, centered vertically
-    const productX = data.width - resizedProduct.width - Math.floor(data.width * 0.05);
-    const productY = Math.floor((data.height - resizedProduct.height) / 2);
-
-    // Create layers array (bottom to top)
-    const layers: Layer[] = [];
-
-    // 1. Background layer
-    layers.push({
-      name: "Background",
-      canvas: backgroundImage as any,
-      top: 0,
-      left: 0,
-      right: data.width,
-      bottom: data.height,
-    });
-
-    // 2. Product layer
-    layers.push({
-      name: "Product",
-      canvas: resizedProduct as any,
-      top: productY,
-      left: productX,
-      right: productX + resizedProduct.width,
-      bottom: productY + resizedProduct.height,
-    });
-
-    // Note: Text layers would go here, but ag-psd doesn't support editable text well
-    // The composited image will show the text, but individual text layers aren't editable
-    // Users can still move/resize the product and background layers
-
-    // Create PSD document
-    const psd: Psd = {
+    // Create PSD structure (single layer with composited image)
+    const psd: any = {
       width: data.width,
       height: data.height,
-      children: layers,
+      channels: 4, // RGBA
+      bitsPerChannel: 8,
+      colorMode: 3, // RGB
+      children: [
+        {
+          name: "Composited Ad",
+          canvas: {
+            width: data.width,
+            height: data.height,
+            getContext: () => ({
+              getImageData: () => ({
+                data: pixelData,
+                width: data.width,
+                height: data.height,
+              }),
+            }),
+          },
+        },
+      ],
     };
 
     // Write PSD to buffer
-    const psdBuffer = writePsd(psd, { generateThumbnail: true, trimImageData: false });
+    const psdBuffer = Buffer.from(writePsd(psd));
 
-    return Buffer.from(psdBuffer);
+    return psdBuffer;
   } catch (error) {
     console.error("[PSD Builder] Failed to generate PSD:", error);
     throw new Error(`PSD generation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -136,99 +118,44 @@ export async function generatePSD(data: PSDLayerData): Promise<Buffer> {
 
 /**
  * Generate PSD for iteration variation
- * This creates a PSD with background and product as separate layers
- * Text is baked into the composite image but not as separate layers
+ * This creates a single-layer PSD with the composited ad image
  */
-export async function generateIterationPSD(
-  compositeImageUrl: string, // The final composited image with text
-  productImageUrl: string,
-  backgroundImageUrl: string,
-  width: number,
-  height: number
-): Promise<Buffer> {
-  try {
-    // Download all images
-    const [compositeBuffer, backgroundBuffer, productBuffer] = await Promise.all([
-      downloadImage(compositeImageUrl),
-      downloadImage(backgroundImageUrl),
-      downloadImage(productImageUrl),
-    ]);
+export async function generateIterationPSD(params: {
+  runId: number;
+  variationIndex: number;
+  variationData: any;
+  width: number;
+  height: number;
+}): Promise<{ url: string; fileName: string }> {
+  const { runId, variationIndex, variationData, width, height } = params;
 
-    // Convert to image data
-    const compositeImage = await bufferToImageData(compositeBuffer);
-    const backgroundImage = await bufferToImageData(backgroundBuffer);
-    const productImage = await bufferToImageData(productBuffer);
-
-    // Calculate product dimensions
-    const productWidth = Math.floor(width * 0.4);
-    const productHeight = Math.floor((productImage.height / productImage.width) * productWidth);
-
-    // Resize product
-    const resizedProductBuffer = await sharp(productBuffer)
-      .resize(productWidth, productHeight, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    const resizedProduct = {
-      width: resizedProductBuffer.info.width,
-      height: resizedProductBuffer.info.height,
-      data: new Uint8ClampedArray(resizedProductBuffer.data),
-    };
-
-    // Position product
-    const productX = width - resizedProduct.width - Math.floor(width * 0.05);
-    const productY = Math.floor((height - resizedProduct.height) / 2);
-
-    // Create layers (bottom to top)
-    const layers: Layer[] = [];
-
-    // 1. Background layer
-    layers.push({
-      name: "Background",
-      canvas: backgroundImage as any,
-      top: 0,
-      left: 0,
-      right: width,
-      bottom: height,
-    });
-
-    // 2. Product layer (separate, can be moved/replaced)
-    layers.push({
-      name: "Product",
-      canvas: resizedProduct as any,
-      top: productY,
-      left: productX,
-      right: productX + resizedProduct.width,
-      bottom: productY + resizedProduct.height,
-    });
-
-    // 3. Text overlay layer (baked text from composite)
-    // This is the composited image with text, positioned as overlay
-    layers.push({
-      name: "Text Overlay (Flatten to Edit)",
-      canvas: compositeImage as any,
-      top: 0,
-      left: 0,
-      right: width,
-      bottom: height,
-      opacity: 255,
-      blendMode: "normal",
-    });
-
-    // Create PSD document
-    const psd: Psd = {
-      width,
-      height,
-      children: layers,
-    };
-
-    // Write PSD
-    const psdBuffer = writePsd(psd, { generateThumbnail: true, trimImageData: false });
-
-    return Buffer.from(psdBuffer);
-  } catch (error) {
-    console.error("[PSD Builder] Failed to generate iteration PSD:", error);
-    throw new Error(`PSD generation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+  // Extract data from variation
+  const variation = variationData.variation;
+  
+  if (!variationData.productImageUrl || !variationData.controlImageUrl) {
+    throw new Error("Missing required image URLs for PSD generation");
   }
+
+  const psdData: PSDLayerData = {
+    headline: variation.headline || "",
+    subheadline: variation.subheadline || "",
+    benefit1: variation.benefits?.[0] || "",
+    benefit2: variation.benefits?.[1] || "",
+    benefit3: variation.benefits?.[2] || "",
+    cta: variation.cta || "",
+    productImageUrl: variationData.productImageUrl,
+    backgroundImageUrl: variationData.controlImageUrl,
+    width,
+    height,
+  };
+
+  // Generate PSD
+  const psdBuffer = await generatePSD(psdData);
+
+  // Upload to S3
+  const { storagePut } = await import("../storage");
+  const fileName = `run-${runId}-variation-${variationIndex + 1}.psd`;
+  const { url } = await storagePut(`psds/${fileName}`, psdBuffer, "application/octet-stream");
+
+  return { url, fileName };
 }

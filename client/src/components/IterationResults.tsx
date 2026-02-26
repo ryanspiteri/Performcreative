@@ -434,14 +434,30 @@ export function IterationResults({ run }: { run: any }) {
                             
                             {/* Download Buttons */}
                             <div className="flex gap-2">
-                              <a
-                                href={v.url}
-                                download
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    // Fetch image as blob to avoid CORS issues
+                                    const response = await fetch(v.url);
+                                    const blob = await response.blob();
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `variation-${i + 1}.png`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    window.URL.revokeObjectURL(url);
+                                    toast.success("PNG downloaded!");
+                                  } catch (err: any) {
+                                    toast.error(`Download failed: ${err.message}`);
+                                  }
+                                }}
                                 className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 text-white px-3 py-2 rounded-lg text-xs font-medium"
                               >
                                 <Download className="w-3.5 h-3.5" />
                                 PNG
-                              </a>
+                              </button>
                               {generatingPSD === i ? (
                                 <button
                                   disabled
