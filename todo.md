@@ -1253,3 +1253,13 @@ All three fixes implemented and tested:
 - [x] Only do full regeneration when backgroundPrompt is provided
 - [ ] Test regeneration with headline-only change (background should stay similar)
 - [ ] Test regeneration with background prompt (should generate new background)
+
+## CLICKUP BOARD FIX
+
+- [x] Check current list ID in iterationClickUp.ts (pushing to wrong board)
+- [x] Verify correct Graphic Ad Board list ID from ClickUp
+- [x] Update CLICKUP_LIST_ID constant to use Graphic Ad Board
+- [x] Fixed Stage 4 of iteration pipeline to use new iterationClickUp service instead of old clickup.ts
+- [x] Root cause: Stage 4 was using createScriptTask which searches for "VIDEO AD BOARD"
+- [x] Solution: Replaced with pushIterationVariationToClickUp which uses correct GRAPHIC_AD_BOARD_LIST_ID (900302632860)
+- [ ] Test push to verify tasks go to correct board

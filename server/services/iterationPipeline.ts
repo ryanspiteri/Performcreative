@@ -1,7 +1,7 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
-import { createScriptTask } from "./clickup";
+import { pushIterationVariationToClickUp } from "./iterationClickUp";
 import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import axios from "axios";
@@ -299,34 +299,37 @@ export async function runIterationStage4(runId: number, run: any) {
 
     for (let i = 0; i < variations.length; i++) {
       const v = briefData?.variations?.[i] || {};
-      const taskName = `[Iteration] ${product} - ${v.headline || `Variation ${i + 1}`}`;
-      const taskDesc = [
-        `## Iteration Pipeline \u2014 ${product}`,
-        `**Source Ad:** ${sourceUrl}`,
-        `**Variation:** ${i + 1} of ${variations.length}`,
-        `**Headline:** ${v.headline || "N/A"}`,
-        `**Subheadline:** ${v.subheadline || "N/A"}`,
-        `**Angle:** ${v.angle || "N/A"}`,
-        `**Generated Image:** ${variations[i]?.url || "N/A"}`,
-        "",
-        `### Analysis`,
-        analysis.substring(0, 500),
-      ].join("\n");
+      const imageUrl = variations[i]?.url;
+      
+      if (!imageUrl) {
+        console.warn(`[Iteration] Skipping variation ${i + 1}: no image URL`);
+        continue;
+      }
 
       try {
-        const task = await createScriptTask(
-          taskName,
-          "Iteration Variation",
-          0,
-          taskDesc,
-          product,
-          "Medium"
-        );
-        tasks.push({ name: taskName, taskId: task.id, url: task.url });
-        console.log(`[Iteration] ClickUp task created: ${task.id}`);
+        const task = await pushIterationVariationToClickUp({
+          runId,
+          variationIndex: i,
+          variation: {
+            url: imageUrl,
+            variation: {
+              headline: v.headline || `Variation ${i + 1}`,
+              subheadline: v.subheadline || "",
+              benefits: [
+                v.benefit1 || "",
+                v.benefit2 || "",
+                v.benefit3 || ""
+              ].filter(Boolean),
+              angle: v.angle || ""
+            }
+          },
+          product
+        });
+        tasks.push({ name: v.headline || `Variation ${i + 1}`, taskId: task.taskId, url: task.taskUrl });
+        console.log(`[Iteration] ClickUp task created: ${task.taskId}`);
       } catch (err: any) {
         console.warn(`[Iteration] ClickUp task ${i + 1} failed:`, err.message);
-        tasks.push({ name: taskName, error: err.message });
+        tasks.push({ name: v.headline || `Variation ${i + 1}`, error: err.message });
       }
     }
 
