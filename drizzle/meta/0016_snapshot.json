@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "19c93523-89a3-40c5-a268-cd785997d44f",
+  "id": "65eac16b-bea5-4db2-b261-ed7a64ac9383",
   "prevId": "ae9d93a5-80d8-424b-8dc4-5c25fa767b5f",
   "tables": {
     "backgrounds": {
@@ -596,36 +596,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "videoSourceType": {
-          "name": "videoSourceType",
-          "type": "enum('competitor','winning_ad')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'competitor'"
-        },
-        "videoDuration": {
-          "name": "videoDuration",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 60
-        },
-        "videoStyleConfig": {
-          "name": "videoStyleConfig",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "videoUploadUrl": {
-          "name": "videoUploadUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "iterationSourceUrl": {
           "name": "iterationSourceUrl",
           "type": "text",
@@ -708,6 +678,36 @@
         "variationType": {
           "name": "variationType",
           "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "videoSourceType": {
+          "name": "videoSourceType",
+          "type": "enum('competitor','winning_ad')",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'competitor'"
+        },
+        "videoDuration": {
+          "name": "videoDuration",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 60
+        },
+        "videoStyleConfig": {
+          "name": "videoStyleConfig",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "videoUploadUrl": {
+          "name": "videoUploadUrl",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

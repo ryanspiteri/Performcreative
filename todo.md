@@ -1264,30 +1264,35 @@ All three fixes implemented and tested:
 - [x] Solution: Replaced with pushIterationVariationToClickUp which uses correct GRAPHIC_AD_BOARD_LIST_ID (900302632860)
 - [ ] Test push to verify tasks go to correct board
 
-## COPY FRAMEWORK v2.0 INTEGRATION
+## COPY FRAMEWORK v2.0 INTEGRATION (Re-applied)
 
-- [x] Add PRODUCT_INTELLIGENCE constant with copy levers, traps, stack partners for all 12 ONEST products (5 hero + 7 extended)
-- [x] Rewrite generateVideoBrief() system prompt with Copy Framework v2.0 (6 styles, 5 hook archetypes, awareness matrix, psychological frameworks, specificity rule)
+- [x] Add PRODUCT_INTELLIGENCE constant with copy levers, traps, stack partners for all 12 ONEST products
+- [x] Rewrite generateVideoBrief() system prompt with Copy Framework v2.0 (6 styles, 5 hook archetypes, awareness matrix, psychological frameworks)
 - [x] Rewrite generateVideoBrief() user prompt with selling strategy, CTA approach, metadata fields
-- [x] Update VideoBriefOptions interface with new fields (hookArchetype, awarenessLevel, scriptStyleClassification, sellingStrategy, ctaApproach, funnelPosition, testHypothesis, etc.)
 - [x] Create separate system prompts for each script style (DR, UGC, Education, Founder-Led, Lifestyle, Demo)
-- [x] Rewrite generateConceptMatchedScript() user prompt with product intelligence, visual direction brief, script metadata
-- [x] Replace 10 generic experts with named experts (Schwartz, Halbert, Cialdini, Kahneman, Festinger, Ariely, Fogg, Sharp, Ries, Norman)
+- [x] Rewrite generateConceptMatchedScript() with product intelligence, visual direction brief, script metadata
+- [x] Replace experts with 10 named experts (Schwartz, Halbert, Cialdini, Kahneman, Festinger, Ariely, Fogg, Sharp, Ries, Norman)
 - [x] Rewrite reviewScriptWithPanel() with instant score killers, compliance pass/fail, hard scoring rules
-- [x] Update iteration prompt to reference specific expert feedback and frameworks
 - [x] Add duration selector (45s, 60s, 90s) to pipeline start
 - [x] Add dynamic style/quantity selection (all 6 styles, 0-5 per style) to pipeline start
-- [x] Add "Competitor Ad" vs "Our Winning Ad" toggle to pipeline start
-- [x] Implement Winning Ad mode with variation system (hook swaps, angle shifts, audience reframes)
-- [x] Update formatBriefForDisplay() to show new fields (classification, selling angle, metadata)
-- [x] Update formatScriptForClickUp() to include visual direction brief and script metadata
-- [x] Update Results page to display Visual Direction Brief per script
-- [x] Update Results page to display Script Metadata per script
-- [x] Update Results page to show named experts (Schwartz, Halbert, etc.) instead of generic names
-- [x] Update script output interface to include visualDirection object and scriptMetadata object
-- [x] Add database columns: video_source_type, video_duration, video_style_config, video_upload_url
+- [x] Add Competitor Ad vs Our Winning Ad toggle to pipeline start
+- [x] Implement Winning Ad mode with variation system
 - [x] Add video upload endpoint for Winning Ad mode
-- [x] Update formatScriptText() to include metadata when copying scripts
-- [x] Write vitest tests (20 tests, all passing)
+- [x] Add database columns: video_source_type, video_duration, video_style_config, video_upload_url
+- [x] Update ACTIVE_PRODUCTS to all 12 products
+- [x] Update Results page with Script Metadata block (product, persona, awareness, funnel, style, objection, hypothesis)
+- [x] Add score colour coding (green 90+, orange 80-89, red <80) to expert review panel
+- [x] Update Results page header to show source type and duration
+- [x] Write vitest tests (14 new tests, all passing)
+- [x] Update products test for 12-product list
 - [ ] End-to-end test: run full video pipeline with new Copy Framework prompts
-- [ ] Add compliance guardrails to all script generation prompts
+
+## BROWSE CREATIVES UX FIXES
+
+- [x] Fix config panel positioning — sticky sidebar with auto-scroll on creative selection
+- [x] Add cost estimate display to video pipeline config panel (like Iterate Winners has)
+- [x] Add source type toggle (Competitor Ad / Our Winning Ad)
+- [x] Add duration selector (45s / 60s / 90s)
+- [x] Add script style picker with +/- controls for all 6 styles
+- [x] Add video upload zone for Winning Ad mode
+- [x] Run button shows summary (script count, duration, source type)

@@ -90,14 +90,13 @@ export default function Results() {
             )}
           </h1>
           <p className="text-gray-500 text-sm">
-            {run.foreplayAdBrand || ""} · {run.product} · {run.pipelineType?.toUpperCase()}
+            {run.foreplayAdBrand || ""} · {run.product} · {run.pipelineType?.toUpperCase()} · {run.triggerSource === "manual" ? "Manual trigger" : run.triggerSource}
             {run.pipelineType === "video" && run.videoSourceType && (
-              <> · <span className={run.videoSourceType === "winning_ad" ? "text-amber-400" : "text-gray-400"}>{run.videoSourceType === "winning_ad" ? "Winning Ad" : "Competitor"}</span></>
+              <> · {run.videoSourceType === "winning_ad" ? "Winning Ad" : "Competitor"}</>
             )}
             {run.pipelineType === "video" && run.videoDuration && (
-              <> · ~{run.videoDuration}s</>
+              <> · {run.videoDuration}s</>
             )}
-            {" · "}{run.triggerSource === "manual" ? "Manual trigger" : run.triggerSource}
           </p>
         </div>
         {isRunning && (
@@ -773,28 +772,6 @@ function StepStatus({ label, done }: { label: string; done: boolean }) {
   );
 }
 
-const STYLE_COLORS: Record<string, string> = {
-  DR: "bg-red-500/20 text-red-400 border-red-500/30",
-  UGC: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  EDU: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  FND: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  LIFE: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  DEMO: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-};
-
-const NAMED_EXPERTS: Record<string, { framework: string; color: string }> = {
-  "Eugene Schwartz": { framework: "Awareness Levels", color: "text-red-400" },
-  "Gary Halbert": { framework: "Starving Crowd", color: "text-orange-400" },
-  "Robert Cialdini": { framework: "Influence Principles", color: "text-yellow-400" },
-  "Daniel Kahneman": { framework: "System 1/2 Thinking", color: "text-emerald-400" },
-  "Leon Festinger": { framework: "Cognitive Dissonance", color: "text-teal-400" },
-  "Dan Ariely": { framework: "Predictable Irrationality", color: "text-blue-400" },
-  "BJ Fogg": { framework: "Behaviour Model", color: "text-indigo-400" },
-  "Byron Sharp": { framework: "Brand Distinctiveness", color: "text-purple-400" },
-  "Al Ries": { framework: "Positioning", color: "text-pink-400" },
-  "Don Norman": { framework: "Emotional Design", color: "text-cyan-400" },
-};
-
 function ScriptsSection({ scripts }: { scripts: any[] }) {
   const [activeTab, setActiveTab] = useState(0);
   const script = scripts[activeTab];
@@ -808,112 +785,92 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
           </h2>
           <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded font-medium">Expert Reviewed</span>
         </div>
-        <div className="flex border-b border-white/5 overflow-x-auto">
-          {scripts.map((s: any, i: number) => {
-            const styleCode = s.metadata?.style?.split(" ")[0] || s.label?.split(" ")[0] || "";
-            return (
-              <button
-                key={i}
-                onClick={() => setActiveTab(i)}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-                  activeTab === i
-                    ? "border-[#FF3838] text-white"
-                    : "border-transparent text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                {s.metadata?.style && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${STYLE_COLORS[styleCode] || "bg-white/10 text-gray-400 border-white/20"}`}>
-                    {styleCode}
-                  </span>
-                )}
-                {s.label}
-                {s.review?.finalScore && (
-                  <span className={`text-xs ${activeTab === i ? "text-orange-400" : "text-gray-600"}`}>
-                    {s.review.finalScore}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex border-b border-white/5">
+          {scripts.map((s: any, i: number) => (
+            <button
+              key={i}
+              onClick={() => setActiveTab(i)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === i
+                  ? "border-[#FF3838] text-white"
+                  : "border-transparent text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              {s.label}
+              {s.review?.finalScore && (
+                <span className={`ml-2 text-xs ${activeTab === i ? "text-orange-400" : "text-gray-600"}`}>
+                  {s.review.finalScore}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
       {script && (
         <div className="p-5">
+          {/* Script Metadata */}
+          {script.scriptMetadata && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
+              {script.scriptMetadata.product && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Product</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.product}</div>
+                </div>
+              )}
+              {script.scriptMetadata.persona && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Persona</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.persona}</div>
+                </div>
+              )}
+              {script.scriptMetadata.awarenessLevel && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Awareness</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.awarenessLevel}</div>
+                </div>
+              )}
+              {script.scriptMetadata.funnelPosition && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Funnel</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.funnelPosition}</div>
+                </div>
+              )}
+              {script.scriptMetadata.scriptStyle && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Style</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.scriptStyle}</div>
+                </div>
+              )}
+              {script.scriptMetadata.primaryObjection && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Objection</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.primaryObjection}</div>
+                </div>
+              )}
+            </div>
+          )}
+          {script.scriptMetadata?.testHypothesis && (
+            <div className="mb-5 bg-[#0F1117] rounded-lg px-4 py-3 border border-white/5">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Test Hypothesis</div>
+              <div className="text-sm text-gray-300">{script.scriptMetadata.testHypothesis}</div>
+            </div>
+          )}
+
           <div className="mb-4">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-semibold text-white">
               {script.title}
               {script.review?.finalScore && (
-                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                  script.review.finalScore >= 90 ? "bg-emerald-500/20 text-emerald-400" :
+                  script.review.finalScore >= 80 ? "bg-orange-500/20 text-orange-400" :
+                  "bg-red-500/20 text-red-400"
+                }`}>
                   Score: {script.review.finalScore}/100
-                </span>
-              )}
-              {script.review?.compliancePass === false && (
-                <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded border border-red-500/30">
-                  Compliance Fail
                 </span>
               )}
             </h3>
           </div>
-
-          {/* Script Metadata Block */}
-          {script.metadata && (
-            <div className="mb-6 bg-[#01040A] rounded-lg border border-white/5 overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Script Metadata</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/5">
-                {script.metadata.product && (
-                  <div className="bg-[#01040A] p-3">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Product</div>
-                    <div className="text-sm text-white font-medium">{script.metadata.product}</div>
-                  </div>
-                )}
-                {script.metadata.style && (
-                  <div className="bg-[#01040A] p-3">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Style</div>
-                    <div className="text-sm text-white font-medium">{script.metadata.style}</div>
-                  </div>
-                )}
-                {script.metadata.targetPersona && (
-                  <div className="bg-[#01040A] p-3">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Target Persona</div>
-                    <div className="text-sm text-white font-medium">{script.metadata.targetPersona}</div>
-                  </div>
-                )}
-                {script.metadata.awarenessLevel && (
-                  <div className="bg-[#01040A] p-3">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Awareness Level</div>
-                    <div className="text-sm text-white font-medium">{script.metadata.awarenessLevel}</div>
-                  </div>
-                )}
-                {script.metadata.funnelPosition && (
-                  <div className="bg-[#01040A] p-3">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Funnel Position</div>
-                    <div className="text-sm text-white font-medium">{script.metadata.funnelPosition}</div>
-                  </div>
-                )}
-                {script.metadata.hookArchetype && (
-                  <div className="bg-[#01040A] p-3">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Hook Archetype</div>
-                    <div className="text-sm text-white font-medium">{script.metadata.hookArchetype}</div>
-                  </div>
-                )}
-                {script.metadata.testHypothesis && (
-                  <div className="bg-[#01040A] p-3 col-span-2">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Test Hypothesis</div>
-                    <div className="text-sm text-gray-300">{script.metadata.testHypothesis}</div>
-                  </div>
-                )}
-                {script.metadata.primaryObjection && (
-                  <div className="bg-[#01040A] p-3 col-span-2">
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Primary Objection Addressed</div>
-                    <div className="text-sm text-gray-300">{script.metadata.primaryObjection}</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {script.review && <ExpertReviewPanel review={script.review} label="Script" />}
 
@@ -956,70 +913,10 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
 
           {script.visualDirection && (
             <div className="mb-6">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">VISUAL DIRECTION BRIEF</div>
-              {typeof script.visualDirection === "object" ? (
-                <div className="bg-[#01040A] rounded-lg border border-white/5 overflow-hidden">
-                  {/* Properties grid */}
-                  {(script.visualDirection.colourPalette || script.visualDirection.pacing || script.visualDirection.editStyle || script.visualDirection.textOverlays || script.visualDirection.soundDesign) && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-white/5">
-                      {script.visualDirection.colourPalette && (
-                        <div className="bg-[#01040A] p-3">
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Colour Palette</div>
-                          <div className="text-sm text-gray-300">{script.visualDirection.colourPalette}</div>
-                        </div>
-                      )}
-                      {script.visualDirection.pacing && (
-                        <div className="bg-[#01040A] p-3">
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Pacing</div>
-                          <div className="text-sm text-gray-300">{script.visualDirection.pacing}</div>
-                        </div>
-                      )}
-                      {script.visualDirection.editStyle && (
-                        <div className="bg-[#01040A] p-3">
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Edit Style</div>
-                          <div className="text-sm text-gray-300">{script.visualDirection.editStyle}</div>
-                        </div>
-                      )}
-                      {script.visualDirection.textOverlays && (
-                        <div className="bg-[#01040A] p-3">
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Text Overlays</div>
-                          <div className="text-sm text-gray-300">{script.visualDirection.textOverlays}</div>
-                        </div>
-                      )}
-                      {script.visualDirection.soundDesign && (
-                        <div className="bg-[#01040A] p-3">
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Sound Design</div>
-                          <div className="text-sm text-gray-300">{script.visualDirection.soundDesign}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {/* Shot-by-shot direction */}
-                  {script.visualDirection.shots && Array.isArray(script.visualDirection.shots) && (
-                    <div className="p-4 border-t border-white/5">
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-3">Shot-by-Shot Direction</div>
-                      <div className="space-y-2">
-                        {script.visualDirection.shots.map((shot: any, si: number) => (
-                          <div key={si} className="flex gap-3 text-sm">
-                            <span className="text-orange-400 font-medium whitespace-nowrap min-w-[60px]">{shot.timestamp || `Shot ${si + 1}`}</span>
-                            <span className="text-gray-300">{shot.direction || shot.description || shot}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {/* Fallback for string-like object */}
-                  {script.visualDirection.overview && (
-                    <div className="p-4">
-                      <div className="text-gray-300 text-sm leading-relaxed">{script.visualDirection.overview}</div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-gray-300 text-sm leading-relaxed bg-[#01040A] rounded-lg p-4 border border-white/5">
-                  {script.visualDirection}
-                </div>
-              )}
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">VISUAL DIRECTION</div>
+              <div className="text-gray-300 text-sm leading-relaxed bg-[#01040A] rounded-lg p-4 border border-white/5">
+                {script.visualDirection}
+              </div>
             </div>
           )}
 
@@ -1082,7 +979,11 @@ function ExpertReviewPanel({ review, label }: { review: any; label: string }) {
           </div>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-orange-400">
+          <div className={`text-2xl font-bold ${
+            review.finalScore >= 90 ? "text-emerald-400" :
+            review.finalScore >= 80 ? "text-orange-400" :
+            "text-red-400"
+          }`}>
             <span className="text-yellow-400">★</span> {review.finalScore}<span className="text-sm text-gray-400">/100</span>
           </div>
           {review.approved && (
@@ -1125,36 +1026,27 @@ function ExpertReviewPanel({ review, label }: { review: any; label: string }) {
 
               {expandedRound === ri && (
                 <div className="ml-4 border-l border-white/10 pl-4 py-2 space-y-2">
-                  {round.expertReviews?.map((er: any, ei: number) => {
-                    const expertInfo = NAMED_EXPERTS[er.expertName];
-                    const isLowScore = er.score < 70;
-                    const isScoreKiller = er.scoreKiller || er.instantKiller;
-                    return (
-                      <div key={ei} className="text-sm">
-                        <button
-                          onClick={() => toggleExpert(ri * 100 + ei)}
-                          className="w-full flex items-center justify-between py-1.5 text-gray-300 hover:text-white"
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className={expertInfo?.color || "text-gray-300"}>{er.expertName}</span>
-                            {expertInfo && (
-                              <span className="text-[10px] text-gray-600 font-normal">{expertInfo.framework}</span>
-                            )}
-                            {isScoreKiller && (
-                              <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">KILLER</span>
-                            )}
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <span className={`font-semibold ${isLowScore ? "text-red-400" : "text-orange-400"}`}>{er.score}</span>
-                            <ChevronRight className={`w-3 h-3 text-gray-600 transition-transform ${expandedExperts.has(ri * 100 + ei) ? "rotate-90" : ""}`} />
-                          </span>
-                        </button>
-                        {expandedExperts.has(ri * 100 + ei) && (
-                          <div className="ml-6 pb-3 text-sm text-gray-400">{er.feedback}</div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {round.expertReviews?.map((er: any, ei: number) => (
+                    <div key={ei} className="text-sm">
+                      <button
+                        onClick={() => toggleExpert(ri * 100 + ei)}
+                        className="w-full flex items-center justify-between py-1 text-gray-300 hover:text-white"
+                      >
+                        <span>{er.expertName}</span>
+                        <span className="flex items-center gap-2">
+                          <span className={`font-semibold ${
+                            er.score >= 90 ? "text-emerald-400" :
+                            er.score >= 80 ? "text-orange-400" :
+                            "text-red-400"
+                          }`}>{er.score}</span>
+                          <ChevronRight className={`w-3 h-3 text-gray-600 transition-transform ${expandedExperts.has(ri * 100 + ei) ? "rotate-90" : ""}`} />
+                        </span>
+                      </button>
+                      {expandedExperts.has(ri * 100 + ei) && (
+                        <div className="ml-6 pb-3 text-sm text-gray-400">{er.feedback}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -1165,36 +1057,27 @@ function ExpertReviewPanel({ review, label }: { review: any; label: string }) {
       {/* Flat reviews (for creative reviews without rounds) */}
       {flatReviews && (
         <div className="space-y-2">
-          {flatReviews.map((er: any, ei: number) => {
-            const expertInfo = NAMED_EXPERTS[er.expertName];
-            const isLowScore = er.score < 70;
-            const isScoreKiller = er.scoreKiller || er.instantKiller;
-            return (
-              <div key={ei} className="text-sm">
-                <button
-                  onClick={() => toggleExpert(ei)}
-                  className="w-full flex items-center justify-between py-1.5 text-gray-300 hover:text-white"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className={expertInfo?.color || "text-gray-300"}>{er.expertName}</span>
-                    {expertInfo && (
-                      <span className="text-[10px] text-gray-600 font-normal">{expertInfo.framework}</span>
-                    )}
-                    {isScoreKiller && (
-                      <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">KILLER</span>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className={`font-semibold ${isLowScore ? "text-red-400" : "text-orange-400"}`}>{er.score}</span>
-                    <ChevronRight className={`w-3 h-3 text-gray-600 transition-transform ${expandedExperts.has(ei) ? "rotate-90" : ""}`} />
-                  </span>
-                </button>
-                {expandedExperts.has(ei) && (
-                  <div className="ml-6 pb-3 text-sm text-gray-400">{er.feedback}</div>
-                )}
-              </div>
-            );
-          })}
+          {flatReviews.map((er: any, ei: number) => (
+            <div key={ei} className="text-sm">
+              <button
+                onClick={() => toggleExpert(ei)}
+                className="w-full flex items-center justify-between py-1 text-gray-300 hover:text-white"
+              >
+                <span>{er.expertName}</span>
+                <span className="flex items-center gap-2">
+                  <span className={`font-semibold ${
+                    er.score >= 90 ? "text-emerald-400" :
+                    er.score >= 80 ? "text-orange-400" :
+                    "text-red-400"
+                  }`}>{er.score}</span>
+                  <ChevronRight className={`w-3 h-3 text-gray-600 transition-transform ${expandedExperts.has(ei) ? "rotate-90" : ""}`} />
+                </span>
+              </button>
+              {expandedExperts.has(ei) && (
+                <div className="ml-6 pb-3 text-sm text-gray-400">{er.feedback}</div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1252,43 +1135,12 @@ function InlineBold({ text }: { text: string }) {
 }
 
 function formatScriptText(script: any): string {
-  let text = `${script.title}\n`;
-  
-  // Include metadata if present
-  if (script.metadata) {
-    text += `\n--- SCRIPT METADATA ---\n`;
-    if (script.metadata.product) text += `Product: ${script.metadata.product}\n`;
-    if (script.metadata.style) text += `Style: ${script.metadata.style}\n`;
-    if (script.metadata.targetPersona) text += `Target Persona: ${script.metadata.targetPersona}\n`;
-    if (script.metadata.awarenessLevel) text += `Awareness Level: ${script.metadata.awarenessLevel}\n`;
-    if (script.metadata.funnelPosition) text += `Funnel Position: ${script.metadata.funnelPosition}\n`;
-    if (script.metadata.hookArchetype) text += `Hook Archetype: ${script.metadata.hookArchetype}\n`;
-    if (script.metadata.testHypothesis) text += `Test Hypothesis: ${script.metadata.testHypothesis}\n`;
-    if (script.metadata.primaryObjection) text += `Primary Objection: ${script.metadata.primaryObjection}\n`;
-  }
-  
-  text += `\nHOOK: ${script.hook}\n\nFULL SCRIPT:\n`;
+  let text = `${script.title}\n\nHOOK: ${script.hook}\n\nFULL SCRIPT:\n`;
   if (script.script && Array.isArray(script.script)) {
     for (const row of script.script) {
       text += `\n[${row.timestamp}]\nVISUAL: ${row.visual}\nDIALOGUE: ${row.dialogue}\n`;
     }
   }
-  
-  // Handle structured visual direction
-  if (script.visualDirection) {
-    text += `\nVISUAL DIRECTION:\n`;
-    if (typeof script.visualDirection === "object") {
-      if (script.visualDirection.colourPalette) text += `Colour Palette: ${script.visualDirection.colourPalette}\n`;
-      if (script.visualDirection.pacing) text += `Pacing: ${script.visualDirection.pacing}\n`;
-      if (script.visualDirection.editStyle) text += `Edit Style: ${script.visualDirection.editStyle}\n`;
-      if (script.visualDirection.textOverlays) text += `Text Overlays: ${script.visualDirection.textOverlays}\n`;
-      if (script.visualDirection.soundDesign) text += `Sound Design: ${script.visualDirection.soundDesign}\n`;
-      if (script.visualDirection.overview) text += `${script.visualDirection.overview}\n`;
-    } else {
-      text += `${script.visualDirection}\n`;
-    }
-  }
-  
-  if (script.strategicThesis) text += `\nSTRATEGIC THESIS:\n${script.strategicThesis}`;
+  text += `\nVISUAL DIRECTION:\n${script.visualDirection}\n\nSTRATEGIC THESIS:\n${script.strategicThesis}`;
   return text;
 }

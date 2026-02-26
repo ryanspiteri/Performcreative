@@ -90,13 +90,16 @@ export const appRouter = router({
         product: z.string(),
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
         foreplayAdId: z.string().optional(),
-        foreplayAdTitle: z.string(),
-        foreplayAdBrand: z.string(),
+        foreplayAdTitle: z.string().optional(),
+        foreplayAdBrand: z.string().optional(),
         mediaUrl: z.string(),
         thumbnailUrl: z.string().optional(),
         sourceType: z.enum(["competitor", "winning_ad"]).optional(),
         duration: z.number().optional(),
-        styleConfig: z.record(z.string(), z.number()).optional(),
+        styleConfig: z.array(z.object({
+          styleId: z.enum(["DR", "UGC", "FOUNDER", "EDUCATION", "LIFESTYLE", "DEMO"]),
+          quantity: z.number(),
+        })).optional(),
       }))
       .mutation(async ({ input }) => {
         const runId = await db.createPipelineRun({
@@ -106,45 +109,25 @@ export const appRouter = router({
           priority: input.priority,
           triggerSource: "manual",
           foreplayAdId: input.foreplayAdId || "",
-          foreplayAdTitle: input.foreplayAdTitle,
-          foreplayAdBrand: input.foreplayAdBrand,
+          foreplayAdTitle: input.foreplayAdTitle || "",
+          foreplayAdBrand: input.foreplayAdBrand || "",
           videoUrl: input.mediaUrl,
           thumbnailUrl: input.thumbnailUrl || "",
           videoStage: "stage_1_transcription",
           videoSourceType: input.sourceType || "competitor",
           videoDuration: input.duration || 60,
-          videoStyleConfig: input.styleConfig || { direct_response: 2, ugc_testimonial: 2 },
+          videoStyleConfig: input.styleConfig || null,
         });
         runVideoPipelineStages1to3(runId, {
           ...input,
-          foreplayAdId: input.foreplayAdId || "",
           sourceType: input.sourceType || "competitor",
           duration: input.duration || 60,
-          styleConfig: input.styleConfig || { direct_response: 2, ugc_testimonial: 2 },
+          styleConfig: input.styleConfig || [{ styleId: "DR", quantity: 2 }, { styleId: "UGC", quantity: 2 }],
         }).catch(err => {
           console.error("[Pipeline] Video pipeline stages 1-3 failed:", err);
           db.updatePipelineRun(runId, { status: "failed", errorMessage: err.message || "Pipeline failed" });
         });
         return { runId, status: "running" };
-      }),
-
-    // Upload video for "Our Winning Ad" mode
-    uploadWinningAdVideo: publicProcedure
-      .input(z.object({
-        fileName: z.string(),
-        mimeType: z.string(),
-        base64Data: z.string(),
-      }))
-      .mutation(async ({ input }) => {
-        const buffer = Buffer.from(input.base64Data, "base64");
-        const maxSize = 100 * 1024 * 1024; // 100MB
-        if (buffer.length > maxSize) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "File too large. Maximum size is 100MB." });
-        }
-        const suffix = Math.random().toString(36).substring(2, 10);
-        const fileKey = `winning-ads/${Date.now()}-${suffix}-${input.fileName}`;
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
-        return { url, fileKey };
       }),
 
     fetchForeplayVideos: publicProcedure.query(async () => {
@@ -548,6 +531,25 @@ Return JSON in this exact format:
         }
 
         return { success: true };
+      }),
+
+    // Upload video for winning ad mode
+    uploadWinningAdVideo: publicProcedure
+      .input(z.object({
+        fileName: z.string(),
+        fileBase64: z.string(),
+        contentType: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.fileBase64, "base64");
+        const maxSize = 100 * 1024 * 1024; // 100MB
+        if (buffer.length > maxSize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "File too large. Maximum 100MB." });
+        }
+        const ext = input.fileName.split(".").pop() || "mp4";
+        const key = `winning-ads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { url } = await storagePut(key, buffer, input.contentType);
+        return { url, key };
       }),
 
     // Video brief approval — user approves the brief before scripts are generated
