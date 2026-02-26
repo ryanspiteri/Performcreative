@@ -15,6 +15,20 @@ export function IterationResults({ run }: { run: any }) {
   const [showRegenForm, setShowRegenForm] = useState<number | null>(null);
   const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
   const [canvaDesignUrls, setCanvaDesignUrls] = useState<Record<number, string>>({});
+  const [pushingToClickUp, setPushingToClickUp] = useState(false);
+
+  const pushToClickUp = trpc.pipeline.pushIterationToClickUp.useMutation({
+    onSuccess: (result) => {
+      toast.success(`Pushed ${result.pushedCount} variations to ClickUp!`);
+      utils.pipeline.get.invalidate();
+      utils.pipeline.list.invalidate();
+      setPushingToClickUp(false);
+    },
+    onError: (err) => {
+      toast.error(`ClickUp push failed: ${err.message}`);
+      setPushingToClickUp(false);
+    },
+  });
 
 
   const utils = trpc.useUtils();
@@ -688,15 +702,41 @@ export function IterationResults({ run }: { run: any }) {
       {/* Completed state */}
       {run.status === "completed" && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
-            <CheckCircle className="w-4 h-4" />
-            Iteration pipeline completed
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                <CheckCircle className="w-4 h-4" />
+                Iteration pipeline completed
+              </div>
+              <p className="text-emerald-300/60 text-xs mt-1">
+                {variations.length} variations generated with Flux Pro + Bannerbear
+                {clickupTasks.filter(t => t.taskId).length > 0 && ` · ${clickupTasks.filter(t => t.taskId).length} ClickUp tasks created`}
+                {clickupTasks.length === 0 && " · Completed without ClickUp push"}
+              </p>
+            </div>
+            {clickupTasks.length === 0 && (
+              <button
+                onClick={() => {
+                  setPushingToClickUp(true);
+                  pushToClickUp.mutate({ runId: run.id });
+                }}
+                disabled={pushingToClickUp}
+                className="flex items-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/90 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+              >
+                {pushingToClickUp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Pushing...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Push to ClickUp
+                  </>
+                )}
+              </button>
+            )}
           </div>
-          <p className="text-emerald-300/60 text-xs mt-1">
-            {variations.length} variations generated with Flux Pro + Bannerbear
-            {clickupTasks.filter(t => t.taskId).length > 0 && ` · ${clickupTasks.filter(t => t.taskId).length} ClickUp tasks created`}
-            {clickupTasks.length === 0 && " · Completed without ClickUp push"}
-          </p>
         </div>
       )}
     </div>

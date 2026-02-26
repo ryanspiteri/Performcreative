@@ -12,6 +12,7 @@ import { createMultipleScriptTasks } from "./services/clickup";
 import { runVideoPipelineStages1to3, runVideoPipelineStage4, runVideoPipelineStage5, completeVideoPipelineWithoutClickUp } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
 import { runIterationStages1to2, runIterationStage3, runIterationStage4, regenerateIterationVariation } from "./services/iterationPipeline";
+import { pushIterationRunToClickUp } from "./services/iterationClickUp";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
@@ -713,6 +714,38 @@ Return JSON in this exact format:
         } catch (err: any) {
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: err.message });
         }
+      }),
+
+    // Push completed iteration variations to ClickUp
+    pushIterationToClickUp: publicProcedure
+      .input(z.object({
+        runId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.status !== "completed") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Pipeline must be completed before pushing to ClickUp" });
+        }
+        if (!run.iterationVariations) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No variations found to push" });
+        }
+
+        const variations = typeof run.iterationVariations === 'string' 
+          ? JSON.parse(run.iterationVariations) 
+          : run.iterationVariations;
+        const result = await pushIterationRunToClickUp({
+          runId: input.runId,
+          variations,
+          product: run.product,
+        });
+
+        return {
+          success: true,
+          taskIds: result.taskIds,
+          taskUrls: result.taskUrls,
+          pushedCount: result.taskIds.length,
+        };
       }),
 
     // Generate child variations from selected parent runs

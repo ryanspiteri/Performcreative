@@ -1232,3 +1232,16 @@ All three fixes implemented and tested:
 - [ ] Store parent-child relationships in database (parentRunId, variationLayer fields)
 - [ ] Display parent-child hierarchy in results view
 - [ ] Test generating 5 parents → 3 children each → 15 total unique variations
+
+## CLICKUP INTEGRATION - ITERATE WINNERS
+
+- [x] Find ClickUp list ID for "Graphic Ad Board" in "Ad Creatives" folder (900302632860)
+- [x] Find ClickUp status ID for "Review" status ("review")
+- [x] Find ClickUp user ID for Lauren Row (2772206)
+- [x] Create iterationClickUp service with push functions
+- [x] Add pushIterationToClickUp endpoint to routers
+- [x] Create task for each variation with image attachment
+- [x] Set status to "Review" and assign to Lauren Row
+- [x] Add "Push to ClickUp" button to frontend results page
+- [x] Add pushToClickUp mutation to IterationResults component
+- [ ] Test ClickUp push with real variation
