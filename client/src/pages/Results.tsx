@@ -809,7 +809,7 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
 
       {script && (
         <div className="p-5">
-          {/* Script Metadata */}
+          {/* Script Metadata — v3.0 with sub-structure, funnel, archetype */}
           {script.scriptMetadata && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
               {script.scriptMetadata.product && (
@@ -840,6 +840,18 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
                 <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
                   <div className="text-[10px] text-gray-500 uppercase tracking-wider">Style</div>
                   <div className="text-sm text-white font-medium">{script.scriptMetadata.scriptStyle}</div>
+                </div>
+              )}
+              {script.scriptMetadata.subStructure && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-purple-500/20">
+                  <div className="text-[10px] text-purple-400 uppercase tracking-wider">Sub-Structure</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.subStructure}</div>
+                </div>
+              )}
+              {script.scriptMetadata.actorArchetype && (
+                <div className="bg-[#0F1117] rounded-lg px-3 py-2 border border-green-500/20">
+                  <div className="text-[10px] text-green-400 uppercase tracking-wider">Actor Archetype</div>
+                  <div className="text-sm text-white font-medium">{script.scriptMetadata.actorArchetype}</div>
                 </div>
               )}
               {script.scriptMetadata.primaryObjection && (
@@ -899,11 +911,26 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
                   </thead>
                   <tbody>
                     {script.script.map((row: any, i: number) => (
-                      <tr key={i} className="border-b border-white/5">
-                        <td className="py-3 pr-4 text-orange-400 font-medium align-top whitespace-nowrap">{row.timestamp}</td>
-                        <td className="py-3 pr-4 text-gray-300 align-top">{row.visual}</td>
-                        <td className="py-3 text-gray-300 align-top">{row.dialogue}</td>
-                      </tr>
+                      <>
+                        <tr key={`row-${i}`} className="border-b border-white/5">
+                          <td className="py-3 pr-4 text-orange-400 font-medium align-top whitespace-nowrap">{row.timestamp}</td>
+                          <td className="py-3 pr-4 text-gray-300 align-top">{row.visual}</td>
+                          <td className="py-3 text-gray-300 align-top">{row.dialogue}</td>
+                        </tr>
+                        {row.transitionLine && (
+                          <tr key={`trans-${i}`} className="border-b border-white/5">
+                            <td colSpan={3} className="py-2 px-4">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+                                <span className="text-[11px] text-amber-400/80 italic whitespace-nowrap px-2">
+                                  {row.transitionLine}
+                                </span>
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     ))}
                   </tbody>
                 </table>
@@ -992,11 +1019,51 @@ function ExpertReviewPanel({ review, label }: { review: any; label: string }) {
         </div>
       </div>
 
+      {/* 6-Criteria Breakdown (v3.0) */}
+      {review.criteriaBreakdown && (
+        <div className="mb-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {[
+            { key: "hookStrength", label: "Hook Strength", color: "text-red-400" },
+            { key: "emotionalArc", label: "Emotional Arc", color: "text-purple-400" },
+            { key: "ctaClarity", label: "CTA Clarity", color: "text-blue-400" },
+            { key: "complianceAdherence", label: "Compliance", color: "text-emerald-400" },
+            { key: "structureAdherence", label: "Structure", color: "text-amber-400" },
+            { key: "brandVoice", label: "Brand Voice", color: "text-cyan-400" },
+          ].map(({ key, label, color }) => {
+            const val = review.criteriaBreakdown[key];
+            if (val == null) return null;
+            return (
+              <div key={key} className="bg-[#0F1117] rounded-lg px-3 py-2 border border-white/5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
+                  <span className={`text-sm font-bold ${val >= 85 ? "text-emerald-400" : val >= 70 ? color : "text-red-400"}`}>{val}</span>
+                </div>
+                <div className="mt-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      val >= 85 ? "bg-emerald-500" : val >= 70 ? "bg-amber-500" : "bg-red-500"
+                    }`}
+                    style={{ width: `${val}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Score floor warning */}
+      {review.scoreFloorApplied && (
+        <div className="mb-4 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2 text-xs text-red-400">
+          Score floor applied: {review.scoreFloorReason || "One or more criteria fell below the minimum threshold"}
+        </div>
+      )}
+
       {/* Round-based reviews (for script/brief reviews) */}
       {hasRounds && (
         <>
           {review.rounds.length > 1 && (
-            <div className="flex items-center gap-2 mb-4 text-sm">
+            <div className="flex items-center gap-2 mb-4 text-sm flex-wrap">
               <span className="text-gray-500">↗</span>
               {review.rounds.map((r: any, i: number) => (
                 <span key={i} className="flex items-center gap-1">
@@ -1043,7 +1110,23 @@ function ExpertReviewPanel({ review, label }: { review: any; label: string }) {
                         </span>
                       </button>
                       {expandedExperts.has(ri * 100 + ei) && (
-                        <div className="ml-6 pb-3 text-sm text-gray-400">{er.feedback}</div>
+                        <div className="ml-6 pb-3 space-y-2">
+                          <div className="text-sm text-gray-400">{er.feedback}</div>
+                          {/* Per-expert criteria breakdown */}
+                          {er.criteriaScores && (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {Object.entries(er.criteriaScores).map(([k, v]: [string, any]) => (
+                                <span key={k} className={`text-[10px] px-2 py-0.5 rounded border ${
+                                  v >= 85 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                                  : v >= 70 ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                  : "bg-red-500/10 border-red-500/20 text-red-400"
+                                }`}>
+                                  {k.replace(/([A-Z])/g, ' $1').trim()}: {v}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}

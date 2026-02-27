@@ -84,7 +84,7 @@ export const appRouter = router({
         return run;
       }),
 
-    // Video pipeline trigger
+    // Video pipeline trigger — v3.0 with funnel stage + archetype
     triggerVideo: publicProcedure
       .input(z.object({
         product: z.string(),
@@ -96,6 +96,8 @@ export const appRouter = router({
         thumbnailUrl: z.string().optional(),
         sourceType: z.enum(["competitor", "winning_ad"]).optional(),
         duration: z.number().optional(),
+        funnelStage: z.enum(["cold", "warm", "retargeting", "retention"]).optional(),
+        actorArchetype: z.enum(["FitnessEnthusiast", "BusyMum", "Athlete", "Biohacker", "WellnessAdvocate"]).optional(),
         styleConfig: z.array(z.object({
           styleId: z.enum(["DR", "UGC", "FOUNDER", "EDUCATION", "LIFESTYLE", "DEMO"]),
           quantity: z.number(),
@@ -117,11 +119,15 @@ export const appRouter = router({
           videoSourceType: input.sourceType || "competitor",
           videoDuration: input.duration || 60,
           videoStyleConfig: input.styleConfig || null,
+          videoFunnelStage: input.funnelStage || "cold",
+          videoArchetypes: input.actorArchetype ? [input.actorArchetype] : null,
         });
         runVideoPipelineStages1to3(runId, {
           ...input,
           sourceType: input.sourceType || "competitor",
           duration: input.duration || 60,
+          funnelStage: input.funnelStage || "cold",
+          actorArchetype: input.actorArchetype,
           styleConfig: input.styleConfig || [{ styleId: "DR", quantity: 2 }, { styleId: "UGC", quantity: 2 }],
         }).catch(err => {
           console.error("[Pipeline] Video pipeline stages 1-3 failed:", err);

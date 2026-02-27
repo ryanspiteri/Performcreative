@@ -37,13 +37,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 const STEP_TIMEOUT = 10 * 60 * 1000;
 
 // ============================================================
-// SCRIPT STYLE DEFINITIONS
+// SCRIPT STYLE DEFINITIONS — COPY FRAMEWORK v3.0
 // ============================================================
 
 export const SCRIPT_STYLES = [
   { id: "DR", label: "Direct Response", description: "Hard-sell with clear offer, urgency, and direct CTA" },
   { id: "UGC", label: "UGC / Testimonial", description: "Authentic personal experience, soft-sell recommendation" },
   { id: "FOUNDER", label: "Founder-Led", description: "Brand founder speaking with authority and passion" },
+  { id: "BRAND", label: "Brand / Equity", description: "Belief-led content — asks for belief, not a sale" },
   { id: "EDUCATION", label: "Education / Myth-Busting", description: "Teach something surprising, position product as the answer" },
   { id: "LIFESTYLE", label: "Lifestyle / Aspiration", description: "Aspirational day-in-the-life with product woven in" },
   { id: "DEMO", label: "Problem / Solution Demo", description: "Show the problem, demonstrate the product solving it" },
@@ -57,7 +58,473 @@ export interface StyleConfig {
 }
 
 // ============================================================
-// PRODUCT INTELLIGENCE — ONEST COPY FRAMEWORK v2.0
+// FUNNEL STAGE TYPES & RULES — v3.0
+// ============================================================
+
+export type FunnelStage = "cold" | "warm" | "retargeting" | "retention";
+
+export const FUNNEL_STAGE_RULES: Record<FunnelStage, string> = {
+  cold: `COLD — NON-NEGOTIABLE RULES:
+- Product name does NOT appear in the hook under any circumstances
+- Hook leads with the problem, the enemy, or a contrarian statement about the category
+- Product introduced as the logical conclusion of the problem — not the opening premise
+- Proof section kept brief — viewer is not yet invested enough for detailed evidence
+- CTA: "link below" / "check it out" / "see for yourself" — NEVER "buy now"`,
+
+  warm: `WARM — NON-NEGOTIABLE RULES:
+- ONEST can be named after the hook section is complete
+- Lead with what makes ONEST different — transparency, ingredient specificity, Australian-made
+- Assume they have seen competitor products — differentiation is the primary job
+- CTA can be more direct: "try ONEST" / "visit onest.com.au"`,
+
+  retargeting: `RETARGETING — NON-NEGOTIABLE RULES:
+- Can open with product name — they already know it
+- Lead immediately with social proof or a specific result
+- Address the most likely objection for the product
+- CTA is the strongest of any stage — "try it risk-free" / "30-day guarantee" / "order now"`,
+
+  retention: `RETENTION — NON-NEGOTIABLE RULES:
+- Never re-explain what the product does to someone who already uses it
+- Lead with loyalty, community, or new product announcement
+- Stack-sell opportunity: reference complementary products they do not own yet
+- CTA is relationship-oriented, not transaction-oriented`,
+};
+
+// ============================================================
+// 19 SCRIPT SUB-STRUCTURES — v3.0 MASTER REFERENCE
+// ============================================================
+
+export interface ScriptSubStructure {
+  id: string;
+  name: string;
+  category: "DR" | "UGC" | "FOUNDER" | "BRAND";
+  funnelStages: FunnelStage[];
+  awarenessLevel: string;
+  platform: string;
+  length: string;
+  stages: Array<{ stage: string; function: string }>;
+  whyItConverts: string;
+  psychologicalLever: string;
+}
+
+export const SCRIPT_SUB_STRUCTURES: ScriptSubStructure[] = [
+  // === DIRECT RESPONSE (7) ===
+  {
+    id: "DR-1", name: "Problem → Agitate → Solve (PAS)", category: "DR",
+    funnelStages: ["cold"], awarenessLevel: "Problem Aware",
+    platform: "Meta primary, TikTok", length: "15–30 seconds",
+    stages: [
+      { stage: "Hook (0–3s)", function: "Name the problem in a way that feels uncomfortably personal" },
+      { stage: "Problem", function: "Validate and expand the pain — make them nod" },
+      { stage: "Agitate", function: "Make the consequence of inaction feel real and immediate" },
+      { stage: "Solve", function: "Introduce ONEST as the logical answer — lead with mechanism not name" },
+      { stage: "Proof", function: "One specific, credible result or credential" },
+      { stage: "CTA", function: "Single low-friction action" },
+    ],
+    whyItConverts: "Intercepts Peter and Lara at their emotion before asking them to care about a product. PAS meets them where they already are.",
+    psychologicalLever: "Loss aversion. The agitation phase makes inaction feel more costly than the purchase.",
+  },
+  {
+    id: "DR-2", name: "Before → After → Bridge (BAB)", category: "DR",
+    funnelStages: ["warm"], awarenessLevel: "Solution Aware",
+    platform: "Meta retargeting, TikTok, email", length: "20–45 seconds",
+    stages: [
+      { stage: "Hook", function: "Paint the 'before' state vividly — name the specific struggle" },
+      { stage: "Before", function: "Expand. Make the before state feel lived-in and real" },
+      { stage: "After", function: "The contrast. Specific, believable, not exaggerated" },
+      { stage: "Bridge", function: "ONEST is the mechanism that moves you from one state to the other" },
+      { stage: "CTA", function: "Anchor the CTA to the 'after' state — they are buying the destination" },
+    ],
+    whyItConverts: "The brain visualises the 'after' automatically. Lara is motivated by the clearest possible vision of her best self.",
+    psychologicalLever: "Desire amplification. Channelling existing desire toward a specific outcome.",
+  },
+  {
+    id: "DR-3", name: "Hook → Mechanism → Proof → CTA", category: "DR",
+    funnelStages: ["warm", "retargeting"], awarenessLevel: "Solution Aware → Product Aware",
+    platform: "Meta feed, YouTube pre-roll, longer TikTok", length: "30–60 seconds",
+    stages: [
+      { stage: "Hook", function: "Bold claim or contrarian statement — earn attention before explaining" },
+      { stage: "Mechanism", function: "Why this works — name the specific ingredient, explain the process simply" },
+      { stage: "Proof", function: "Validate with numbers, named results, or science" },
+      { stage: "CTA", function: "'See the full label' / 'Try it risk-free' — low friction" },
+    ],
+    whyItConverts: "Directly answers 'does it actually work?' Named ingredients are the sale — transparency is the differentiator.",
+    psychologicalLever: "Authority + Commitment. Education creates a micro-yes ladder.",
+  },
+  {
+    id: "DR-4", name: "Enemy Framing → Reveal → Solution", category: "DR",
+    funnelStages: ["cold", "warm"], awarenessLevel: "Solution Aware",
+    platform: "Meta cold, TikTok", length: "20–45 seconds",
+    stages: [
+      { stage: "Hook", function: "Name the enemy — a lie, an industry practice, a bad ingredient" },
+      { stage: "Expose", function: "Explain exactly how the enemy is causing the problem" },
+      { stage: "Reveal", function: "ONEST as the brand that operates differently — show the evidence" },
+      { stage: "Proof", function: "Transparency as the differentiator — label shown, dose stated" },
+      { stage: "CTA", function: "'Judge for yourself' framing — invites rather than demands" },
+    ],
+    whyItConverts: "Peter and Lara are already cynical about the supplement industry. This validates that cynicism and positions ONEST as the honest exception.",
+    psychologicalLever: "Unity + Liking. Shared enemy creates tribal alignment.",
+  },
+  {
+    id: "DR-5", name: "Contrarian Statement → Proof → Reframe → CTA", category: "DR",
+    funnelStages: ["cold"], awarenessLevel: "Problem Aware → Solution Aware",
+    platform: "Meta Reels, TikTok, high-frequency placements", length: "15–30 seconds",
+    stages: [
+      { stage: "Hook", function: "Say the opposite of what they expect — let the tension sit 2–3 seconds" },
+      { stage: "Proof", function: "Back the contrarian claim immediately with evidence" },
+      { stage: "Reframe", function: "Show them the world differently as a result" },
+      { stage: "CTA", function: "'See for yourself' — curiosity-led" },
+    ],
+    whyItConverts: "A genuinely contrarian hook creates neurological pattern interruption — the brain must resolve the tension.",
+    psychologicalLever: "Cognitive dissonance. The viewer's existing belief is challenged; resolving it requires engaging with the content.",
+  },
+  {
+    id: "DR-6", name: "Social Proof Lead → Identification → Product → CTA", category: "DR",
+    funnelStages: ["retargeting"], awarenessLevel: "Product Aware → Most Aware",
+    platform: "Meta retargeting, email, SMS", length: "15–30 seconds",
+    stages: [
+      { stage: "Hook", function: "Open with a specific customer result — number, timeframe, outcome" },
+      { stage: "Identification", function: "'If you're anything like [name]…' — create mirror recognition" },
+      { stage: "Problem connect", function: "Briefly confirm the shared pain — 1–2 sentences" },
+      { stage: "Product", function: "As the mechanism behind the result — not the hero, the enabler" },
+      { stage: "CTA", function: "Risk-reversal framing — 'try it' not 'buy it'" },
+    ],
+    whyItConverts: "Social proof as the opener short-circuits scepticism before it activates.",
+    psychologicalLever: "Social proof + Endowment effect. Risk-reversal framing makes the viewer feel they already own the outcome.",
+  },
+  {
+    id: "DR-7", name: "Story → Lesson → Product", category: "DR",
+    funnelStages: ["cold", "warm"], awarenessLevel: "Problem Unaware → Problem Aware",
+    platform: "TikTok primary, Meta longer-form, YouTube", length: "45–90 seconds",
+    stages: [
+      { stage: "Hook", function: "Open mid-story — in media res, something already happening" },
+      { stage: "Story", function: "Personal experience, relatable struggle — no polish, no performance" },
+      { stage: "Lesson", function: "What changed, what they learned, what they now know" },
+      { stage: "Product", function: "Part of the solution, not the whole story — mentioned naturally" },
+      { stage: "CTA", function: "Soft — 'this is what I use now' / 'link below if you want to try'" },
+    ],
+    whyItConverts: "Bypasses the sales defence mechanism entirely. The viewer is invested in the story before they realise there is a product.",
+    psychologicalLever: "Narrative transportation. People in a story state are significantly more persuadable.",
+  },
+
+  // === UGC (6) ===
+  {
+    id: "UGC-1", name: "Talking Head Review", category: "UGC",
+    funnelStages: ["cold", "warm"], awarenessLevel: "Problem Aware → Solution Aware",
+    platform: "Meta Reels, TikTok, Stories", length: "30–60 seconds",
+    stages: [
+      { stage: "Hook (0–3s)", function: "Mid-thought, unexpected, specific — never 'hey guys'" },
+      { stage: "Credibility", function: "Who they are in one sentence — context, not a bio" },
+      { stage: "The before", function: "Their specific situation — one clear pain point only" },
+      { stage: "The discovery", function: "How they found ONEST — casual, slightly accidental feeling" },
+      { stage: "The result", function: "One specific, believable result — not a list" },
+      { stage: "The endorsement", function: "Natural peer recommendation — 'I just tell everyone now'" },
+      { stage: "CTA", function: "Soft — 'link in bio' / 'they've got something on at the moment'" },
+    ],
+    whyItConverts: "The brain processes peer-to-camera content as advice, not advertising.",
+    psychologicalLever: "Social proof through perceived authenticity.",
+  },
+  {
+    id: "UGC-2", name: "Objection Crusher", category: "UGC",
+    funnelStages: ["warm", "retargeting"], awarenessLevel: "Solution Aware → Product Aware",
+    platform: "Meta retargeting, TikTok cold traffic for high-scepticism audiences", length: "30–45 seconds",
+    stages: [
+      { stage: "Hook", function: "Creator voices the objection directly — 'I thought fat burners were all marketing'" },
+      { stage: "Validate", function: "Agree with the scepticism — this is disarming and trust-building" },
+      { stage: "The turning point", function: "What made them try anyway — specific, not vague" },
+      { stage: "What surprised them", function: "One unexpected result they did not anticipate" },
+      { stage: "The reframe", function: "'I was wrong about this one specifically'" },
+      { stage: "CTA", function: "'Worth trying if you've been sitting on the fence'" },
+    ],
+    whyItConverts: "Festinger's cognitive dissonance in action — you name the exact objection in the viewer's head, validate it, then resolve it.",
+    psychologicalLever: "Credibility through honesty. Admitting prior scepticism makes the eventual endorsement exponentially more believable.",
+  },
+  {
+    id: "UGC-3", name: "Day in the Life", category: "UGC",
+    funnelStages: ["cold"], awarenessLevel: "Problem Unaware → Problem Aware",
+    platform: "TikTok primary, Instagram Reels organic, Meta upper funnel", length: "45–90 seconds",
+    stages: [
+      { stage: "Hook", function: "Open at a real moment — waking up, pre-gym, morning routine mid-action" },
+      { stage: "Context", function: "Show the routine, not just the product — the product lives inside a life" },
+      { stage: "Natural integration", function: "Product appears as part of the routine, not the centrepiece" },
+      { stage: "The feeling", function: "What it actually feels like — energy, focus, no crash — sensory and specific" },
+      { stage: "The outcome", function: "Training harder, more productive, present — the life benefit" },
+      { stage: "Sign-off", function: "'This is just what I do now' — normalisation, not endorsement" },
+    ],
+    whyItConverts: "Lara is not buying a supplement — she is buying into a version of her life where she is consistent, energised, and performing.",
+    psychologicalLever: "Aspirational identity. The product is the prop, not the plot.",
+  },
+  {
+    id: "UGC-4", name: "Myth Bust / Hot Take", category: "UGC",
+    funnelStages: ["cold", "warm"], awarenessLevel: "Solution Aware",
+    platform: "TikTok primary, Instagram Reels, Meta interest targeting", length: "30–60 seconds",
+    stages: [
+      { stage: "Hook", function: "Bold, slightly controversial opener — 'You don't need a pre-workout'" },
+      { stage: "Hold tension", function: "Do not resolve it — let 3–5 seconds of setup build" },
+      { stage: "The nuance", function: "'…unless you're doing it right. Here's what most brands get wrong'" },
+      { stage: "The standard", function: "What good actually looks like — specific ingredients, real doses" },
+      { stage: "The product", function: "ONEST as the example that meets the standard — never forced" },
+      { stage: "CTA", function: "'Judge for yourself — the label's on the website'" },
+    ],
+    whyItConverts: "Peter trusts people who seem willing to tell him what not to buy. When you then show him what to buy, the credibility transfer is complete.",
+    psychologicalLever: "Authority through honesty. Transparency framing is ONEST's core DNA.",
+  },
+  {
+    id: "UGC-5", name: "Results Reveal", category: "UGC",
+    funnelStages: ["retargeting"], awarenessLevel: "Product Aware",
+    platform: "Meta retargeting, warm TikTok audiences, Stories", length: "20–40 seconds",
+    stages: [
+      { stage: "Hook", function: "The result first — 'I've lost 6kg in 8 weeks and I'm not in a huge deficit'" },
+      { stage: "Pre-empt the sceptic", function: "'I know how that sounds — I thought the same thing'" },
+      { stage: "What changed", function: "Minimal — the product carried the weight" },
+      { stage: "The product's role", function: "Specific benefit — energy, cravings, metabolism — one only" },
+      { stage: "The proof", function: "Photo, weight, performance metric — something tangible" },
+      { stage: "CTA", function: "'Link's below'" },
+    ],
+    whyItConverts: "Leads with the destination. The viewer's first question is 'how?' — which means they are leaning in before you have explained anything.",
+    psychologicalLever: "Curiosity through proof. Result-first hooks create immediate engagement.",
+  },
+  {
+    id: "UGC-6", name: "Product Demo / Ingredient Education", category: "UGC",
+    funnelStages: ["warm", "retargeting"], awarenessLevel: "Product Aware",
+    platform: "Meta feed, TikTok, YouTube pre-roll", length: "45–75 seconds",
+    stages: [
+      { stage: "Hook", function: "A specific ingredient claim — 'Most fat burners use one form of caffeine. HyperBurn uses two. Here's why that matters'" },
+      { stage: "Education", function: "Explain the mechanism simply — human language, no jargon" },
+      { stage: "The comparison", function: "Category standard vs. what ONEST actually does" },
+      { stage: "Visual demo", function: "Scooping, mixing, label shown — tactile and real" },
+      { stage: "The feel", function: "What the difference actually feels like in the body" },
+      { stage: "CTA", function: "'Full ingredient breakdown's on the website — link below'" },
+    ],
+    whyItConverts: "Converts the analytical buyer who reads every label. Transparency is the sale — this structure makes it literal and visible.",
+    psychologicalLever: "Authority through education. Knowledge transfer builds trust.",
+  },
+
+  // === FOUNDER-LED (3) ===
+  {
+    id: "FL-1", name: "The Origin Story", category: "FOUNDER",
+    funnelStages: ["cold", "warm"], awarenessLevel: "Problem Unaware → Solution Aware",
+    platform: "TikTok, Meta, YouTube, organic social", length: "60–90 seconds",
+    stages: [
+      { stage: "Hook", function: "Open at the moment of frustration — not the beginning, the breaking point" },
+      { stage: "The problem they lived", function: "What was wrong with the industry before ONEST existed — personal and specific" },
+      { stage: "The decision", function: "Why they chose to build instead of just complain" },
+      { stage: "The standard they set", function: "What ONEST committed to that others would not — transparency, doses, ingredients" },
+      { stage: "What that looks like now", function: "Brief product reference — earned through the story, not inserted" },
+      { stage: "The invitation", function: "'That's why we built this. That's who it's for.' — tribe identity, not a hard sell" },
+    ],
+    whyItConverts: "Answers 'why should I trust you?' before the question is asked.",
+    psychologicalLever: "Narrative authority. The founder's story IS the proof of concept.",
+  },
+  {
+    id: "FL-2", name: "The Industry Call-Out", category: "FOUNDER",
+    funnelStages: ["cold", "warm"], awarenessLevel: "Solution Aware",
+    platform: "TikTok primary, Meta, organic social", length: "45–75 seconds",
+    stages: [
+      { stage: "Hook", function: "Founder addresses the industry directly — 'I need to talk about what's in most supplements'" },
+      { stage: "The problem named", function: "Specific practice being called out — proprietary blends, underdosing, artificial fillers" },
+      { stage: "The evidence", function: "How to spot it — educate the viewer to protect themselves" },
+      { stage: "The standard", function: "What ONEST does differently — label shown, doses stated" },
+      { stage: "The challenge", function: "'Compare our label to anything else on the shelf'" },
+      { stage: "CTA", function: "'Link in bio — everything's on there'" },
+    ],
+    whyItConverts: "Validates every suspicion Peter and Lara already had. Positions ONEST as the honest disruptor.",
+    psychologicalLever: "Unity + Authority. Shared enemy creates tribal alignment.",
+  },
+  {
+    id: "FL-3", name: "The Standard-Setter", category: "FOUNDER",
+    funnelStages: ["retargeting"], awarenessLevel: "Product Aware",
+    platform: "Meta retargeting, TikTok, email", length: "30–60 seconds",
+    stages: [
+      { stage: "Hook", function: "Founder makes a specific product claim with total confidence" },
+      { stage: "The why", function: "Why this standard was non-negotiable — personal conviction, not marketing" },
+      { stage: "The what", function: "The specific ingredient, dose, or manufacturing decision — tangible" },
+      { stage: "The comparison", function: "What the alternative looks like — educational, not aggressive" },
+      { stage: "The ask", function: "'This is what we made. Try it and judge for yourself.'" },
+    ],
+    whyItConverts: "Converts the final-stage sceptic who needs to believe in the people behind the product.",
+    psychologicalLever: "Personal conviction as proof. The founder's confidence IS the closing argument.",
+  },
+
+  // === BRAND / EQUITY (3) ===
+  {
+    id: "BR-1", name: "The Belief Film", category: "BRAND",
+    funnelStages: ["cold"], awarenessLevel: "Problem Unaware",
+    platform: "Meta, TikTok, YouTube, organic social", length: "60–120 seconds",
+    stages: [
+      { stage: "Opening visual", function: "Athlete in action — no product, no logo, no copy yet" },
+      { stage: "The truth", function: "A belief statement about what serious performance actually requires" },
+      { stage: "The audience named", function: "Not 'people who take supplements' — 'the ones who don't settle'" },
+      { stage: "The tension", function: "What separates the ones who get there from the ones who don't" },
+      { stage: "The conviction", function: "ONEST's position in that world — not what we sell, what we believe" },
+      { stage: "The product reveal", function: "Product appears as the conclusion of the argument, not the start" },
+      { stage: "Sign-off", function: "Brand line: MADE OF GREATNESS" },
+    ],
+    whyItConverts: "Asks for belief, not a sale. Measured by watch time, shares, saves, and downstream conversion lift.",
+    psychologicalLever: "Identity alignment. The viewer sees themselves in the belief before seeing the product.",
+  },
+  {
+    id: "BR-2", name: "The Community Proof", category: "BRAND",
+    funnelStages: ["warm"], awarenessLevel: "Solution Aware",
+    platform: "Meta, TikTok, Instagram Reels, organic social", length: "45–90 seconds",
+    stages: [
+      { stage: "Hook", function: "Multiple faces, multiple results — not one story, a movement" },
+      { stage: "The common thread", function: "What all these people share — the standard they hold themselves to" },
+      { stage: "The results", function: "Varied, specific, believable — different people, same quality of outcome" },
+      { stage: "The brand's role", function: "Understated — 'this is what we make for people like this'" },
+      { stage: "The identity statement", function: "'ONEST is for people who take this seriously'" },
+      { stage: "CTA", function: "Light — 'find your community' / 'link in bio'" },
+    ],
+    whyItConverts: "Peter does not just want results — he wants to be seen as someone who belongs to the right tribe.",
+    psychologicalLever: "Tribal identity. ONEST becomes the badge of belonging.",
+  },
+  {
+    id: "BR-3", name: "The Values Declaration", category: "BRAND",
+    funnelStages: ["cold", "warm", "retargeting", "retention"], awarenessLevel: "All levels",
+    platform: "Any — most powerful as a pinned piece across all channels", length: "30–60 seconds",
+    stages: [
+      { stage: "Hook", function: "A single, bold, unambiguous statement of what ONEST stands for" },
+      { stage: "What that means in practice", function: "Specific — 'it means our label shows every ingredient and every dose'" },
+      { stage: "What it costs", function: "Honesty about the trade-off — 'it means we're more expensive than shortcuts'" },
+      { stage: "Who it's for", function: "Name them — 'it's for the people who care enough to read the label'" },
+      { stage: "The invitation", function: "'If that's you — welcome.'" },
+    ],
+    whyItConverts: "In a category defined by noise, clarity is a differentiator.",
+    psychologicalLever: "Self-selection. Attracts the right customers and pre-selects out the wrong ones.",
+  },
+];
+
+// ============================================================
+// UGC ARCHETYPE VOICE PROFILES — v3.0
+// ============================================================
+
+export type ActorArchetype = "FitnessEnthusiast" | "BusyMum" | "Athlete" | "Biohacker" | "WellnessAdvocate";
+
+export const ARCHETYPE_PROFILES: Record<ActorArchetype, {
+  label: string;
+  lifeContext: string;
+  languageRegister: string;
+  preProductObjection: string;
+}> = {
+  FitnessEnthusiast: {
+    label: "Fitness Enthusiast",
+    lifeContext: "Trains 4-6 days a week. Tracks macros. Has tried multiple supplements. Goes to an F45 or commercial gym. Influenced by what people in their gym circle are using. Cares about performance metrics — PRs, body composition, recovery times.",
+    languageRegister: "Comfortable with supplement terminology but still casual. Says 'reps', 'gains', 'recovery'. Drops gym-specific references naturally. Not performatively bro — genuinely gym-oriented. Australian colloquialisms where they fit naturally.",
+    preProductObjection: "\"I've already tried most things in this category. I'm cynical because I've wasted money on products that underdosed or overpromised.\" The turning point was a specific training metric that changed, or a specific ingredient they finally understood.",
+  },
+  BusyMum: {
+    label: "Busy Mum",
+    lifeContext: "Juggling kids, work, and personal goals simultaneously. Fitness is important but time is the constraint. Values simplicity and products that fit into an already-full morning. Has had inconsistent supplement habits because routines get disrupted.",
+    languageRegister: "Warm and direct. References real moments: school drop-off, 5:30am gym session before the house wakes up, 3pm energy slump. Relatable specificity is the authenticity signal. Not fitness-speak heavy — talks about how she feels, not performance metrics.",
+    preProductObjection: "\"Is this safe? What's actually in it? I don't want to be taking something I can't understand.\" The turning point was the transparent label — seeing exactly what is in it and being able to verify it.",
+  },
+  Athlete: {
+    label: "Athlete",
+    lifeContext: "Competes in something — Hyrox, CrossFit, team sports, powerlifting. Training has a structure and a goal. Supplements are tools for performance, not lifestyle accessories. Talks about training blocks, competition prep, recovery protocols.",
+    languageRegister: "Precise and performance-focused. References specific metrics and outcomes. Comfortable with clinical dosing language — knows what Creapure means, knows what Dicaffeine Malate is. Respects specificity as a signal of quality.",
+    preProductObjection: "\"I can't afford to put something in my body that isn't clinically dosed. I've seen athletes take products that don't contain what the label claims.\" The turning point was full ingredient transparency — every dose listed, nothing hidden in a blend.",
+  },
+  Biohacker: {
+    label: "Biohacker",
+    lifeContext: "Optimises everything. Tracks sleep, HRV, bloodwork. Reads PubMed. Treats their body as a system to be engineered. Talks about N=1 experimentation and personal results.",
+    languageRegister: "Analytical and curious. References self-tracking: 'I noticed on my Oura ring', 'my recovery scores went up', 'I've been testing this for six weeks.' Wants to understand why something works, not just that it works.",
+    preProductObjection: "\"Most supplements have proprietary blends so I can't verify the doses I'm actually getting. I need to see every ingredient and every dose.\" The turning point was full label transparency combined with the specific mechanism of a key ingredient.",
+  },
+  WellnessAdvocate: {
+    label: "Wellness Advocate",
+    lifeContext: "Health-conscious but not gym-obsessed. Cares about what goes into their body. Worried about 'bad chemicals'. Holistic view of health — sleep, stress, nutrition, movement together. May have been burned by overpromised or artificially-filled supplements.",
+    languageRegister: "Warm, considered, slightly cautious. References how things make her feel rather than performance metrics. 'I felt better in the mornings', 'my skin actually changed', 'I stopped feeling so flat by 2pm.' Responds to 'no artificial colours, no fillers' as a strong positive signal.",
+    preProductObjection: "\"I don't want to take something full of stimulants or artificial ingredients I don't recognise.\" The turning point was the no artificial colours / no fillers / no proprietary blends positioning — plus Australian-made GMP certification as a quality guarantee.",
+  },
+};
+
+// ============================================================
+// EMOTION-TO-STRUCTURE MAP — v3.0 Logic 1
+// ============================================================
+
+export const EMOTION_STRUCTURE_MAP: Record<string, string[]> = {
+  "Frustrated": ["DR-1", "UGC-2", "FL-2"],
+  "Aspirational": ["DR-2", "UGC-3", "BR-1"],
+  "Sceptical": ["DR-3", "DR-4", "UGC-4", "FL-1"],
+  "Curious": ["DR-5", "DR-7", "UGC-1"],
+  "Ready but hesitant": ["DR-6", "UGC-5", "FL-3"],
+};
+
+// ============================================================
+// MODULAR HOOK/BODY/CTA BANK — v3.0 Logic 2
+// ============================================================
+
+const HOOK_BANK = `
+HOOK BANK — five archetypes (classify the competitor's hook, then use the same archetype):
+| Archetype | Example |
+|---|---|
+| Contrarian | "The reason you're not losing fat has nothing to do with your diet." |
+| Specific frustration | "Six months in a calorie deficit and the scale hasn't moved." |
+| Social proof lead | "47,000 Aussies have switched to this in the last 12 months." |
+| Named enemy | "Most fat burners don't tell you what's actually in them. Here's why." |
+| Bold claim + number | "250mg of two forms of caffeine. Here's what that actually does to your metabolism." |
+`;
+
+const CTA_BANK = `
+CTA BANK — matched to funnel stage:
+| Stage | CTA approach |
+|---|---|
+| Cold | "See the full ingredient breakdown — link below" |
+| Warm | "Try it and judge for yourself — link below" |
+| Retargeting | "30-day guarantee — order now at onest.com.au" |
+`;
+
+// ============================================================
+// TRANSITION LOGIC — v3.0 Logic 3
+// ============================================================
+
+const TRANSITION_LOGIC = `
+TRANSITION LOGIC — The viewer should never feel the structure change. Each transition should feel like the most natural next sentence, not the next section of a brief.
+
+The four critical transitions:
+| Transition | Wrong version | Correct version |
+|---|---|---|
+| Problem → Solution | "That's why we created HyperBurn." | "The only way to fix a dormant metabolism is to give it a reason to fire back up." |
+| Story → Product | "Anyway, I started using HyperBurn and…" | "The thing that actually changed it was understanding what my body was missing — specifically one thing." |
+| Education → CTA | "So if you want to try it, click the link." | "That's literally everything that's in it — no blends, no fillers. If you want to read the full breakdown yourself, it's all on the site." |
+| Proof → CTA | "Don't miss out — buy now." | "There's a 30-day guarantee, so there's actually no reason not to try it." |
+`;
+
+// ============================================================
+// SCRIPT AUDIT CHECKLIST — v3.0 Logic 4
+// ============================================================
+
+const SCRIPT_AUDIT_CHECKLIST = `
+SCRIPT AUDIT CHECKLIST — run every completed script through these 10 checks:
+1. Awareness match — Does the script assume the right level of audience knowledge for the funnel stage?
+2. Hook independence — Does the hook work as a complete idea in under 3 seconds with no context?
+3. Banned phrases — Zero instances of "unlock your potential", "fuel your journey", "transform your body", "achieve your goals"
+4. Specificity test — At least one named ingredient, specific number, or concrete timeframe
+5. One job — Single primary message, obvious in one sentence
+6. Transition logic — All major transitions feel inevitable rather than engineered
+7. Single CTA — One and only one action asked for at the end
+8. Brand voice — Could this script appear on a competitor's product without modification? If yes — rewrite
+9. Emotional logic — Script takes the viewer from one clear emotional state to a different one logically
+10. Peter / Lara test — Read it aloud imagining you are Peter or Lara hearing it for the first time
+`;
+
+// ============================================================
+// COMPLIANCE GUARDRAILS
+// ============================================================
+
+const COMPLIANCE_RULES = `
+COMPLIANCE GUARDRAILS (MANDATORY — violations override all scores):
+CAN SAY: "supports," "helps," "promotes," "contributes to," "designed to," "formulated with"
+CANNOT SAY: "cures," "treats," "prevents," "guarantees," "clinically proven to [specific outcome]," "doctor recommended"
+CANNOT SAY: specific weight loss amounts, medical claims, comparison to prescription drugs
+SAFE FRAMING: "supports healthy metabolism" ✓ | "burns fat guaranteed" ✗
+SAFE FRAMING: "helps maintain energy levels" ✓ | "gives you unlimited energy" ✗
+SAFE FRAMING: "supports restful sleep" ✓ | "cures insomnia" ✗
+Any script with compliance violations MUST score 0 regardless of other qualities.
+`;
+
+// ============================================================
+// PRODUCT INTELLIGENCE — ONEST COPY FRAMEWORK v3.0
 // ============================================================
 
 export const PRODUCT_INTELLIGENCE: Record<string, {
@@ -184,24 +651,24 @@ export const PRODUCT_INTELLIGENCE: Record<string, {
   },
   Thermoburn: {
     fullName: "ONEST ThermoBurn",
-    category: "Stimulant-Free Fat Burner",
+    category: "Capsule Thermogenic",
     copyLevers: [
-      "Stimulant-free — supports fat metabolism without caffeine or jitters",
-      "Perfect for caffeine-sensitive individuals or evening use",
-      "Can be stacked with HyperBurn for amplified results or used standalone",
+      "Two forms of caffeine for sustained energy without jitters",
+      "Green Tea Extract, Bitter Orange Extract, Grains of Paradise — multi-pathway thermogenesis",
+      "Theobromine and Lion's Mane for mood and cognitive support",
+      "Capsule format — taste-free, convenient, take anywhere",
       "Transparent label with clinically studied ingredients",
-      "Supports metabolism through multiple pathways without stimulant dependency",
     ],
     copyTraps: [
-      "Don't position as 'weaker' than HyperBurn — position as 'different approach'",
-      "Avoid implying caffeine is bad — just offer the stimulant-free alternative",
+      "Don't position capsules as 'weaker' than powder — position as 'convenient and effective'",
+      "Avoid implying it replaces HyperBurn — different format for different preferences",
     ],
     stackPartners: ["Hyperburn", "Thermosleep"],
-    targetPersona: "Lara (caffeine-sensitive, wants gentle fat support) and Peter (already takes pre-workout, doesn't want more caffeine)",
-    awarenessAngle: "Solution-aware → Product-aware (show stimulant-free option exists)",
-    keyIngredients: ["Acetyl L-Carnitine", "CLA", "Grains of Paradise", "Green Tea Extract"],
-    primaryBenefit: "Fat metabolism support without any stimulants",
-    differentiator: "Stimulant-free formula that actually works — not just a caffeine-free version of a fat burner",
+    targetPersona: "Busy professionals, both genders, convenience-focused buyers who want fat support without mixing powders",
+    awarenessAngle: "Solution-aware → Product-aware (show capsule thermogenic option exists)",
+    keyIngredients: ["Two forms of caffeine", "Green Tea Extract", "Bitter Orange Extract", "Grains of Paradise", "Theobromine", "Lion's Mane", "Theacrine"],
+    primaryBenefit: "Sustained energy, mood support, and healthy weight management in a convenient capsule",
+    differentiator: "Multi-pathway thermogenic in capsule format — not just caffeine pills",
   },
   "Carb Control": {
     fullName: "ONEST Carb Control",
@@ -332,35 +799,45 @@ export const PRODUCT_INTELLIGENCE: Record<string, {
 };
 
 // ============================================================
-// COMPLIANCE GUARDRAILS — ONEST COPY FRAMEWORK v2.0
+// PRODUCT FALLBACK BRIEFS — v3.0 Section 11
 // ============================================================
 
-const COMPLIANCE_RULES = `
-COMPLIANCE GUARDRAILS (MANDATORY — violations override all scores):
-CAN SAY: "supports," "helps," "promotes," "contributes to," "designed to," "formulated with"
-CANNOT SAY: "cures," "treats," "prevents," "guarantees," "clinically proven to [specific outcome]," "doctor recommended"
-CANNOT SAY: specific weight loss amounts, medical claims, comparison to prescription drugs
-SAFE FRAMING: "supports healthy metabolism" ✓ | "burns fat guaranteed" ✗
-SAFE FRAMING: "helps maintain energy levels" ✓ | "gives you unlimited energy" ✗
-SAFE FRAMING: "supports restful sleep" ✓ | "cures insomnia" ✗
-Any script with compliance violations MUST score 0 regardless of other qualities.
-`;
+const PRODUCT_FALLBACK_BRIEFS: Record<string, string> = {
+  Hyperburn: `Product: ONEST HyperBurn | Category: Elite Thermogenic Fat Burner (powder)
+Key ingredients: 250mg caffeine total — Caffeine Anhydrous (fast-acting) + Dicaffeine Malate (sustained release, reduces crash). Capsimax® (patented capsaicin for thermogenesis). GBBGO® (converts to L-Carnitine, amplifies fat transport). L-Carnitine. Huperzia Serrata (cognitive focus).
+Primary benefits: Accelerates fat burning and thermogenesis. Smooth, sustained energy — no crash, no jitter. Eliminates hunger cravings. Improves mood and mental focus.
+Usage: Taken first thing in the morning on an empty stomach.
+Primary objection: "I've tried fat burners and they didn't work." Secondary: "Will it make me jittery?"
+Brand differentiator: Full ingredient transparency — every dose listed. No proprietary blend. Australian-made, GMP certified. No artificial colours or fillers.`,
+
+  Thermosleep: `Product: ONEST ThermoSleep | Category: Night-time Fat Burner + Sleep Aid
+Key ingredients: 5-HTP (serotonin precursor, mood and sleep). Raspberry Ketones. Melatonin (sleep onset). Magnesium (deep sleep quality). EGCG (Green Tea Extract, metabolic support).
+Primary benefits: Fall asleep faster. Deeper, more restorative sleep. Wake up energised — not groggy. Supports fat burning overnight without stimulants.
+Primary objection: "I'm sceptical anything can burn fat while I sleep." Secondary: "Will it leave me groggy?"
+Primary audience: Lara. Also anyone targeting fat loss and sleep quality simultaneously.`,
+
+  Hyperload: `Product: ONEST HyperLoad | Category: Elite High-Stim Pre-Workout
+Primary benefits: Explosive training performance. Significant strength and power output increase. Sharp mental focus and clarity. Powerful muscle pumps.
+Primary audience: Peter. Serious gym-goers. High-stim seekers. Competitive athletes.
+Primary objection: "High-stim pre-workouts make me crash." Secondary: "Is this just a massive caffeine hit?"
+Brand differentiator: Full ingredient transparency. Clinically dosed — not under-dosed to hit a price point. Stackable with HyperPump.`,
+
+  Thermoburn: `Product: ONEST ThermoBurn | Category: Capsule Thermogenic
+Key ingredients: Two forms of caffeine. Green Tea Extract. Bitter Orange Extract. Grains of Paradise. Theobromine. Lion's Mane. Theacrine.
+Primary benefits: Sustained energy without jitters. Mood support. Healthy weight management. Convenience — capsule format, taste-free.
+Primary objection: "Capsules feel less effective than powder."
+Audience: Busy professionals, both genders, convenience-focused buyers.`,
+
+  "HyperBurn Caffeine Free": `Product: ONEST HyperBurn Caffeine Free | Category: Stimulant-Free Thermogenic
+Key ingredients: L-Carnitine. Acetyl-L-Carnitine. Capsimax®. GBBGO®. Huperzia Serrata. Zero caffeine.
+Primary benefits: Same fat-burning mechanism as HyperBurn — without stimulants. Ideal for caffeine-sensitive individuals, shift workers, afternoon or evening use. Vegan and keto-friendly.
+Primary audience: Lara (primary). Caffeine-sensitive buyers. Shift workers.
+Primary objection: "If it has no caffeine, how does it actually work?"
+Resolution: Explain non-stimulant fat-burning mechanisms — Capsimax® thermogenesis, GBBGO® carnitine amplification — these work independently of caffeine.`,
+};
 
 // ============================================================
-// HOOK ARCHETYPES — ONEST COPY FRAMEWORK v2.0
-// ============================================================
-
-const HOOK_ARCHETYPES = `
-5 HOOK ARCHETYPES (classify the competitor's hook, then use the same archetype):
-1. PATTERN INTERRUPT: Unexpected visual/statement that breaks scroll behaviour ("I put butter in my coffee for 30 days")
-2. IDENTITY CALL-OUT: Directly addresses a specific audience ("If you're over 40 and still can't lose belly fat...")
-3. CURIOSITY GAP: Opens a loop the viewer must close ("My doctor told me to stop taking protein powder. Here's why...")
-4. SOCIAL PROOF LEAD: Starts with proof/results before explaining ("This is what happened after 90 days...")
-5. CONTROVERSY/MYTH: Challenges a common belief ("Everything you know about fat burners is wrong")
-`;
-
-// ============================================================
-// VIDEO BRIEF GENERATION — COPY FRAMEWORK v2.0
+// BRIEF GENERATION — COPY FRAMEWORK v3.0 (Stage 1)
 // ============================================================
 
 export interface VideoBriefConcept {
@@ -371,9 +848,11 @@ export interface VideoBriefConcept {
   sellingStrategy: string;
   ctaApproach: string;
   styleId: ScriptStyleId;
+  subStructureId?: string;
 }
 
 export interface VideoBriefOptions {
+  funnelStage: FunnelStage;
   competitorConceptAnalysis: string;
   hookStyle: string;
   hookArchetype: string;
@@ -393,6 +872,42 @@ export interface VideoBriefOptions {
   ugcConcepts?: Array<{ title: string; hookLine: string; structure: string; keyAngle: string; sellingStrategy?: string; ctaApproach?: string }>;
 }
 
+function getSubStructureReference(styleConfig: StyleConfig[], funnelStage: FunnelStage): string {
+  const relevantStructures = SCRIPT_SUB_STRUCTURES.filter(s => {
+    const styleMatch = styleConfig.some(sc => {
+      if (sc.quantity <= 0) return false;
+      if (sc.styleId === "DR") return s.category === "DR";
+      if (sc.styleId === "UGC") return s.category === "UGC";
+      if (sc.styleId === "FOUNDER") return s.category === "FOUNDER";
+      if (sc.styleId === "BRAND") return s.category === "BRAND";
+      return false;
+    });
+    const funnelMatch = s.funnelStages.includes(funnelStage);
+    return styleMatch && funnelMatch;
+  });
+
+  if (relevantStructures.length === 0) {
+    // Fall back to all structures for the requested styles
+    const allForStyle = SCRIPT_SUB_STRUCTURES.filter(s =>
+      styleConfig.some(sc => {
+        if (sc.quantity <= 0) return false;
+        if (sc.styleId === "DR") return s.category === "DR";
+        if (sc.styleId === "UGC") return s.category === "UGC";
+        if (sc.styleId === "FOUNDER") return s.category === "FOUNDER";
+        if (sc.styleId === "BRAND") return s.category === "BRAND";
+        return false;
+      })
+    );
+    return allForStyle.map(s =>
+      `${s.id} — ${s.name}\nFunnel: ${s.funnelStages.join(", ")} | Awareness: ${s.awarenessLevel}\nStages: ${s.stages.map(st => `${st.stage}: ${st.function}`).join(" → ")}\nWhy it converts: ${s.whyItConverts}`
+    ).join("\n\n");
+  }
+
+  return relevantStructures.map(s =>
+    `${s.id} — ${s.name}\nFunnel: ${s.funnelStages.join(", ")} | Awareness: ${s.awarenessLevel}\nStages: ${s.stages.map(st => `${st.stage}: ${st.function}`).join(" → ")}\nWhy it converts: ${s.whyItConverts}`
+  ).join("\n\n");
+}
+
 async function generateVideoBrief(
   transcript: string,
   visualAnalysis: string,
@@ -401,7 +916,8 @@ async function generateVideoBrief(
   productInfoContext: string,
   styleConfig: StyleConfig[],
   duration: number,
-  sourceType: "competitor" | "winning_ad"
+  sourceType: "competitor" | "winning_ad",
+  funnelStage: FunnelStage
 ): Promise<VideoBriefOptions> {
   const productIntel = PRODUCT_INTELLIGENCE[product];
   const productIntelBlock = productIntel
@@ -424,112 +940,118 @@ STACK PARTNERS: ${productIntel.stackPartners.join(", ")}
 `
     : `Product: ONEST ${product}. Use ONEST Health's brand positioning: Australian-made, transparent labelling, clinically dosed ingredients, no proprietary blends.`;
 
+  const fallbackBrief = PRODUCT_FALLBACK_BRIEFS[product] || "";
+  const fullProductInfo = productInfoContext || fallbackBrief || `Product: ONEST ${product}. Brand: ONEST Health. Website: onest.com.au.`;
+
   const styleRequests = styleConfig.filter(s => s.quantity > 0);
   const styleRequestText = styleRequests.map(s => {
     const style = SCRIPT_STYLES.find(st => st.id === s.styleId);
     return `${s.quantity}x ${style?.label || s.styleId} (${style?.description || ""})`;
   }).join(", ");
 
+  const subStructureRef = getSubStructureReference(styleConfig, funnelStage);
+
   const sourceContext = sourceType === "winning_ad"
     ? `This is one of OUR OWN winning ads. Your job is to create VARIATIONS that extend its success — hook swaps, angle shifts, audience reframes, format adaptations. Keep what works, vary what can be tested.`
     : `This is a COMPETITOR ad. Your job is to reverse-engineer what makes it engage viewers, then create concepts that use that engagement framework to SELL ONEST ${product}.`;
 
-  const system = `You are an elite direct response advertising strategist for ONEST Health, an Australian health supplement brand. You have deep expertise in the psychological frameworks of Eugene Schwartz (awareness levels), Gary Halbert (starving crowd principle), Robert Cialdini (influence and persuasion), and Daniel Kahneman (System 1/System 2 thinking).
+  // v3.0 Stage 1 System Prompt
+  const system = `You are an elite direct response advertising strategist for ONEST Health, an Australian health supplement brand. You have 15+ years of experience creating video ads that generate measurable sales — not just views.
 
-Your job is to analyse video ads and create creative briefs that SELL products — not just mimic competitors. Every concept you propose must have a clear path from "viewer watches" to "viewer buys."
+Your job is to deeply analyse competitor video ads, reverse-engineer what makes them ENGAGE viewers (hook, narrative framework, persuasion mechanism), and then create a creative brief that uses that same engagement framework to SELL an ONEST Health product.
 
-${HOOK_ARCHETYPES}
+CRITICAL DISTINCTION:
+- The competitor's ad structure tells us HOW to hold attention. That is the framework.
+- YOUR brief must specify how to use that attention to SELL the ONEST product.
+- Every concept you propose must have a clear path from "viewer watches" to "viewer buys."
 
-SCRIPT STYLE CLASSIFICATION:
-1. DIRECT RESPONSE (DR): Hard-sell with clear offer, urgency, specific CTA. Hook → Problem/Agitation → Solution/Product → Proof + CTA.
-2. UGC / TESTIMONIAL: Authentic personal experience. Feels unscripted. Sells through trust and relatability. Soft but clear recommendation.
-3. FOUNDER-LED: Brand founder speaking with authority and passion. Combines expertise with personal conviction. "I created this because..."
-4. EDUCATION / MYTH-BUSTING: Teaches something surprising, positions product as the answer. "Everything you know about X is wrong..."
-5. LIFESTYLE / ASPIRATION: Aspirational day-in-the-life with product woven naturally. Shows the life the viewer wants.
-6. PROBLEM / SOLUTION DEMO: Shows the problem visually, demonstrates the product solving it. Before/after or side-by-side.
+You understand the difference between:
+- DR (Direct Response): Hard-sell. Clear offer. Specific CTA. The viewer must know exactly what the product is, why they need it, and how to buy it now.
+- UGC (User-Generated Content): Soft-sell. Authentic personal experience. The viewer should feel like a real person genuinely loves this product — but the product name, benefits, and where to get it are still clearly communicated. UGC sells through trust and relatability, not pressure.
+- FOUNDER-LED: Highest-trust format. The founder speaks with authority and personal conviction. Authenticity is the entire mechanism.
+- BRAND / EQUITY: Does not ask for a sale. Asks for belief. Measured by watch time, shares, saves, and downstream conversion lift.
 
-AWARENESS LEVEL MATRIX (Schwartz):
-- UNAWARE: Doesn't know they have a problem → Lead with story/emotion, reveal the problem
-- PROBLEM-AWARE: Knows the problem, not the solution → Agitate the problem, introduce the category
-- SOLUTION-AWARE: Knows solutions exist, not your product → Differentiate ONEST from alternatives
-- PRODUCT-AWARE: Knows ONEST, hasn't bought → Overcome objections, provide proof, create urgency
-- MOST-AWARE: Existing customer → Upsell, cross-sell, reinforce loyalty
+You do NOT create generic scripts. You reverse-engineer what makes the competitor ad engage viewers, then build a brief that channels that engagement into product sales.
 
-${COMPLIANCE_RULES}
+${COMPLIANCE_RULES}`;
 
-${sourceContext}`;
+  // v3.0 Stage 1 User Prompt
+  const prompt = `Analyse this competitor video ad and create a video creative brief for ONEST Health's ${product}.
 
-  const prompt = `Analyse this video ad and create a creative brief for ONEST Health's ${product}.
+${sourceContext}
 
-SOURCE: ${sourceType === "winning_ad" ? "OUR WINNING AD" : `COMPETITOR BRAND: ${brandName}`}
-TARGET DURATION: ~${duration} seconds per script
+FUNNEL STAGE: ${funnelStage}
+Apply the rules for this funnel stage to all concept development:
+- cold: problem-led, product named only after hook establishes tension
+- warm: differentiation-led, ONEST named after hook
+- retargeting: proof-led, product can be named in hook
+- retention: loyalty/stack-led, never re-explain what the product does
 
-TRANSCRIPT:
+${FUNNEL_STAGE_RULES[funnelStage]}
+
+COMPETITOR BRAND: ${brandName}
+
+COMPETITOR TRANSCRIPT:
 ${transcript}
 
 VISUAL ANALYSIS:
 ${visualAnalysis}
 
 ONEST PRODUCT INFORMATION:
-${productInfoContext || "No detailed product info in database."}
-
+${fullProductInfo}
 ${productIntelBlock}
 
-REQUESTED SCRIPTS: ${styleRequestText}
+AVAILABLE SCRIPT SUB-STRUCTURES FOR THIS FUNNEL STAGE:
+${subStructureRef}
+
+${HOOK_BANK}
 
 INSTRUCTIONS:
 
-PART 1 — AD ANALYSIS
-1. What is the SPECIFIC hook type and which of the 5 hook archetypes does it match?
+PART 1 — COMPETITOR ANALYSIS (What makes their ad ENGAGE viewers?)
+1. What is the SPECIFIC hook type?
 2. What is the narrative framework?
 3. What persuasion mechanism drives engagement?
-4. What awareness level does this ad target?
 
-PART 2 — ONEST SELLING STRATEGY
-5. How should ONEST adapt this framework to sell ${product}?
-6. What is the product selling angle — how does ${product} specifically solve the problem this ad taps into?
-7. What is the primary objection the target audience has, and how do we overcome it?
-8. What competitive repositioning opportunity exists? (How do we position ONEST as better than what the viewer currently uses?)
-9. Is there a stack opportunity? (Can we mention complementary ONEST products?)
+PART 2 — ONEST SELLING STRATEGY (How do we use that engagement to SELL ${product}?)
+4. How should ONEST adapt this framework to sell ${product}? Specify:
+   - Which product benefits map to the competitor's key claims
+   - How to weave ${product}'s ingredients/results into the narrative naturally
+   - What makes ${product} the obvious solution within this framework
+5. What is the product selling angle?
 
-PART 3 — SCRIPT CONCEPTS
+PART 3 — SCRIPT CONCEPTS (${styleRequestText})
 Generate exactly these concepts: ${styleRequestText}
-
-Each concept must include:
-- title: Descriptive title
-- hookLine: The exact opening line
-- structure: Script structure with where product is introduced, benefits hit, and CTA lands
-- keyAngle: The unique selling angle
-- sellingStrategy: How this script sells ${product} — what benefits highlighted, objections overcome, proof points used
-- ctaApproach: The specific CTA approach appropriate to the style
-- styleId: One of "DR", "UGC", "FOUNDER", "EDUCATION", "LIFESTYLE", "DEMO"
+Each concept MUST specify a subStructureId from the available structures above.
 
 Return your response in this EXACT JSON format:
 {
-  "competitorConceptAnalysis": "200+ word analysis of what makes this ad engage viewers",
-  "hookStyle": "The specific hook type identified",
-  "hookArchetype": "One of: PATTERN_INTERRUPT, IDENTITY_CALLOUT, CURIOSITY_GAP, SOCIAL_PROOF_LEAD, CONTROVERSY_MYTH",
-  "narrativeFramework": "The exact narrative structure",
-  "persuasionMechanism": "How the ad holds attention and builds desire",
-  "productSellingAngle": "150+ words on how ${product}'s benefits map onto this framework",
-  "onestAdaptation": "200+ words on how to adapt this framework to SELL ${product}",
+  "funnelStage": "${funnelStage}",
+  "competitorConceptAnalysis": "200+ word analysis",
+  "hookStyle": "specific hook type identified",
+  "hookArchetype": "One of: contrarian, specificFrustration, socialProofLead, namedEnemy, boldClaim",
+  "narrativeFramework": "exact narrative structure",
+  "persuasionMechanism": "how the ad holds attention and builds desire",
+  "productSellingAngle": "150+ words on how ${product}'s benefits map onto the framework",
+  "onestAdaptation": "200+ word explanation of how ONEST adapts this to sell ${product}",
   "awarenessLevel": "One of: UNAWARE, PROBLEM_AWARE, SOLUTION_AWARE, PRODUCT_AWARE, MOST_AWARE",
-  "primaryObjection": "The main objection the target audience has and how to overcome it",
+  "primaryObjection": "The main objection and how to overcome it",
   "competitiveRepositioning": "How to position ONEST as better than alternatives",
-  "stackOpportunity": "Complementary ONEST products that could be mentioned (or 'None' if not appropriate)",
+  "stackOpportunity": "Complementary ONEST products or 'None'",
   "concepts": [
     {
       "title": "...",
-      "hookLine": "...",
-      "structure": "...",
-      "keyAngle": "...",
-      "sellingStrategy": "...",
-      "ctaApproach": "...",
-      "styleId": "DR|UGC|FOUNDER|EDUCATION|LIFESTYLE|DEMO"
+      "hookLine": "exact opening hook line",
+      "structure": "outline with product/benefit/CTA placement",
+      "keyAngle": "unique selling angle",
+      "sellingStrategy": "how this script sells ${product}",
+      "ctaApproach": "specific CTA approach — no discount codes or offer amounts",
+      "styleId": "DR|UGC|FOUNDER|BRAND|EDUCATION|LIFESTYLE|DEMO",
+      "subStructureId": "e.g. DR-1, UGC-3, FL-2, BR-1"
     }
   ],
-  "targetAudience": "Specific target audience",
-  "toneAndEnergy": "Tone and energy level"
+  "targetAudience": "specific target audience",
+  "toneAndEnergy": "tone and energy level description"
 }`;
 
   const response = await callClaude([{ role: "user", content: prompt }], system, 8000);
@@ -545,6 +1067,8 @@ Return your response in this EXACT JSON format:
           ...(parsed.ugcConcepts || []).map((c: any) => ({ ...c, styleId: "UGC" })),
         ];
       }
+      // Ensure funnelStage is set
+      if (!parsed.funnelStage) parsed.funnelStage = funnelStage;
       return parsed;
     }
   } catch (e) {
@@ -559,12 +1083,14 @@ Return your response in this EXACT JSON format:
       structure: "Hook → Problem → Solution → Proof → CTA",
       keyAngle: "Product differentiation",
       sellingStrategy: `Sell ${product} through its key benefits and ONEST's transparent labelling`,
-      ctaApproach: s.styleId === "UGC" ? "Link in bio — honestly just try it" : "Visit onest.com.au — use code for discount",
+      ctaApproach: s.styleId === "UGC" ? "Link in bio — honestly just try it" : "Visit onest.com.au",
       styleId: s.styleId,
+      subStructureId: s.styleId === "DR" ? "DR-1" : s.styleId === "UGC" ? "UGC-1" : s.styleId === "FOUNDER" ? "FL-1" : "BR-1",
     }))
   );
 
   return {
+    funnelStage,
     competitorConceptAnalysis: "Analysis could not be generated. Please review the transcript and visual analysis manually.",
     hookStyle: "Unknown — review transcript",
     hookArchetype: "UNKNOWN",
@@ -583,40 +1109,81 @@ Return your response in this EXACT JSON format:
 }
 
 // ============================================================
-// STYLE-SPECIFIC SCRIPT GENERATION — COPY FRAMEWORK v2.0
+// STYLE-SPECIFIC SCRIPT GENERATION — v3.0 (Stage 2)
 // ============================================================
 
-export function getStyleSystemPrompt(styleId: ScriptStyleId, product: string, duration: number): string {
+function getSubStructurePromptBlock(subStructureId?: string): string {
+  if (!subStructureId) return "";
+  const sub = SCRIPT_SUB_STRUCTURES.find(s => s.id === subStructureId);
+  if (!sub) return "";
+  return `
+ASSIGNED SUB-STRUCTURE: ${sub.id} — ${sub.name}
+Category: ${sub.category} | Funnel: ${sub.funnelStages.join(", ")} | Awareness: ${sub.awarenessLevel}
+Stages:
+${sub.stages.map(st => `- ${st.stage}: ${st.function}`).join("\n")}
+Why it converts: ${sub.whyItConverts}
+Psychological lever: ${sub.psychologicalLever}
+
+Follow this sub-structure's stage progression exactly. Each stage maps to timestamp segments in the script.
+`;
+}
+
+function getArchetypePromptBlock(archetype?: ActorArchetype): string {
+  if (!archetype) return "";
+  const profile = ARCHETYPE_PROFILES[archetype];
+  if (!profile) return "";
+  return `
+ACTOR ARCHETYPE: ${profile.label}
+Life context: ${profile.lifeContext}
+Language register: ${profile.languageRegister}
+Pre-product objection: ${profile.preProductObjection}
+
+Apply this voice profile throughout the script. The character's life context, language register, and pre-product objection must be woven into the dialogue naturally.
+`;
+}
+
+export function getStyleSystemPrompt(styleId: ScriptStyleId, product: string, duration: number, funnelStage: FunnelStage): string {
   const durationRange = duration === 45 ? "40-50" : duration === 90 ? "80-100" : "50-65";
   const segmentCount = duration === 45 ? "6-8" : duration === 90 ? "12-16" : "8-12";
+  const funnelRules = FUNNEL_STAGE_RULES[funnelStage];
 
   const baseRules = `
 MANDATORY RULES FOR ALL SCRIPTS:
 1. The product name "ONEST ${product}" must appear at least 2-3 times in the script.
 2. At least 2-3 specific product benefits or ingredients must be mentioned — not generic supplement claims.
-3. Every timestamp segment must serve the sale — no filler that could apply to any brand.
-4. Script must be ${durationRange} seconds long with ${segmentCount} timestamp segments.
-5. Use the competitor's ENGAGEMENT framework for pacing and structure, but fill it with ONEST selling content.
+3. Every timestamp segment must include a transitionLine — a single sentence that closes the current segment and opens the next. This makes structural shifts feel inevitable, not engineered. Required in every segment except the final CTA.
+4. Every segment must serve the sale — no filler that could apply to any brand.
+5. The script must build sequentially — each segment must increase purchase intent before the next begins.
+6. Script must be ${durationRange} seconds long with ${segmentCount} timestamp segments.
+
+FUNNEL STAGE: ${funnelStage}
+${funnelRules}
+
+${TRANSITION_LOGIC}
+
+${SCRIPT_AUDIT_CHECKLIST}
+
 ${COMPLIANCE_RULES}`;
 
   switch (styleId) {
     case "DR":
       return `You are a world-class direct response copywriter who has generated over $50M in trackable revenue from video ads. You write for ONEST Health, an Australian health supplement brand.
 
-YOUR SCRIPTS SELL PRODUCTS. Every line of dialogue moves the viewer closer to purchase.
+YOUR SCRIPTS SELL PRODUCTS. Every line of dialogue exists to move the viewer closer to purchase. You understand the proven DR framework:
 
-DR SCRIPT STRUCTURE (${durationRange}s):
-1. HOOK (0-5s): Pattern-interrupt that stops the scroll. Match the approved hook style.
-2. PROBLEM/DESIRE (5-15s): Agitate the pain point or amplify the desire. Make the viewer feel the gap.
-3. SOLUTION REVEAL (15-25s): Introduce ONEST ${product} BY NAME as the answer. Hit 2-3 specific benefits.
-4. PROOF (25-${duration === 90 ? "70" : "40"}s): Social proof, results, clinical backing, or transformation.
-5. CTA (final 10-15s): Clear, direct call-to-action. Tell the viewer EXACTLY what to do next. Add urgency.
+1. HOOK (0-5s): Pattern-interrupt that stops the scroll. Match the approved hook style. For cold traffic: never name the product in the hook.
+2. PROBLEM/DESIRE (5-15s): Agitate the pain point or amplify the desire. Make the viewer feel the gap between where they are and where they want to be.
+3. SOLUTION REVEAL (15-25s): Introduce ONEST ${product} BY NAME as the answer. Hit 2-3 specific benefits backed by real named ingredients or claims. Timing of first product mention is governed by funnelStage.
+4. PROOF (25-40s): Social proof, results, clinical backing, or transformation. Make the viewer believe this product delivers.
+5. CTA (40-55s): Clear, direct call-to-action. Tell the viewer exactly what to do next. CTA intensity is governed by funnelStage.
 
 CRITICAL DR RULES:
-- Product name "ONEST ${product}" must appear at least 3 times
-- At least 3 specific benefits or ingredients must be mentioned
-- The final 10-15 seconds MUST be a clear, direct CTA with urgency
-- Every segment must serve the sale — no generic motivation
+1. The product name "ONEST ${product}" must appear at least 3 times.
+2. At least 3 specific product benefits or named ingredients must be mentioned.
+3. The CTA must tell viewers exactly where to go. No discount codes or offer amounts in the script.
+4. Every timestamp segment must include a transitionLine — required in every segment except the final CTA.
+5. Every segment must serve the sale — no filler, no generic motivation that could apply to any brand.
+6. The script must build sequentially — each segment must increase purchase intent before the next begins.
 ${baseRules}`;
 
     case "UGC":
@@ -624,26 +1191,29 @@ ${baseRules}`;
 
 THE UGC PARADOX: The script must feel completely unscripted and genuine, while strategically communicating product benefits and driving purchase intent.
 
-UGC SCRIPT STRUCTURE (${durationRange}s):
-1. HOOK (0-5s): Casual, scroll-stopping opener. Sounds like someone about to share something genuine.
-2. PERSONAL CONTEXT (5-15s): The creator's real situation — their problem, journey, why they needed a solution.
-3. DISCOVERY (15-25s): How they found ONEST ${product}. Natural product mention — like telling a mate.
-4. EXPERIENCE & RESULTS (25-${duration === 90 ? "70" : "40"}s): What happened when they used it. Personal, specific results.
-5. RECOMMENDATION (final 10-15s): Genuine recommendation. "Honestly just try it" not "BUY NOW."
+YOUR UGC FRAMEWORK:
+1. HOOK (0-5s): Casual, scroll-stopping opener. Sounds like someone about to share something genuinely exciting. Match the approved hook style. For cold traffic: does not open with the product name.
+2. PERSONAL CONTEXT (5-15s): The creator's real situation — their problem, journey, why they were looking for a solution. Builds relatability.
+3. DISCOVERY (15-25s): How they found ONEST ${product}. Name the product naturally — the way you'd tell a mate about something you found.
+4. EXPERIENCE & RESULTS (25-40s): Specific, personal results — not clinical claims. "I actually had energy at 3pm" not "clinically proven to boost energy." Mention 2-3 benefits naturally.
+5. RECOMMENDATION (40-55s): Genuine recommendation. Not "BUY NOW" — "honestly, just try it" or "I'll leave the link below." Feels like a friend's recommendation.
 
 CRITICAL UGC RULES:
-- Product name said naturally 2-3 times — the way you'd say it in conversation
-- Benefits expressed as personal experiences: "I stopped getting that 3pm crash" not "Supports sustained energy"
-- CTA feels like a friend's recommendation: "Link's in my bio if you wanna check it out"
-- Include at least one moment of genuine personality — a laugh, tangent, self-deprecating comment
-- NEVER use corporate language: no "formulated," "proprietary," "cutting-edge," "revolutionary"
-- Australian English and casual tone throughout. "Reckon," "heaps," "arvo" where natural
+1. Product name appears 2-3 times naturally — never in the hook for cold traffic.
+2. Benefits expressed as personal experiences, not marketing claims.
+3. Every timestamp segment must include a transitionLine — makes each structural shift feel like natural conversation, not a script section change.
+4. Apply the voice profile for the selected actor archetype.
+5. Include at least one moment of genuine personality — a laugh, a tangent, a self-deprecating comment. Real people are not perfectly polished.
+6. BANNED: "formulated", "proprietary", "cutting-edge", "revolutionary", "unlock your potential", "fuel your journey", "transform your body", "achieve your goals". Instant inauthenticity signals.
+7. Australian English throughout. Casual AU colloquialisms where they fit naturally — do not force them.
 ${baseRules}`;
 
     case "FOUNDER":
       return `You are writing a founder-led video ad script for ONEST Health. The founder speaks with authority, passion, and personal conviction about why they created ${product}.
 
-FOUNDER-LED STRUCTURE (${durationRange}s):
+CRITICAL RULE: The founder must be on camera. This does not work with actors or proxies. Authenticity is the entire mechanism.
+
+FOUNDER-LED FRAMEWORK:
 1. HOOK (0-5s): Founder introduces themselves or makes a bold statement about the industry.
 2. THE PROBLEM (5-15s): What the founder saw wrong in the supplement industry — proprietary blends, under-dosing, dishonesty.
 3. THE MISSION (15-25s): Why they created ONEST — transparency, clinical dosing, doing it right.
@@ -651,10 +1221,35 @@ FOUNDER-LED STRUCTURE (${durationRange}s):
 5. THE INVITATION (final 10-15s): Invites the viewer to try it. Confident but not pushy. "See for yourself."
 
 CRITICAL FOUNDER RULES:
-- Speak with authority and personal conviction — "I created this because..."
-- Show insider knowledge of the industry — what competitors do wrong
-- Be specific about ingredients and doses — founders know their products
-- CTA is an invitation, not a hard sell — "I'd love for you to try it"
+1. Speak with authority and personal conviction — "I created this because..."
+2. Show insider knowledge of the industry — what competitors do wrong
+3. Be specific about ingredients and doses — founders know their products
+4. CTA is an invitation, not a hard sell — "I'd love for you to try it"
+5. Every timestamp segment must include a transitionLine.
+${baseRules}`;
+
+    case "BRAND":
+      return `You are writing a brand/equity video script for ONEST Health. This script does NOT ask for a sale — it asks for BELIEF.
+
+BRAND CONTENT RULES:
+- These are measured by watch time, shares, saves, and downstream conversion lift — never by direct ROAS
+- Do not evaluate brand content on the same metrics as DR content
+- The product appears as the conclusion of the argument, not the start
+- Focus on identity, belief, and community — not features and benefits
+
+BRAND FRAMEWORK:
+1. OPENING: Aspirational visual or bold belief statement — no product, no logo yet
+2. THE TRUTH: What serious performance/health actually requires
+3. THE AUDIENCE: Name them — not "supplement users" but "the ones who don't settle"
+4. THE CONVICTION: ONEST's position — not what we sell, what we believe
+5. THE REVEAL: Product appears as the natural conclusion
+6. SIGN-OFF: Brand line — MADE OF GREATNESS
+
+CRITICAL BRAND RULES:
+1. Product appears late — earned through the narrative, not inserted
+2. No hard sell, no urgency, no "buy now"
+3. Every timestamp segment must include a transitionLine.
+4. Focus on emotional resonance and identity alignment
 ${baseRules}`;
 
     case "EDUCATION":
@@ -672,6 +1267,7 @@ CRITICAL EDUCATION RULES:
 - The myth-bust must be relevant to the product's differentiator
 - Transition from education to product must feel natural, not forced
 - CTA leverages the new knowledge: "Now that you know this, try..."
+- Every timestamp segment must include a transitionLine.
 ${baseRules}`;
 
     case "LIFESTYLE":
@@ -689,6 +1285,7 @@ CRITICAL LIFESTYLE RULES:
 - Focus on feelings and aspirations, not features and benefits
 - Visual direction is crucial — every shot should feel aspirational
 - CTA is soft and aspirational — invites the viewer into the lifestyle
+- Every timestamp segment must include a transitionLine.
 ${baseRules}`;
 
     case "DEMO":
@@ -706,6 +1303,7 @@ CRITICAL DEMO RULES:
 - The product introduction must feel like a natural solution reveal
 - Results should be specific and believable, not exaggerated
 - CTA connects the demonstrated results to the viewer's situation
+- Every timestamp segment must include a transitionLine.
 ${baseRules}`;
 
     default:
@@ -721,21 +1319,27 @@ async function generateConceptMatchedScript(
   concept: VideoBriefConcept,
   brief: VideoBriefOptions,
   productInfoContext: string,
-  duration: number
+  duration: number,
+  funnelStage: FunnelStage,
+  archetype?: ActorArchetype
 ): Promise<{
   title: string;
   hook: string;
-  script: Array<{ timestamp: string; visual: string; dialogue: string }>;
+  script: Array<{ timestamp: string; visual: string; dialogue: string; transitionLine?: string }>;
   visualDirection: string;
   strategicThesis: string;
+  subStructureId: string;
   scriptMetadata: {
     product: string;
     targetPersona: string;
     awarenessLevel: string;
-    funnelPosition: string;
+    funnelStage: string;
     scriptStyle: string;
+    subStructure: string;
+    hookArchetype: string;
     testHypothesis: string;
     primaryObjection: string;
+    actorArchetype?: string;
   };
   visualDirectionBrief: {
     overallStyle: string;
@@ -745,6 +1349,9 @@ async function generateConceptMatchedScript(
   };
 }> {
   const productIntel = PRODUCT_INTELLIGENCE[product];
+  const fallbackBrief = PRODUCT_FALLBACK_BRIEFS[product] || "";
+  const fullProductInfo = productInfoContext || fallbackBrief || `Product: ONEST ${product}. Brand: ONEST Health. Website: onest.com.au.`;
+
   const productIntelBlock = productIntel
     ? `
 === PRODUCT INTELLIGENCE (YOU MUST USE THIS) ===
@@ -762,12 +1369,21 @@ ${productIntel.copyTraps.map((t, i) => `${i + 1}. ${t}`).join("\n")}
     : "";
 
   const styleLabel = SCRIPT_STYLES.find(s => s.id === concept.styleId)?.label || concept.styleId;
-  const system = getStyleSystemPrompt(concept.styleId, product, duration);
+  const system = getStyleSystemPrompt(concept.styleId, product, duration, funnelStage);
 
   const durationRange = duration === 45 ? "40-50" : duration === 90 ? "80-100" : "50-65";
   const segmentCount = duration === 45 ? "6-8" : duration === 90 ? "12-16" : "8-12";
 
-  const prompt = `Write a ${styleLabel} script for ONEST Health's ${product} that follows the approved concept brief.
+  const subStructureBlock = getSubStructurePromptBlock(concept.subStructureId);
+  const archetypeBlock = (concept.styleId === "UGC" && archetype) ? getArchetypePromptBlock(archetype) : "";
+
+  const scriptTypeDesc = concept.styleId === "DR" ? "direct response script"
+    : concept.styleId === "UGC" ? "UGC (user-generated content) script"
+    : concept.styleId === "FOUNDER" ? "founder-led script"
+    : concept.styleId === "BRAND" ? "brand/equity script"
+    : `${styleLabel} script`;
+
+  const prompt = `Write a ${scriptTypeDesc} for ONEST Health's ${product} that follows the approved concept brief.
 
 APPROVED CONCEPT:
 Title: ${concept.title}
@@ -778,7 +1394,14 @@ Selling Strategy: ${concept.sellingStrategy || "Sell through key benefits and un
 CTA Approach: ${concept.ctaApproach || "Direct viewers to onest.com.au"}
 Script Style: ${styleLabel}
 
-COMPETITOR'S ENGAGEMENT FRAMEWORK (use for PACING and STRUCTURE):
+${subStructureBlock}
+
+FUNNEL STAGE: ${funnelStage}
+Apply funnel stage rules to product naming timing, CTA intensity, and proof placement.
+
+${archetypeBlock}
+
+COMPETITOR'S ENGAGEMENT FRAMEWORK (use for PACING and STRUCTURE, not content):
 Hook Style: ${brief.hookStyle}
 Narrative Framework: ${brief.narrativeFramework}
 Persuasion Mechanism: ${brief.persuasionMechanism}
@@ -791,44 +1414,33 @@ ${brief.onestAdaptation}
 
 TARGET AUDIENCE: ${brief.targetAudience}
 TONE & ENERGY: ${brief.toneAndEnergy}
-AWARENESS LEVEL: ${brief.awarenessLevel || "PROBLEM_AWARE"}
 
 COMPETITOR'S ORIGINAL TRANSCRIPT (for reference — use PACING and STRUCTURE, not words):
 ${transcript}
 
 === PRODUCT INFORMATION (YOU MUST USE THIS) ===
-${productInfoContext || `Product: ONEST ${product}. Brand: ONEST Health (Australian-made, transparent labelling, clinically dosed ingredients, no proprietary blends). Website: onest.com.au.`}
+${fullProductInfo}
 ${productIntelBlock}
 === END PRODUCT INFORMATION ===
 
 Return your response in this EXACT JSON format:
 {
   "title": "${concept.title}",
-  "hook": "The exact opening line",
+  "hook": "exact opening line — stops the scroll as a complete idea in under 3 seconds",
   "script": [
-    {"timestamp": "0-3s", "visual": "What the viewer sees", "dialogue": "What is said"},
-    ...more rows covering ~${duration} seconds total (${segmentCount} segments)
+    {
+      "timestamp": "0-3s",
+      "visual": "what the viewer sees",
+      "dialogue": "what is said — every line serves the sale",
+      "transitionLine": "single sentence closing this segment and opening the next"
+    },
+    ...more rows covering ${durationRange} seconds total (${segmentCount} segments)
   ],
-  "visualDirection": "Overall visual direction in 2-3 sentences",
-  "strategicThesis": "How this script uses the engagement framework to sell ONEST ${product}",
-  "scriptMetadata": {
-    "product": "ONEST ${product}",
-    "targetPersona": "${productIntel?.targetPersona || "Health-conscious adults 25-55"}",
-    "awarenessLevel": "${brief.awarenessLevel || "PROBLEM_AWARE"}",
-    "funnelPosition": "Top/Mid/Bottom of funnel",
-    "scriptStyle": "${styleLabel}",
-    "testHypothesis": "What this script tests (e.g., 'Testing whether curiosity gap hooks outperform identity call-outs for ${product}')",
-    "primaryObjection": "${brief.primaryObjection || "Price or scepticism"}"
-  },
-  "visualDirectionBrief": {
-    "overallStyle": "Overall visual style description",
-    "colorPalette": "Color palette guidance",
-    "pacing": "Pacing and editing rhythm",
-    "shots": [
-      {"timestamp": "0-3s", "shotType": "Close-up/Wide/Medium/etc", "description": "Shot description"}
-    ]
-  }
+  "visualDirection": "2-3 sentences. DR: polished direct response energy. UGC: phone-filmed, natural lighting, real environment.",
+  "strategicThesis": "Paragraph: (1) how this uses the competitor's engagement framework, (2) how it sells ONEST ${product} specifically, (3) what psychological triggers drive purchase intent, (4) why the CTA approach will convert"
 }
+
+CRITICAL: Every script segment MUST include a transitionLine field (except the final CTA segment). The transitionLine is a single sentence that closes the current segment and opens the next, making the structural shift feel inevitable rather than engineered.
 
 Make the script ~${duration} seconds long with ${segmentCount} timestamp segments.`;
 
@@ -837,30 +1449,57 @@ Make the script ~${duration} seconds long with ${segmentCount} timestamp segment
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonMatch[0]);
+      // Attach metadata
+      parsed.subStructureId = concept.subStructureId || "";
+      parsed.scriptMetadata = {
+        product: `ONEST ${product}`,
+        targetPersona: productIntel?.targetPersona || brief.targetAudience || "Health-conscious adults",
+        awarenessLevel: brief.awarenessLevel || "PROBLEM_AWARE",
+        funnelStage,
+        scriptStyle: styleLabel,
+        subStructure: concept.subStructureId || "custom",
+        hookArchetype: brief.hookArchetype || "UNKNOWN",
+        testHypothesis: `Testing ${concept.subStructureId || styleLabel} structure with ${brief.hookArchetype || "mixed"} hook archetype for ${product} at ${funnelStage} funnel stage`,
+        primaryObjection: brief.primaryObjection || "Scepticism",
+        ...(archetype ? { actorArchetype: archetype } : {}),
+      };
+      if (!parsed.visualDirectionBrief) {
+        parsed.visualDirectionBrief = {
+          overallStyle: concept.styleId === "UGC" ? "Phone-filmed, natural lighting, real environment" : "Polished direct response energy",
+          colorPalette: "ONEST brand colours",
+          pacing: duration === 45 ? "Fast-paced, punchy" : duration === 90 ? "Measured, story-driven" : "Medium pacing",
+          shots: [],
+        };
+      }
+      return parsed;
     }
   } catch (e) {
     console.error("[VideoPipeline] Failed to parse script JSON:", e);
   }
 
+  // Fallback
   return {
     title: concept.title,
     hook: concept.hookLine,
     script: [
-      { timestamp: "0-3s", visual: "Opening shot", dialogue: concept.hookLine },
-      { timestamp: "3-10s", visual: "Problem setup", dialogue: "Here's what most people don't know..." },
-      { timestamp: "10-25s", visual: "Solution reveal", dialogue: `ONEST ${product} changes everything.` },
-      { timestamp: "25-45s", visual: "Social proof", dialogue: "The results speak for themselves." },
+      { timestamp: "0-3s", visual: "Opening shot", dialogue: concept.hookLine, transitionLine: "But here's what most people don't realise..." },
+      { timestamp: "3-10s", visual: "Problem setup", dialogue: "Here's what most people don't know...", transitionLine: "And that's exactly why this matters." },
+      { timestamp: "10-25s", visual: "Solution reveal", dialogue: `ONEST ${product} changes everything.`, transitionLine: "The results speak for themselves." },
+      { timestamp: "25-45s", visual: "Social proof", dialogue: "The results speak for themselves.", transitionLine: "So here's what you can do right now." },
       { timestamp: "45-55s", visual: "CTA", dialogue: "Click the link below to get started." },
     ],
     visualDirection: "Match the competitor's production style.",
     strategicThesis: "This script adapts the competitor's framework for ONEST.",
+    subStructureId: concept.subStructureId || "",
     scriptMetadata: {
       product: `ONEST ${product}`,
       targetPersona: productIntel?.targetPersona || "Health-conscious adults",
       awarenessLevel: brief.awarenessLevel || "PROBLEM_AWARE",
-      funnelPosition: "Mid-funnel",
+      funnelStage,
       scriptStyle: styleLabel,
+      subStructure: concept.subStructureId || "custom",
+      hookArchetype: brief.hookArchetype || "UNKNOWN",
       testHypothesis: "Testing framework adaptation",
       primaryObjection: brief.primaryObjection || "Scepticism",
     },
@@ -874,7 +1513,7 @@ Make the script ~${duration} seconds long with ${segmentCount} timestamp segment
 }
 
 // ============================================================
-// 10 NAMED EXPERT REVIEWERS — ONEST COPY FRAMEWORK v2.0
+// EXPERT REVIEW PANEL — v3.0 (6 CRITERIA, 5 ROUNDS)
 // ============================================================
 
 export const NAMED_EXPERTS = [
@@ -895,127 +1534,321 @@ async function reviewScriptWithPanel(
   product: string,
   scriptStyle: string,
   brief: VideoBriefOptions,
-  productInfoContext: string
+  productInfoContext: string,
+  funnelStage: FunnelStage
 ): Promise<{ rounds: any[]; finalScore: number; approved: boolean; summary: string }> {
   const rounds: any[] = [];
   let currentScript = scriptJson;
   let approved = false;
   let finalScore = 0;
+  const MAX_ROUNDS = 5;
 
-  for (let round = 1; round <= 3; round++) {
-    const expertListText = NAMED_EXPERTS.map((e, i) =>
-      `${i + 1}. ${e.name} (${e.framework}): ${e.lens} | INSTANT KILLER: ${e.instantKiller}`
-    ).join("\n");
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    // v3.0 Stage 3 Review System Prompt — 6 criteria of equal weight
+    const system = `You are simulating a panel of 10 advertising experts reviewing a ${scriptStyle} script for ONEST Health's ${product}. This is review round ${round}.
 
-    const system = `You are simulating a panel of 10 world-renowned advertising and psychology experts reviewing a ${scriptStyle} script for ONEST Health's ${product}. This is review round ${round}.
+Score based on SIX criteria of equal weight:
 
-THE 10 EXPERT REVIEWERS:
-${expertListText}
+1. ENGAGEMENT FRAMEWORK: Does the script follow the approved hook style and narrative framework? Does it use the competitor's engagement structure correctly?
 
-SCORING CRITERIA (all 5 weighted equally):
-1. ENGAGEMENT FRAMEWORK: Does the script follow the approved hook style and narrative framework?
-2. PRODUCT SELLING: Does the script effectively sell ONEST ${product}? Is the product named? Are specific benefits mentioned?
-3. CTA STRENGTH: Does the script end with an appropriate CTA for its style?
-4. FORMAT AUTHENTICITY: Does this feel like an authentic ${scriptStyle} ad?
-5. CONVERSION POTENTIAL: Would this script drive purchases as a paid ad?
+2. PRODUCT SELLING: Does the script effectively sell ONEST ${product}? Is the product named? Are specific benefits and named ingredients mentioned? Would a viewer know what the product is and why they should want it?
 
-HARD SCORING RULES:
-- If the script fails to mention the product by name → scores MUST be below 70
-- If the script has no clear CTA → scores MUST be below 75
-- If the script could work for any generic supplement brand → scores MUST be below 80
-- If the script violates compliance guardrails → score MUST be 0
-- Minimum passing score: 90/100 (scripts below 90 get iterated)
+3. CTA STRENGTH:
+   DR: Does the script end with a clear, direct CTA? Does the viewer know exactly where to go?
+   UGC: Does the script end with a genuine, friend-like recommendation? Would a viewer feel motivated to check out the product?
 
-${COMPLIANCE_RULES}`;
+4. FORMAT AUTHENTICITY:
+   DR: Does this feel like a polished direct response ad that drives action?
+   UGC: Does this feel like authentic UGC — a real person sharing a genuine experience? Or does it sound like scripted ad copy?
 
-    const prompt = `Review this ${scriptStyle} script for ONEST Health's ${product}:
-${JSON.stringify(currentScript, null, 2)}
+5. PERSUASION ARCHITECTURE: Does the script build sequentially — does each segment increase purchase intent before the next begins? Is the CTA arriving at peak motivation, after proof has landed? Does each transitionLine make the structural shift feel inevitable, not engineered? Is there a tension established in the hook that gets resolved in the solution section?
 
-Product information for reference:
-${productInfoContext || `ONEST ${product} — Australian-made health supplement`}
+6. CONVERSION POTENTIAL: Overall — would this script drive purchases? Would you approve this to run as a paid ad for ONEST ${product}?
 
-Each expert must review through their specific framework lens. If their instant killer is triggered, their score must reflect it.
+SCORE FLOOR RULES — strictly enforced:
+- Script fails to mention product by name: score MUST be below 70
+- Script has no clear CTA (DR) or no recommendation (UGC): score MUST be below 75
+- Script could belong to any generic supplement brand: score MUST be below 80
+- Product introduced before problem is established (cold/warm): score MUST be below 80
+- Any transitionLine missing from the JSON output: score MUST be below 85
+- Script contains banned phrases ("unlock your potential", "fuel your journey", "transform your body", "achieve your goals"): score MUST be below 75
 
-Return JSON: {
+FUNNEL STAGE: ${funnelStage}
+Verify the script follows the non-negotiable rules for this funnel stage.
+
+${COMPLIANCE_RULES}
+
+Score range guidance:
+- 90-100: Approved. Effective product sell, strong CTA, authentic format, sequential persuasion architecture, complete transitionLine coverage.
+- 80-89: Good but missing specific product benefits, CTA could be stronger, or one transition feels engineered.
+- 70-79: Framework correct but script does not sell the product effectively. Structural issue.
+- Below 70: Could be for any brand. Fundamental commercial failure. Requires structural rewrite.
+
+Return JSON:
+{
   "reviews": [
     {
-      "expertName": "Full name (e.g., Eugene Schwartz)",
-      "framework": "Their framework name",
-      "score": <60-100>,
-      "feedback": "2-3 sentences: what works through their lens, what's missing, one specific improvement",
-      "instantKillerTriggered": true/false
+      "expertName": "Full name",
+      "domain": "Their domain/framework",
+      "score": 60 to 100,
+      "feedback": "2-3 sentences: what works, what is missing for selling the product, one specific improvement"
     }
   ]
-}`;
+}
 
-    const response = await callClaude([{ role: "user", content: prompt }], system, 4000);
+Score range guidance:
+- 90-100: Approved. Effective product sell, strong CTA, authentic format.
+- 80-89: Good but missing specific product benefits or CTA could be stronger.
+- 70-79: Framework correct but script does not sell the product effectively.
+- Below 70: Could be for any brand. Fundamental commercial failure.`;
 
-    let reviews: any[] = [];
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.reviews) reviews = parsed.reviews;
-      }
-    } catch (e) {
-      console.error("[VideoPipeline] Review parse failed:", e);
-    }
+    const reviewPrompt = `Review this ${scriptStyle} script for ONEST Health's ${product}.
 
-    if (reviews.length === 0) {
-      reviews = NAMED_EXPERTS.map(e => ({
-        expertName: e.name,
-        framework: e.framework,
-        score: 85 + round * 2 + Math.floor(Math.random() * 5),
-        feedback: "The script demonstrates solid adherence to the framework with room for improvement.",
-        instantKillerTriggered: false,
-      }));
-    }
-
-    const avgScore = reviews.reduce((sum: number, r: any) => sum + (Number(r.score) || 85), 0) / reviews.length;
-    finalScore = Math.round(avgScore * 10) / 10;
-
-    rounds.push({ roundNumber: round, averageScore: finalScore, expertReviews: reviews });
-
-    if (avgScore >= 90) { approved = true; break; }
-    if (round === 3) { approved = avgScore >= 85; break; }
-
-    // Iterate script with specific expert feedback
-    const lowScorers = reviews.filter((r: any) => (r.score || 85) < 90);
-    const feedback = lowScorers.map((r: any) =>
-      `${r.expertName} (${r.framework}, score: ${r.score}): ${r.feedback}${r.instantKillerTriggered ? " [INSTANT KILLER TRIGGERED]" : ""}`
-    ).join("\n");
-
-    try {
-      const iterResponse = await callClaude([{
-        role: "user",
-        content: `Improve this ${scriptStyle} script based on expert feedback. The script MUST sell ONEST ${product} with specific benefits and a clear CTA.
-
-Current script:
+SCRIPT:
 ${JSON.stringify(currentScript, null, 2)}
 
-Expert feedback (address ALL points):
-${feedback}
+PRODUCT INFORMATION:
+${productInfoContext || PRODUCT_FALLBACK_BRIEFS[product] || `ONEST ${product}`}
 
-Return the improved script in the same JSON format. Focus on:
-1. Addressing each expert's specific concern
-2. Ensuring the product name appears at least 2-3 times
-3. Including specific product benefits (not generic claims)
-4. Ending with a clear, style-appropriate CTA`
-      }], `You are iterating a ${scriptStyle} script for ONEST Health ${product}. Every change must make the script sell the product more effectively.`, 6000);
-      const jsonMatch = iterResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) currentScript = JSON.parse(jsonMatch[0]);
+BRIEF CONTEXT:
+Hook Style: ${brief.hookStyle}
+Narrative Framework: ${brief.narrativeFramework}
+Target Audience: ${brief.targetAudience}
+Funnel Stage: ${funnelStage}
+
+${round >= 4 ? 'ROUND 4+ INSTRUCTION: If the script has not cleared 90 after 3 rounds, the issue is STRUCTURAL. Polishing sentences will not solve a structural problem. Instruct a rebuild from the hook down — new hook approach, new narrative arc, new proof sequencing.' : ''}
+
+Provide your expert panel review as JSON.`;
+
+    const reviewResponse = await callClaude([{ role: "user", content: reviewPrompt }], system, 4000);
+
+    let reviewData: any;
+    try {
+      const jsonMatch = reviewResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        reviewData = JSON.parse(jsonMatch[0]);
+      }
     } catch (e) {
-      console.error("[VideoPipeline] Script iteration failed:", e);
+      console.error(`[VideoPipeline] Failed to parse review round ${round}:`, e);
+    }
+
+    if (!reviewData?.reviews) {
+      reviewData = {
+        reviews: NAMED_EXPERTS.slice(0, 10).map(exp => ({
+          expertName: exp.name,
+          domain: exp.framework,
+          score: 75,
+          feedback: "Could not generate review. Manual review recommended.",
+        })),
+      };
+    }
+
+    const avgScore = Math.round(
+      reviewData.reviews.reduce((sum: number, r: any) => sum + (r.score || 75), 0) / reviewData.reviews.length
+    );
+
+    rounds.push({
+      round,
+      reviews: reviewData.reviews,
+      averageScore: avgScore,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (avgScore >= 90) {
+      approved = true;
+      finalScore = avgScore;
+      break;
+    }
+
+    finalScore = avgScore;
+
+    // If not the last round, revise the script
+    if (round < MAX_ROUNDS) {
+      const lowestCriteria = reviewData.reviews
+        .sort((a: any, b: any) => (a.score || 75) - (b.score || 75))
+        .slice(0, 3)
+        .map((r: any) => `${r.expertName} (${r.domain}): ${r.feedback}`)
+        .join("\n");
+
+      const revisionInstruction = round >= 4
+        ? `STRUCTURAL REWRITE REQUIRED. The script has failed to clear 90 after ${round - 1} rounds. The issue is structural, not copy polish. Rebuild from the hook down — new hook approach, new narrative arc, new proof sequencing. Keep the same product and concept angle but completely restructure the delivery.`
+        : `Revise the script to address the 3 lowest-scoring criteria. Focus on specific improvements, not general polish.`;
+
+      const revisionPrompt = `${revisionInstruction}
+
+LOWEST-SCORING FEEDBACK:
+${lowestCriteria}
+
+CURRENT SCRIPT:
+${JSON.stringify(currentScript, null, 2)}
+
+Return the COMPLETE revised script in the same JSON format (title, hook, script array with timestamp/visual/dialogue/transitionLine, visualDirection, strategicThesis).`;
+
+      const revisionSystem = getStyleSystemPrompt(currentScript.scriptMetadata?.scriptStyle === 'UGC' ? 'UGC' : currentScript.scriptMetadata?.scriptStyle === 'Founder-Led' ? 'FOUNDER' : currentScript.scriptMetadata?.scriptStyle === 'Brand / Equity' ? 'BRAND' : 'DR', product, 60, funnelStage);
+
+      const revisionResponse = await callClaude([{ role: "user", content: revisionPrompt }], revisionSystem, 6000);
+
+      try {
+        const jsonMatch = revisionResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const revisedScript = JSON.parse(jsonMatch[0]);
+          // Preserve metadata from original
+          revisedScript.subStructureId = currentScript.subStructureId;
+          revisedScript.scriptMetadata = currentScript.scriptMetadata;
+          revisedScript.visualDirectionBrief = revisedScript.visualDirectionBrief || currentScript.visualDirectionBrief;
+          currentScript = revisedScript;
+        }
+      } catch (e) {
+        console.error(`[VideoPipeline] Failed to parse revision round ${round}:`, e);
+      }
     }
   }
 
-  return { rounds, finalScore, approved, summary: `Score: ${finalScore}/100. ${approved ? "Approved." : "Needs improvement."}` };
+  const summary = approved
+    ? `Script approved in round ${rounds.length} with average score ${finalScore}/100.`
+    : `Script completed ${rounds.length} review rounds. Final score: ${finalScore}/100. ${finalScore < 90 ? 'Flagged for human review.' : ''}`;
+
+  return { rounds, finalScore, approved, summary };
 }
 
 // ============================================================
-// MAIN PIPELINE — Stages 1-5
+// COST ESTIMATION — v3.0
 // ============================================================
 
+export function estimatePipelineCost(styleConfig: StyleConfig[], duration: number): {
+  totalScripts: number;
+  estimatedTokens: number;
+  estimatedCostUSD: number;
+  breakdown: Array<{ style: string; quantity: number; tokensPerScript: number }>;
+} {
+  const breakdown = styleConfig.filter(s => s.quantity > 0).map(s => {
+    const style = SCRIPT_STYLES.find(st => st.id === s.styleId);
+    const baseTokens = duration === 45 ? 8000 : duration === 90 ? 14000 : 10000;
+    const reviewTokens = 12000; // ~3 review rounds average
+    const tokensPerScript = baseTokens + reviewTokens;
+    return {
+      style: style?.label || s.styleId,
+      quantity: s.quantity,
+      tokensPerScript,
+    };
+  });
+
+  const totalScripts = breakdown.reduce((sum, b) => sum + b.quantity, 0);
+  const estimatedTokens = breakdown.reduce((sum, b) => sum + (b.quantity * b.tokensPerScript), 0);
+  // Brief generation tokens
+  const briefTokens = 12000;
+  const totalTokens = estimatedTokens + briefTokens;
+  // Approximate cost at $3/1M input + $15/1M output tokens (Claude Sonnet)
+  const estimatedCostUSD = Math.round((totalTokens * 0.000015) * 100) / 100;
+
+  return { totalScripts, estimatedTokens: totalTokens, estimatedCostUSD, breakdown };
+}
+
+// ============================================================
+// STAGED PIPELINE FUNCTIONS — v3.0 (matches routers.ts interface)
+// ============================================================
+
+// Helper to load product info context
+async function loadProductInfoContext(product: string): Promise<string> {
+  try {
+    const info = await db.getProductInfo(product);
+    if (info) {
+      const parts: string[] = [];
+      if ((info as any).ingredients) parts.push(`Ingredients: ${(info as any).ingredients}`);
+      if ((info as any).benefits) parts.push(`Benefits: ${(info as any).benefits}`);
+      if ((info as any).claims) parts.push(`Claims: ${(info as any).claims}`);
+      if ((info as any).targetAudience) parts.push(`Target Audience: ${(info as any).targetAudience}`);
+      if ((info as any).keySellingPoints) parts.push(`Key Selling Points: ${(info as any).keySellingPoints}`);
+      if ((info as any).flavourVariants) parts.push(`Flavour Variants: ${(info as any).flavourVariants}`);
+      if ((info as any).pricing) parts.push(`Pricing: ${(info as any).pricing}`);
+      if ((info as any).additionalNotes) parts.push(`Notes: ${(info as any).additionalNotes}`);
+      return parts.join("\n");
+    }
+  } catch (err: any) {
+    console.warn("[VideoPipeline] Failed to load product info:", err.message);
+  }
+  return "";
+}
+
+function getProductIntelligence(product: string) {
+  return PRODUCT_INTELLIGENCE[product] || {
+    fullName: `ONEST ${product}`,
+    category: "Health Supplement",
+    copyLevers: ["Full ingredient transparency", "Australian-made, GMP certified", "No proprietary blends"],
+    copyTraps: ["Avoid generic supplement claims"],
+    stackPartners: [],
+    targetPersona: "Health-conscious adults 25-55",
+    awarenessAngle: "Problem-aware",
+    keyIngredients: [],
+    primaryBenefit: "Premium quality health supplement",
+    differentiator: "Full label transparency",
+  };
+}
+
+function formatBriefForDisplay(brief: VideoBriefOptions, brandName: string, product: string, sourceType: string): string {
+  const sourceLabel = sourceType === "winning_ad" ? "Our Winning Ad" : `${brandName} Competitor Ad`;
+  let text = `# Video Creative Brief — ${product}\n## Based on ${sourceLabel}\n`;
+  text += `### Classification\n`;
+  text += `- **Funnel Stage:** ${brief.funnelStage || "N/A"}\n`;
+  text += `- **Hook Archetype:** ${(brief as any).hookArchetype?.replace(/_/g, " ") || "N/A"}\n`;
+  text += `- **Awareness Level:** ${brief.awarenessLevel?.replace(/_/g, " ") || "N/A"}\n`;
+  text += `### Competitor Concept Analysis\n${brief.competitorConceptAnalysis}\n`;
+  text += `### Hook Style\n${brief.hookStyle}\n`;
+  text += `### Narrative Framework\n${brief.narrativeFramework}\n`;
+  text += `### Persuasion Mechanism\n${brief.persuasionMechanism}\n`;
+  text += `### Product Selling Angle\n${brief.productSellingAngle || "N/A"}\n`;
+  text += `### Primary Objection\n${brief.primaryObjection || "N/A"}\n`;
+  text += `### Competitive Repositioning\n${brief.competitiveRepositioning || "N/A"}\n`;
+  text += `### ONEST Adaptation Strategy\n${brief.onestAdaptation}\n`;
+  text += `### Stack Opportunity\n${brief.stackOpportunity || "None"}\n---\n`;
+  text += `### Script Concepts (${brief.concepts?.length || 0})\n`;
+  if (brief.concepts && Array.isArray(brief.concepts)) {
+    brief.concepts.forEach((concept, i) => {
+      const styleName = SCRIPT_STYLES.find(s => s.id === concept.styleId)?.label || concept.styleId;
+      text += `\n**${i + 1}. ${concept.title}** (${styleName})\n`;
+      text += `- Hook: "${concept.hookLine}"\n`;
+      text += `- Structure: ${concept.structure}\n`;
+      text += `- Angle: ${concept.keyAngle}\n`;
+      text += `- Selling Strategy: ${concept.sellingStrategy || "N/A"}\n`;
+      text += `- CTA: ${concept.ctaApproach || "N/A"}\n`;
+      text += `- Sub-Structure: ${concept.subStructureId || "N/A"}\n`;
+    });
+  }
+  text += `\n---\n**Target Audience:** ${brief.targetAudience}\n**Tone & Energy:** ${brief.toneAndEnergy}`;
+  return text;
+}
+
+// Convert new-style StyleConfig[] to old-style object for backward compat
+function normalizeStyleConfig(input: any): StyleConfig[] {
+  if (Array.isArray(input)) return input as StyleConfig[];
+  // Old format: { direct_response: 2, ugc_testimonial: 2 }
+  const mapping: Record<string, ScriptStyleId> = {
+    direct_response: "DR",
+    ugc_testimonial: "UGC",
+    founder_led: "FOUNDER",
+    education_mythbusting: "EDUCATION",
+    lifestyle_aspiration: "LIFESTYLE",
+    problem_solution_demo: "DEMO",
+  };
+  const result: StyleConfig[] = [];
+  if (input && typeof input === "object") {
+    for (const [key, val] of Object.entries(input)) {
+      const styleId = mapping[key];
+      if (styleId && typeof val === "number" && val > 0) {
+        result.push({ styleId, quantity: val });
+      }
+    }
+  }
+  if (result.length === 0) {
+    result.push({ styleId: "DR", quantity: 2 }, { styleId: "UGC", quantity: 2 });
+  }
+  return result;
+}
+
+/**
+ * Stages 1-3: Transcription → Visual Analysis → Brief Generation
+ * Pauses at stage_3b_brief_approval for user review.
+ */
 export async function runVideoPipelineStages1to3(runId: number, input: {
   product: string;
   priority: string;
@@ -1026,36 +1859,16 @@ export async function runVideoPipelineStages1to3(runId: number, input: {
   thumbnailUrl?: string;
   sourceType?: "competitor" | "winning_ad";
   duration?: number;
-  styleConfig?: StyleConfig[];
+  styleConfig?: any;
+  funnelStage?: FunnelStage;
+  actorArchetype?: ActorArchetype;
 }) {
   console.log(`[VideoPipeline] Starting stages 1-3 for run #${runId}`);
-
   const sourceType = input.sourceType || "competitor";
   const duration = input.duration || 60;
-  const styleConfig = input.styleConfig || [
-    { styleId: "DR" as ScriptStyleId, quantity: 2 },
-    { styleId: "UGC" as ScriptStyleId, quantity: 2 },
-  ];
-
-  // Load product info
-  let productInfoContext = "";
-  try {
-    const info = await db.getProductInfo(input.product);
-    if (info) {
-      const parts: string[] = [];
-      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
-      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
-      if (info.claims) parts.push(`Claims: ${info.claims}`);
-      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
-      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
-      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
-      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
-      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
-      productInfoContext = parts.join("\n");
-    }
-  } catch (err: any) {
-    console.warn("[VideoPipeline] Failed to load product info:", err.message);
-  }
+  const styleConfig = normalizeStyleConfig(input.styleConfig);
+  const funnelStage: FunnelStage = (input as any).funnelStage || "cold";
+  const productInfoContext = await loadProductInfoContext(input.product);
 
   // Stage 1: Transcription
   await db.updatePipelineRun(runId, { videoStage: "stage_1_transcription" });
@@ -1079,7 +1892,7 @@ export async function runVideoPipelineStages1to3(runId: number, input: {
   try {
     const { analyzeVideoFrames } = await import("./claude");
     visualAnalysis = await withTimeout(
-      analyzeVideoFrames(input.mediaUrl, transcript, input.foreplayAdBrand || "Unknown"),
+      analyzeVideoFrames(input.mediaUrl, transcript, input.foreplayAdBrand || ""),
       STEP_TIMEOUT, "Visual analysis"
     );
   } catch (err: any) {
@@ -1089,28 +1902,24 @@ export async function runVideoPipelineStages1to3(runId: number, input: {
   await db.updatePipelineRun(runId, { visualAnalysis });
   console.log(`[VideoPipeline] Stage 2 complete, analysis length: ${visualAnalysis.length}`);
 
-  // Stage 3: Generate Video Brief
+  // Stage 3: Generate Video Brief (v3.0 Stage 1)
   await db.updatePipelineRun(runId, { videoStage: "stage_3_brief" });
   try {
     const briefOptions = await withTimeout(
       generateVideoBrief(
         transcript, visualAnalysis, input.product,
-        input.foreplayAdBrand || "Unknown", productInfoContext,
-        styleConfig, duration, sourceType
+        input.foreplayAdBrand || "", productInfoContext,
+        styleConfig, duration, sourceType, funnelStage
       ),
       STEP_TIMEOUT, "Video brief"
     );
-
-    const totalConcepts = briefOptions.concepts?.length ||
-      ((briefOptions.drConcepts?.length || 0) + (briefOptions.ugcConcepts?.length || 0));
-    console.log(`[VideoPipeline] Stage 3 complete, brief generated with ${totalConcepts} concepts`);
-
-    const briefText = formatBriefForDisplay(briefOptions, input.foreplayAdBrand || "Unknown", input.product, sourceType);
-
+    console.log(`[VideoPipeline] Stage 3 complete, brief generated with ${briefOptions.concepts?.length || 0} concepts`);
+    const briefText = formatBriefForDisplay(briefOptions, input.foreplayAdBrand || "", input.product, sourceType);
     await db.updatePipelineRun(runId, {
       videoBrief: briefText,
       videoBriefOptions: briefOptions,
       videoStage: "stage_3b_brief_approval",
+      videoFunnelStage: funnelStage,
     });
     console.log(`[VideoPipeline] Stage 3b: Pausing for user brief approval...`);
   } catch (err: any) {
@@ -1123,132 +1932,40 @@ export async function runVideoPipelineStages1to3(runId: number, input: {
   }
 }
 
-function formatBriefForDisplay(brief: VideoBriefOptions, brandName: string, product: string, sourceType: string = "competitor"): string {
-  const sourceLabel = sourceType === "winning_ad" ? "Our Winning Ad" : `${brandName} Competitor Ad`;
-  const concepts = brief.concepts || [
-    ...(brief.drConcepts || []).map((c: any) => ({ ...c, styleId: "DR" })),
-    ...(brief.ugcConcepts || []).map((c: any) => ({ ...c, styleId: "UGC" })),
-  ];
-
-  let text = `# Video Creative Brief — ${product}
-## Based on ${sourceLabel}
-
-### Competitor Concept Analysis
-${brief.competitorConceptAnalysis}
-
-### Hook Style
-${brief.hookStyle}
-**Hook Archetype:** ${brief.hookArchetype || "Not classified"}
-
-### Narrative Framework
-${brief.narrativeFramework}
-
-### Persuasion Mechanism
-${brief.persuasionMechanism}
-
-### Product Selling Angle
-${brief.productSellingAngle || "Not specified"}
-
-### ONEST Adaptation Strategy
-${brief.onestAdaptation}
-
-### Awareness Level
-${brief.awarenessLevel || "Not classified"}
-
-### Primary Objection
-${brief.primaryObjection || "Not identified"}
-
-### Competitive Repositioning
-${brief.competitiveRepositioning || "Not specified"}
-
-### Stack Opportunity
-${brief.stackOpportunity || "None"}
-
----
-
-### Script Concepts (${concepts.length})
-`;
-
-  concepts.forEach((c: any, i: number) => {
-    const styleLabel = SCRIPT_STYLES.find(s => s.id === c.styleId)?.label || c.styleId;
-    text += `
-**${i + 1}. ${c.title}** [${styleLabel}]
-- Hook: "${c.hookLine}"
-- Structure: ${c.structure}
-- Angle: ${c.keyAngle}
-- Selling Strategy: ${c.sellingStrategy || "Not specified"}
-- CTA Approach: ${c.ctaApproach || "Not specified"}
-`;
-  });
-
-  text += `
----
-
-**Target Audience:** ${brief.targetAudience}
-**Tone & Energy:** ${brief.toneAndEnergy}`;
-
-  return text;
-}
-
 /**
- * Run Stage 4 (Script Generation) after user approves the brief.
+ * Stage 4: Script Generation + Expert Review (v3.0 Stages 2 & 3)
+ * Pauses at stage_4b_script_approval for user review.
  */
 export async function runVideoPipelineStage4(runId: number, run: any) {
   console.log(`[VideoPipeline] Resuming stage 4 for run #${runId}`);
-
-  const brief = run.videoBriefOptions as VideoBriefOptions;
-  if (!brief) {
-    await db.updatePipelineRun(runId, { status: "failed", errorMessage: "No brief options found" });
-    return;
-  }
-
+  const brief: VideoBriefOptions = (run.videoBriefOptions as any) || {};
   const duration = run.videoDuration || 60;
+  const sourceType = run.videoSourceType || "competitor";
+  const funnelStage: FunnelStage = run.videoFunnelStage || brief.funnelStage || "cold";
+  const archetypes: ActorArchetype[] = (run.videoArchetypes as any) || [];
+  const defaultArchetype = archetypes.length > 0 ? archetypes[0] : undefined;
+  const productInfoContext = await loadProductInfoContext(run.product);
 
-  // Load product info
-  let productInfoContext = "";
-  try {
-    const info = await db.getProductInfo(run.product);
-    if (info) {
-      const parts: string[] = [];
-      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
-      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
-      if (info.claims) parts.push(`Claims: ${info.claims}`);
-      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
-      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
-      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
-      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
-      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
-      productInfoContext = parts.join("\n");
-    }
-  } catch (err: any) {
-    console.warn("[VideoPipeline] Failed to load product info:", err.message);
-  }
-
-  // Get concepts from brief — support both new and legacy format
-  const concepts: VideoBriefConcept[] = brief.concepts || [
+  await db.updatePipelineRun(runId, { videoStage: "stage_4_scripts" });
+  const concepts = brief.concepts || [
     ...(brief.drConcepts || []).map((c: any) => ({ ...c, styleId: "DR" as ScriptStyleId })),
     ...(brief.ugcConcepts || []).map((c: any) => ({ ...c, styleId: "UGC" as ScriptStyleId })),
   ];
-
-  await db.updatePipelineRun(runId, { videoStage: "stage_4_scripts" });
 
   const allScripts: any[] = [];
   for (let i = 0; i < concepts.length; i++) {
     const concept = concepts[i];
     const styleLabel = SCRIPT_STYLES.find(s => s.id === concept.styleId)?.label || concept.styleId;
-    const label = `${concept.styleId}${i + 1}`;
-    console.log(`[VideoPipeline] Generating ${label} (${styleLabel})...`);
+    const label = `${styleLabel} ${i + 1}`;
+    console.log(`[VideoPipeline] Generating script ${i + 1}/${concepts.length}: ${concept.title} (${styleLabel})...`);
 
     try {
       const script = await withTimeout(
         generateConceptMatchedScript(
-          run.transcript || "",
-          run.visualAnalysis || "",
-          run.product,
-          concept,
-          brief,
-          productInfoContext,
-          duration
+          run.transcript || "", run.visualAnalysis || "",
+          run.product, concept, brief, productInfoContext,
+          duration, funnelStage,
+          concept.styleId === "UGC" ? defaultArchetype : undefined
         ),
         STEP_TIMEOUT, `Script ${label}`
       );
@@ -1257,8 +1974,11 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
       let review;
       try {
         review = await withTimeout(
-          reviewScriptWithPanel(script, run.product, styleLabel, brief, productInfoContext),
-          STEP_TIMEOUT, `Review ${label}`
+          reviewScriptWithPanel(
+            script, run.product, styleLabel, brief,
+            productInfoContext, funnelStage
+          ),
+          STEP_TIMEOUT * 2, `Review ${label}`
         );
       } catch (reviewErr: any) {
         console.error(`[VideoPipeline] Review of ${label} failed:`, reviewErr.message);
@@ -1269,7 +1989,6 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
         type: concept.styleId,
         number: i + 1,
         label,
-        styleLabel,
         ...script,
         review,
       });
@@ -1280,37 +1999,71 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
         type: concept.styleId,
         number: i + 1,
         label,
-        styleLabel,
         title: `${label} - Generation Failed`,
         hook: `Error: ${err.message}`,
         script: [],
-        visualDirection: "",
+        visualDirection: {},
+        scriptMetadata: {},
         strategicThesis: "",
-        scriptMetadata: null,
-        visualDirectionBrief: null,
         review: { finalScore: 0, rounds: [], approved: false, summary: `Generation failed: ${err.message}` },
       });
     }
     // Save after EACH script so partial progress is visible
     await db.updatePipelineRun(runId, { scriptsJson: allScripts });
   }
-  console.log(`[VideoPipeline] All ${concepts.length} scripts processed. Success: ${allScripts.filter(s => s.review?.finalScore > 0).length}/${concepts.length}`);
 
+  console.log(`[VideoPipeline] All ${concepts.length} scripts processed. Success: ${allScripts.filter(s => s.review?.finalScore > 0).length}/${concepts.length}`);
   await db.updatePipelineRun(runId, {
     videoStage: "stage_4b_script_approval",
   });
   console.log(`[VideoPipeline] Scripts generated. Waiting for user approval before ClickUp push.`);
 }
 
+function formatScriptForClickUp(script: any, runId: number, appUrl: string): string {
+  const scriptViewUrl = `${appUrl}/results/${runId}?script=${encodeURIComponent(script.label)}`;
+  const meta = script.scriptMetadata || {};
+  const vd = script.visualDirection || {};
+  let content = `# ${script.title}\n\n`;
+  content += `**Type:** ${(script.type || "").replace(/_/g, " ")} | **Score:** ${script.review?.finalScore}/100\n`;
+  if (meta.scriptStyle) content += `**Style:** ${meta.scriptStyle}\n`;
+  if (meta.funnelStage) content += `**Funnel Stage:** ${meta.funnelStage}\n`;
+  if (meta.awarenessLevel) content += `**Awareness:** ${meta.awarenessLevel}\n`;
+  if (meta.targetPersona) content += `**Persona:** ${meta.targetPersona}\n`;
+  if (meta.subStructure) content += `**Sub-Structure:** ${meta.subStructure}\n`;
+  if (meta.hookArchetype) content += `**Hook Archetype:** ${meta.hookArchetype}\n`;
+  if (meta.testHypothesis) content += `**Hypothesis:** ${meta.testHypothesis}\n`;
+  if (meta.primaryObjection) content += `**Primary Objection:** ${meta.primaryObjection}\n`;
+  if (meta.actorArchetype) content += `**Actor Archetype:** ${meta.actorArchetype}\n`;
+  content += `\n## STRATEGIC THESIS\n${script.strategicThesis}\n\n`;
+  content += `## HOOK\n${script.hook}\n\n`;
+  content += `## FULL SCRIPT\n\n**[View 3-Column Script on ONEST Pipeline →](${scriptViewUrl})**\n\n`;
+  if (script.script && Array.isArray(script.script)) {
+    for (const row of script.script) {
+      content += `**${row.timestamp}**\n`;
+      content += `Visual: ${row.visual}\n`;
+      content += `Dialogue: ${row.dialogue}\n`;
+      if (row.transitionLine) content += `Transition: ${row.transitionLine}\n`;
+      content += `\n`;
+    }
+  }
+  if (typeof vd === "object" && (vd.style || vd.talent || vd.setting)) {
+    content += `## VISUAL DIRECTION BRIEF\n`;
+    for (const [key, val] of Object.entries(vd)) {
+      if (val) content += `- **${key}:** ${val}\n`;
+    }
+  } else if (typeof script.visualDirection === "string") {
+    content += `## VISUAL DIRECTION\n${script.visualDirection}\n`;
+  }
+  return content;
+}
+
 /**
- * Run Stage 5 (ClickUp tasks) after user approves the scripts.
+ * Stage 5: Push approved scripts to ClickUp.
  */
 export async function runVideoPipelineStage5(runId: number, run: any, appUrl: string) {
   console.log(`[VideoPipeline] Running stage 5 (ClickUp) for run #${runId}`);
   await db.updatePipelineRun(runId, { videoStage: "stage_5_clickup" });
-
   const allScripts = (run.scriptsJson as any[]) || [];
-
   try {
     const taskInputs = allScripts.filter(s => s.review?.finalScore > 0).map(s => ({
       title: s.title || `${s.label} Script`,
@@ -1359,50 +2112,3 @@ export async function completeVideoPipelineWithoutClickUp(runId: number) {
   });
 }
 
-function formatScriptForClickUp(script: any, runId: number, appUrl: string): string {
-  const scriptViewUrl = `${appUrl}/results/${runId}?script=${script.label}`;
-  const styleLabel = script.styleLabel || script.type;
-  let content = `# ${script.title}\n\n**Type:** ${styleLabel} | **Score:** ${script.review?.finalScore}/100\n\n`;
-
-  // Script Metadata
-  if (script.scriptMetadata) {
-    content += `## SCRIPT METADATA\n`;
-    content += `- **Product:** ${script.scriptMetadata.product}\n`;
-    content += `- **Target Persona:** ${script.scriptMetadata.targetPersona}\n`;
-    content += `- **Awareness Level:** ${script.scriptMetadata.awarenessLevel}\n`;
-    content += `- **Funnel Position:** ${script.scriptMetadata.funnelPosition}\n`;
-    content += `- **Script Style:** ${script.scriptMetadata.scriptStyle}\n`;
-    content += `- **Test Hypothesis:** ${script.scriptMetadata.testHypothesis}\n`;
-    content += `- **Primary Objection:** ${script.scriptMetadata.primaryObjection}\n\n`;
-  }
-
-  content += `## STRATEGIC THESIS\n${script.strategicThesis}\n\n`;
-  content += `## HOOK\n${script.hook}\n\n`;
-  content += `## FULL SCRIPT\n\n`;
-  content += `**[View 3-Column Script on ONEST Pipeline →](${scriptViewUrl})**\n\n`;
-  content += `> The full script is available in the ONEST Creative Pipeline with proper 3-column formatting.\n\n`;
-
-  if (script.script && Array.isArray(script.script)) {
-    for (const row of script.script) {
-      content += `**${row.timestamp}**\n`;
-      content += `Visual: ${row.visual}\n`;
-      content += `Dialogue: ${row.dialogue}\n\n`;
-    }
-  }
-
-  // Visual Direction Brief
-  content += `## VISUAL DIRECTION\n${script.visualDirection}\n\n`;
-  if (script.visualDirectionBrief) {
-    content += `**Overall Style:** ${script.visualDirectionBrief.overallStyle}\n`;
-    content += `**Color Palette:** ${script.visualDirectionBrief.colorPalette}\n`;
-    content += `**Pacing:** ${script.visualDirectionBrief.pacing}\n`;
-    if (script.visualDirectionBrief.shots?.length > 0) {
-      content += `\n### Shot List\n`;
-      for (const shot of script.visualDirectionBrief.shots) {
-        content += `- **${shot.timestamp}** [${shot.shotType}]: ${shot.description}\n`;
-      }
-    }
-  }
-
-  return content;
-}

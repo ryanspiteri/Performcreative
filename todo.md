@@ -1296,3 +1296,29 @@ All three fixes implemented and tested:
 - [x] Add script style picker with +/- controls for all 6 styles
 - [x] Add video upload zone for Winning Ad mode
 - [x] Run button shows summary (script count, duration, source type)
+
+## COPY FRAMEWORK v3.0 UPGRADE
+
+- [x] Replace all video pipeline prompts with v3.0 authoritative document
+- [x] Add 19 script sub-structures (7 DR, 6 UGC, 3 Founder-Led, 3 Brand)
+- [x] Add funnel stage selector (cold/warm/retargeting/retention) with non-negotiable rules per stage
+- [x] Add UGC archetype voice profiles (Fitness Enthusiast, Busy Mum, Athlete, Biohacker, Wellness Advocate)
+- [x] Add archetype multi-select with "AI Recommends" default option in UI
+- [x] Add Brand as 7th style option (Belief Film, Community Proof, Values Declaration)
+- [x] Add transitionLine requirement to every timestamp segment
+- [x] Add 6-criteria expert review (hookStrength, emotionalArc, ctaClarity, complianceAdherence, structureAdherence, brandVoice)
+- [x] Increase max review rounds from 3 to 5 with structural rewrite trigger at round 4
+- [x] Add emotion-to-structure mapping logic
+- [x] Add modular hook/body/CTA bank system
+- [x] Add 10-point script audit checklist to review
+- [x] Add ThermoBurn and HyperBurn Caffeine Free product fallbacks
+- [x] Update BrowseCreatives UI with funnel stage dropdown
+- [x] Update BrowseCreatives UI with archetype multi-select
+- [x] Update BrowseCreatives UI with Brand style option
+- [x] Update Results page with transition line display between script rows
+- [x] Update Results page with sub-structure and archetype labels in metadata
+- [x] Update Results page with 6-criteria breakdown bars and score floor warnings
+- [x] Update router to accept funnel stage and archetype parameters
+- [x] Add database column for funnel stage (videoFunnelStage)
+- [x] Write/update vitest tests (114 tests, all passing)
+- [ ] Upload updated documentation to Google Drive

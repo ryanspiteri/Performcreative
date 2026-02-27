@@ -73,6 +73,8 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoDuration: int("videoDuration").default(60),
   videoStyleConfig: json("videoStyleConfig"),
   videoUploadUrl: text("videoUploadUrl"),
+  videoFunnelStage: mysqlEnum("videoFunnelStage", ["cold", "warm", "retargeting", "retention"]).default("cold"),
+  videoArchetypes: json("videoArchetypes"),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

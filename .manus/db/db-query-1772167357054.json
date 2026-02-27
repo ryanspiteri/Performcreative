@@ -1,0 +1,98 @@
+{
+  "query": "SHOW COLUMNS FROM pipeline_runs LIKE 'video%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SHOW COLUMNS FROM pipeline_runs LIKE 'video%';",
+  "rows": [
+    {
+      "Field": "videoUrl",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoBrief",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoBriefReview",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoStage",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoBriefOptions",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoSourceType",
+      "Type": "enum('competitor','winning_ad')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "competitor",
+      "Extra": ""
+    },
+    {
+      "Field": "videoDuration",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "60",
+      "Extra": ""
+    },
+    {
+      "Field": "videoStyleConfig",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoUploadUrl",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "videoFunnelStage",
+      "Type": "enum('cold','warm','retargeting','retention')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "cold",
+      "Extra": ""
+    },
+    {
+      "Field": "videoArchetypes",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nvideoUrl\ttext\tYES\t\tNULL\t\nvideoBrief\ttext\tYES\t\tNULL\t\nvideoBriefReview\tjson\tYES\t\tNULL\t\nvideoStage\tvarchar(64)\tYES\t\tNULL\t\nvideoBriefOptions\tjson\tYES\t\tNULL\t\nvideoSourceType\tenum('competitor','winning_ad')\tYES\t\tcompetitor\t\nvideoDuration\tint\tYES\t\t60\t\nvideoStyleConfig\tjson\tYES\t\tNULL\t\nvideoUploadUrl\ttext\tYES\t\tNULL\t\nvideoFunnelStage\tenum('cold','warm','retargeting','retention')\tYES\t\tcold\t\nvideoArchetypes\tjson\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 1623
+}

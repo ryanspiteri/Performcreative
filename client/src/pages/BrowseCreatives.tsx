@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Play, Image as ImageIcon, Filter, Loader2, ChevronRight, CheckCircle, Clock,
-  Upload, Minus, Plus, DollarSign, Zap, Trophy, Info
+  Upload, Minus, Plus, DollarSign, Zap, Trophy, Info, Target, User
 } from "lucide-react";
 
 type Creative = {
@@ -42,6 +42,24 @@ const DURATIONS = [
   { value: 90, label: "90s" },
 ] as const;
 
+const FUNNEL_STAGES = [
+  { id: "cold" as const, label: "Cold", description: "New audiences, problem-aware", color: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
+  { id: "warm" as const, label: "Warm", description: "Engaged, solution-aware", color: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
+  { id: "retargeting" as const, label: "Retargeting", description: "Visited site, product-aware", color: "bg-orange-500/20 text-orange-300 border-orange-500/30" },
+  { id: "retention" as const, label: "Retention", description: "Existing customers", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
+] as const;
+
+const ACTOR_ARCHETYPES = [
+  { id: "FitnessEnthusiast" as const, label: "Fitness Enthusiast", description: "Gym-goer, tracks macros, performance-driven" },
+  { id: "BusyMum" as const, label: "Busy Mum", description: "Time-poor, health-conscious, family-focused" },
+  { id: "Athlete" as const, label: "Athlete", description: "Competitive, recovery-focused, data-driven" },
+  { id: "Biohacker" as const, label: "Biohacker", description: "Ingredient-obsessed, optimisation-focused" },
+  { id: "WellnessAdvocate" as const, label: "Wellness Advocate", description: "Holistic health, clean ingredients, mindful" },
+] as const;
+
+type FunnelStage = typeof FUNNEL_STAGES[number]["id"];
+type ActorArchetype = typeof ACTOR_ARCHETYPES[number]["id"];
+
 type StyleConfig = { styleId: "DR" | "UGC" | "FOUNDER" | "EDUCATION" | "LIFESTYLE" | "DEMO"; quantity: number };
 
 export default function BrowseCreatives() {
@@ -51,9 +69,11 @@ export default function BrowseCreatives() {
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>("Medium");
   const [, setLocation] = useLocation();
 
-  // Copy Framework v2.0 state
+  // Copy Framework v3.0 state
   const [sourceType, setSourceType] = useState<"competitor" | "winning_ad">("competitor");
   const [duration, setDuration] = useState(60);
+  const [funnelStage, setFunnelStage] = useState<FunnelStage>("cold");
+  const [actorArchetype, setActorArchetype] = useState<ActorArchetype | null>(null);
   const [styleConfig, setStyleConfig] = useState<StyleConfig[]>(
     SCRIPT_STYLES.map(s => ({ styleId: s.id, quantity: 0 }))
   );
@@ -141,12 +161,15 @@ export default function BrowseCreatives() {
     );
   };
 
-  // Cost estimate for video pipeline
-  // Base cost: transcription + analysis + brief = ~$0.30
-  // Per script: generation + review (up to 3 rounds) = ~$0.50 per script
-  const baseCost = 0.30;
-  const perScriptCost = 0.50;
+  // Cost estimate for video pipeline (v3.0 — up to 5 review rounds)
+  // Base cost: transcription + analysis + brief = ~$0.35
+  // Per script: generation + review (avg 3 rounds) = ~$0.60 per script
+  const baseCost = 0.35;
+  const perScriptCost = 0.60;
   const estimatedCost = baseCost + (totalScripts * perScriptCost);
+
+  // Check if any UGC scripts are selected (to show archetype picker)
+  const hasUgcScripts = styleConfig.find(s => s.styleId === "UGC")?.quantity ?? 0;
 
   // Upload handler for winning ad
   const uploadMutation = trpc.pipeline.uploadWinningAdVideo.useMutation({
@@ -239,6 +262,8 @@ export default function BrowseCreatives() {
         mediaUrl: uploadedVideoUrl,
         sourceType: "winning_ad",
         duration,
+        funnelStage,
+        actorArchetype: actorArchetype || undefined,
         styleConfig: styleConfig.filter(s => s.quantity > 0),
       });
     } else if (selectedCreative) {
@@ -258,6 +283,8 @@ export default function BrowseCreatives() {
           thumbnailUrl: selectedCreative.thumbnailUrl,
           sourceType: "competitor",
           duration,
+          funnelStage,
+          actorArchetype: actorArchetype || undefined,
           styleConfig: styleConfig.filter(s => s.quantity > 0),
         });
       } else {
@@ -625,6 +652,30 @@ export default function BrowseCreatives() {
                 {/* Video-specific options */}
                 {isVideoMode && (
                   <>
+                    {/* Funnel Stage Selector */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Target className="w-3.5 h-3.5 text-gray-400" />
+                        <label className="text-xs font-medium text-gray-300">Funnel Stage</label>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {FUNNEL_STAGES.map((stage) => (
+                          <button
+                            key={stage.id}
+                            onClick={() => setFunnelStage(stage.id)}
+                            className={`px-2.5 py-2 rounded-lg text-xs font-medium transition-all text-left ${
+                              funnelStage === stage.id
+                                ? `${stage.color} border`
+                                : "bg-[#0F1117] text-gray-400 hover:text-white border border-white/5 hover:border-white/10"
+                            }`}
+                          >
+                            <div className="font-semibold">{stage.label}</div>
+                            <div className="text-[10px] opacity-70 mt-0.5">{stage.description}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Duration Selector */}
                     <div>
                       <label className="text-xs font-medium text-gray-300 mb-2 block">Script Duration</label>
@@ -704,6 +755,34 @@ export default function BrowseCreatives() {
                         </p>
                       )}
                     </div>
+
+                    {/* Actor Archetype Picker — only when UGC scripts selected */}
+                    {hasUgcScripts > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="w-3.5 h-3.5 text-gray-400" />
+                          <label className="text-xs font-medium text-gray-300">UGC Actor Archetype</label>
+                          <span className="text-[10px] text-gray-500">(optional)</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {ACTOR_ARCHETYPES.map((arch) => (
+                            <button
+                              key={arch.id}
+                              onClick={() => setActorArchetype(actorArchetype === arch.id ? null : arch.id)}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all border ${
+                                actorArchetype === arch.id
+                                  ? "bg-green-500/20 text-green-300 border-green-500/30"
+                                  : "bg-[#0F1117] text-gray-400 hover:text-white border-white/5 hover:border-white/10"
+                              }`}
+                            >
+                              <div className="font-semibold">{arch.label}</div>
+                              <div className="text-[10px] opacity-70 mt-0.5">{arch.description}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1.5">Shapes UGC voice tone, vocabulary, and energy level</p>
+                      </div>
+                    )}
 
                     {/* Cost Estimate */}
                     {totalScripts > 0 && (
