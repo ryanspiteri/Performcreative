@@ -634,7 +634,6 @@ Return JSON in this exact format:
         variationTypes: z.array(z.enum(["headline_only", "background_only", "layout_only", "benefit_callouts_only", "props_only", "talent_swap", "full_remix"])).optional(),
         variationCount: z.number().min(1).max(50).optional(),
         aspectRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]).optional(),
-        actorArchetype: z.enum(["FitnessEnthusiast", "BusyMum", "Athlete", "Biohacker", "WellnessAdvocate"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const runId = await db.createPipelineRun({

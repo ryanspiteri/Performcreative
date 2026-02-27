@@ -1,6 +1,6 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
-import { ARCHETYPE_PROFILES, type ActorArchetype } from "./videoPipeline";
+
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
 import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
@@ -38,7 +38,6 @@ export interface IterationPipelineInput {
   variationTypes?: string[];
   variationCount?: number;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
-  actorArchetype?: "FitnessEnthusiast" | "BusyMum" | "Athlete" | "Biohacker" | "WellnessAdvocate";
 }
 
 /**
@@ -107,8 +106,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
         input.product,
         productInfoContext,
         input.variationCount || 3,
-        input.variationTypes,
-        input.actorArchetype
+        input.variationTypes
       ),
       STEP_TIMEOUT,
       "Stage 2: Iteration Brief"
@@ -611,8 +609,7 @@ async function generateIterationBrief(
   product: string,
   productInfo: string,
   variationCount: number = 3,
-  variationTypes?: string[],
-  actorArchetype?: string
+  variationTypes?: string[]
 ): Promise<string> {
   const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
   const claudeClient = axios.create({
@@ -714,12 +711,6 @@ Generate an iteration brief with ${variationCount} NEW variations. Each variatio
 ${variationTypeInstructions}
 - Be scroll-stopping and benefit-driven
 - Be specific to ${product}'s actual benefits and ingredients
-${actorArchetype ? `
-=== ACTOR ARCHETYPE VOICE PROFILE ===
-All copy must be written in the voice of the following archetype:
-${getArchetypeVoiceBlock(actorArchetype)}
-` : ''}
-
 The ${variationCount} variations should test DIFFERENT angles across these categories:
 - Benefit-driven (what the product does for you)
 - Curiosity/intrigue (make them want to learn more)
@@ -779,16 +770,3 @@ Return JSON in this exact format with ${variationCount} variations:
   return text;
 }
 
-/**
- * Build archetype voice block for injection into iteration brief prompts.
- */
-function getArchetypeVoiceBlock(archetype: string): string {
-  const profile = ARCHETYPE_PROFILES[archetype as ActorArchetype];
-  if (!profile) return "";
-  return `Archetype: ${profile.label}
-Life Context: ${profile.lifeContext}
-Language Register: ${profile.languageRegister}
-Pre-Product Objection: ${profile.preProductObjection}
-
-Write ALL headlines, subheadlines, and benefit callouts in this archetype's voice. The copy should feel like this person is speaking naturally — use their vocabulary, reference their life context, and address their specific objection.`;
-}

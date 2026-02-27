@@ -119,13 +119,13 @@ describe("nanoBananaPro compositing mode", () => {
   });
 });
 
-describe("iterationPipeline archetype integration", () => {
-  it("should accept actorArchetype in IterationPipelineInput", async () => {
+describe("videoPipeline archetype integration", () => {
+  it("should export runIterationStages1to2 without archetype dependency", async () => {
     const { runIterationStages1to2 } = await import("./services/iterationPipeline");
     expect(typeof runIterationStages1to2).toBe("function");
   });
 
-  it("should export ARCHETYPE_PROFILES from videoPipeline", async () => {
+  it("should export ARCHETYPE_PROFILES from videoPipeline (used by video pipeline only)", async () => {
     const { ARCHETYPE_PROFILES } = await import("./services/videoPipeline");
     expect(ARCHETYPE_PROFILES).toBeDefined();
     expect(ARCHETYPE_PROFILES.FitnessEnthusiast).toBeDefined();

@@ -1342,3 +1342,11 @@ All three fixes implemented and tested:
 - [x] Update all 4 call sites in iterationPipeline.ts to use two-pass compositing
 - [x] Update cost estimates to reflect 2x Gemini calls per variation
 - [x] Write vitest tests for compositor (122 tests, all passing)
+
+## REVERT — ARCHETYPE PICKER FROM ITERATE WINNERS
+
+- [x] Remove archetype picker UI from IterateWinners.tsx
+- [x] Remove actorArchetype from triggerIteration route input schema
+- [x] Remove actorArchetype from IterationPipelineInput interface
+- [x] Remove archetype voice injection from iteration brief generation
+- [x] Keep archetype picker on video pipeline (Browse Creatives) only

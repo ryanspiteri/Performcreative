@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users } from "lucide-react";
+import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const PRODUCTS = [
@@ -16,15 +16,7 @@ const PRODUCTS = [
 type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
 type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
-type ActorArchetype = "FitnessEnthusiast" | "BusyMum" | "Athlete" | "Biohacker" | "WellnessAdvocate";
 
-const ARCHETYPE_OPTIONS: { id: ActorArchetype; label: string; desc: string }[] = [
-  { id: "FitnessEnthusiast", label: "Fitness Enthusiast", desc: "Gym-goer, tracks macros, performance-driven" },
-  { id: "BusyMum", label: "Busy Mum", desc: "Time-poor, health-conscious, family-focused" },
-  { id: "Athlete", label: "Athlete", desc: "Competitive, recovery-focused, data-driven" },
-  { id: "Biohacker", label: "Biohacker", desc: "Ingredient-obsessed, optimisation-focused" },
-  { id: "WellnessAdvocate", label: "Wellness Advocate", desc: "Holistic health, clean ingredients, mindful" },
-];
 
 export default function IterateWinners() {
   const [, setLocation] = useLocation();
@@ -41,7 +33,6 @@ export default function IterateWinners() {
   const [usePerVariationMode, setUsePerVariationMode] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [actorArchetype, setActorArchetype] = useState<ActorArchetype | null>(null);
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
@@ -143,7 +134,6 @@ export default function IterateWinners() {
         variationTypes: usePerVariationMode ? perVariationStrategies : [variationType], // Per-variation or single
         variationCount,
         aspectRatio,
-        actorArchetype: actorArchetype || undefined,
       });
       setRunId(result.runId);
       setLocation(`/results/${result.runId}`);
@@ -438,46 +428,6 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* UGC Actor Archetype (optional) */}
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4 text-purple-400" />
-              UGC Actor Archetype <span className="text-gray-500 text-xs font-normal">(optional)</span>
-            </label>
-            <p className="text-xs text-gray-500 mb-3">Shapes UGC voice tone, vocabulary, and energy level in the iteration brief</p>
-            <div className="space-y-2">
-              {/* AI Recommends option */}
-              <button
-                onClick={() => setActorArchetype(null)}
-                className={`w-full px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 ${
-                  actorArchetype === null
-                    ? "bg-purple-500/10 border-2 border-purple-500 text-white"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-2 border-transparent"
-                }`}
-              >
-                <div className="flex-1">
-                  <div className="font-semibold text-sm mb-1">AI Recommends</div>
-                  <div className="text-xs opacity-75">Let the AI choose the best archetype based on the ad analysis</div>
-                </div>
-              </button>
-              {ARCHETYPE_OPTIONS.map((arch) => (
-                <button
-                  key={arch.id}
-                  onClick={() => setActorArchetype(arch.id)}
-                  className={`w-full px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 ${
-                    actorArchetype === arch.id
-                      ? "bg-emerald-500/10 border-2 border-emerald-500 text-white"
-                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-2 border-transparent"
-                  }`}
-                >
-                  <div className="flex-1">
-                    <div className="font-semibold text-sm mb-1">{arch.label}</div>
-                    <div className="text-xs opacity-75">{arch.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Upload Area */}
           <div className="mb-8">
@@ -646,12 +596,6 @@ export default function IterateWinners() {
                 <span className="text-gray-400">Creativity Level:</span>
                 <span className="text-white font-medium">{creativityLevel}</span>
               </div>
-              {actorArchetype && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Actor Archetype:</span>
-                  <span className="text-white font-medium">{ARCHETYPE_OPTIONS.find(a => a.id === actorArchetype)?.label || actorArchetype}</span>
-                </div>
-              )}
               <div className="flex justify-between">
                 <span className="text-gray-400">Aspect Ratio:</span>
                 <span className="text-white font-medium">{aspectRatio}</span>
