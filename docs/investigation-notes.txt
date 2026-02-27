@@ -1,0 +1,30 @@
+INVESTIGATION NOTES - Product Render Label Accuracy & Iterate Winners Archetype
+
+## Current Architecture:
+1. Product renders are PNG images uploaded by the user and stored in S3 via product_renders table
+2. The iteration pipeline uses Gemini 3 Pro Image Preview (gemini-3-pro-image-preview) via nanoBananaPro.ts
+3. The product render PNG is passed as inline_data to Gemini alongside a control image (the winning ad)
+4. Gemini generates a new image that tries to composite the product into a new scene
+
+## Label Accuracy Problem:
+- Gemini receives the product render as a reference image but REGENERATES the entire image including the label
+- AI image generation models cannot perfectly reproduce text on labels
+- The "HYPERBURN" text, flavour text, and sub-text get approximated but not pixel-perfect
+
+## Solution Options:
+A. Post-processing compositing: Generate the background/scene with Gemini, then overlay the real product render on top using image compositing (sharp/canvas)
+B. Inpainting approach: Generate the full image, then mask the product area and paste the real render
+C. Prompt engineering: Add stronger instructions to preserve label text exactly (limited effectiveness)
+D. Two-pass approach: Generate background only (no product), then composite product render on top
+
+Option D (two-pass) is the most reliable:
+1. Generate background scene WITHOUT the product (tell Gemini to leave a space)
+2. Use sharp/canvas to composite the real product render PNG onto the generated background
+3. This guarantees pixel-perfect labels since the real render is used
+
+## Iterate Winners Archetype:
+- IterateWinners.tsx has no archetype selector
+- The iteration pipeline (iterationPipeline.ts) generates UGC briefs but doesn't use archetype voice profiles
+- Need to add the same archetype picker from BrowseCreatives.tsx
+- Pass actorArchetype through triggerIteration mutation to iterationPipeline
+- Use archetype voice profile in the brief generation prompt

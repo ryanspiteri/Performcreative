@@ -1321,4 +1321,24 @@ All three fixes implemented and tested:
 - [x] Update router to accept funnel stage and archetype parameters
 - [x] Add database column for funnel stage (videoFunnelStage)
 - [x] Write/update vitest tests (114 tests, all passing)
-- [ ] Upload updated documentation to Google Drive
+- [ ] Upload updated documentation to Google Drive (token expired — attached for manual upload)
+
+## ITERATE WINNERS — UGC ARCHETYPE PICKER
+
+- [x] Add UGC Actor Archetype selector to Iterate Winners config panel
+- [x] Pass actorArchetype param through to the iteration pipeline backend
+- [x] Update routers.ts to accept actorArchetype in iterate pipeline route
+- [x] Add actorArchetype to IterationPipelineInput interface
+- [x] Inject archetype voice profile into iteration brief generation prompt
+- [x] Write vitest tests for archetype integration
+
+## PRODUCT RENDER LABEL ACCURACY
+
+- [x] Investigate current product render pipeline for text accuracy issues
+- [x] Create productCompositor.ts service — two-pass compositing with sharp
+- [x] Add buildBackgroundOnlyPrompt() for Gemini background-only generation
+- [x] Add compositeProductOnBackground() for sharp overlay of real product render
+- [x] Add useCompositing flag to nanoBananaPro.ts NanoBananaProOptions
+- [x] Update all 4 call sites in iterationPipeline.ts to use two-pass compositing
+- [x] Update cost estimates to reflect 2x Gemini calls per variation
+- [x] Write vitest tests for compositor (122 tests, all passing)

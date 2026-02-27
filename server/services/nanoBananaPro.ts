@@ -31,6 +31,12 @@ export interface NanoBananaProOptions {
   productRenderUrl?: string; // Product render to composite
   aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | "4:5" | "5:4";
   resolution?: "1K" | "2K" | "4K";
+  /** When true, uses two-pass compositing: generate background only, then overlay real product render */
+  useCompositing?: boolean;
+  /** Product position for compositing (default: "center") */
+  productPosition?: "center" | "left" | "right" | "bottom-center" | "bottom-left" | "bottom-right";
+  /** Product scale as fraction of canvas width (default: 0.45) */
+  productScale?: number;
 }
 
 export interface NanoBananaProResult {
@@ -50,7 +56,47 @@ export async function generateProductAdWithNanoBananaPro(
     productRenderUrl,
     aspectRatio = "1:1",
     resolution = "2K",
+    useCompositing = false,
+    productPosition = "center",
+    productScale = 0.45,
   } = options;
+
+  // TWO-PASS COMPOSITING MODE
+  // Generates background only, then composites real product render on top
+  // This guarantees pixel-perfect product labels
+  if (useCompositing && productRenderUrl) {
+    console.log("[NanoBananaPro] Using TWO-PASS compositing mode for pixel-perfect labels");
+    const { compositeProductOnBackground } = await import("./productCompositor");
+
+    // Pass 1: Generate background only (no product)
+    const bgResult = await generateProductAdWithNanoBananaPro({
+      prompt: prompt + "\n\nCRITICAL: Do NOT include any product bottle, jar, container, or supplement packaging in this image. Generate ONLY the background scene, text, and atmospheric effects. Leave a clear space in the " + productPosition + " area for the product to be composited later.",
+      controlImageUrl,
+      // Do NOT pass productRenderUrl — we want background only
+      aspectRatio,
+      resolution,
+      useCompositing: false, // Prevent infinite recursion
+    });
+
+    console.log(`[NanoBananaPro] Pass 1 complete: background generated at ${bgResult.imageUrl}`);
+
+    // Pass 2: Composite real product render onto the background
+    const composited = await compositeProductOnBackground({
+      backgroundUrl: bgResult.imageUrl,
+      productRenderUrl,
+      productPosition: productPosition as any,
+      productScale,
+      addShadow: true,
+      addGlow: false,
+    });
+
+    console.log(`[NanoBananaPro] Pass 2 complete: composited image at ${composited.imageUrl}`);
+
+    return {
+      imageUrl: composited.imageUrl,
+      s3Key: composited.s3Key,
+    };
+  }
 
   console.log("[NanoBananaPro] Generating image with Gemini 3 Pro Image Preview");
   console.log(`[NanoBananaPro] Aspect ratio: ${aspectRatio}, Resolution: ${resolution}`);

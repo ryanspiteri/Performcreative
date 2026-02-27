@@ -1,5 +1,6 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
+import { ARCHETYPE_PROFILES, type ActorArchetype } from "./videoPipeline";
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
 import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
@@ -37,6 +38,7 @@ export interface IterationPipelineInput {
   variationTypes?: string[];
   variationCount?: number;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
+  actorArchetype?: "FitnessEnthusiast" | "BusyMum" | "Athlete" | "Biohacker" | "WellnessAdvocate";
 }
 
 /**
@@ -105,7 +107,8 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
         input.product,
         productInfoContext,
         input.variationCount || 3,
-        input.variationTypes
+        input.variationTypes,
+        input.actorArchetype
       ),
       STEP_TIMEOUT,
       "Stage 2: Iteration Brief"
@@ -201,6 +204,9 @@ export async function runIterationStage3(runId: number, run: any) {
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
+          useCompositing: true, // Two-pass: generate background, then composite real product render
+          productPosition: "center",
+          productScale: 0.45,
         });
 
         const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
@@ -245,6 +251,9 @@ export async function runIterationStage3(runId: number, run: any) {
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
+          useCompositing: true, // Two-pass: generate background, then composite real product render
+          productPosition: "center",
+          productScale: 0.45,
         });
         
         const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
@@ -421,6 +430,9 @@ export async function regenerateIterationVariation(
       controlImageUrl: variations[variationIndex].url, // Use the EXISTING variation as control instead of source
       productRenderUrl: productRender.url,
       aspectRatio: aspectRatio as any,
+      useCompositing: true,
+      productPosition: "center",
+      productScale: 0.45,
     });
     
     finalUrl = result.imageUrl;
@@ -444,6 +456,9 @@ export async function regenerateIterationVariation(
       controlImageUrl: sourceUrl, // Use original source as control
       productRenderUrl: productRender.url,
       aspectRatio: aspectRatio as any,
+      useCompositing: true,
+      productPosition: "center",
+      productScale: 0.45,
     });
     
     finalUrl = result.imageUrl;
@@ -596,7 +611,8 @@ async function generateIterationBrief(
   product: string,
   productInfo: string,
   variationCount: number = 3,
-  variationTypes?: string[]
+  variationTypes?: string[],
+  actorArchetype?: string
 ): Promise<string> {
   const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
   const claudeClient = axios.create({
@@ -698,6 +714,11 @@ Generate an iteration brief with ${variationCount} NEW variations. Each variatio
 ${variationTypeInstructions}
 - Be scroll-stopping and benefit-driven
 - Be specific to ${product}'s actual benefits and ingredients
+${actorArchetype ? `
+=== ACTOR ARCHETYPE VOICE PROFILE ===
+All copy must be written in the voice of the following archetype:
+${getArchetypeVoiceBlock(actorArchetype)}
+` : ''}
 
 The ${variationCount} variations should test DIFFERENT angles across these categories:
 - Benefit-driven (what the product does for you)
@@ -756,4 +777,18 @@ Return JSON in this exact format with ${variationCount} variations:
   }
 
   return text;
+}
+
+/**
+ * Build archetype voice block for injection into iteration brief prompts.
+ */
+function getArchetypeVoiceBlock(archetype: string): string {
+  const profile = ARCHETYPE_PROFILES[archetype as ActorArchetype];
+  if (!profile) return "";
+  return `Archetype: ${profile.label}
+Life Context: ${profile.lifeContext}
+Language Register: ${profile.languageRegister}
+Pre-Product Objection: ${profile.preProductObjection}
+
+Write ALL headlines, subheadlines, and benefit callouts in this archetype's voice. The copy should feel like this person is speaking naturally — use their vocabulary, reference their life context, and address their specific objection.`;
 }

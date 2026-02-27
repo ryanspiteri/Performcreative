@@ -1,0 +1,130 @@
+{
+  "query": "SELECT id, product, fileName, url FROM product_renders ORDER BY product LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, product, fileName, url FROM product_renders ORDER BY product LIMIT 20;",
+  "rows": [
+    {
+      "id": "90001",
+      "product": "Hyperburn",
+      "fileName": "867 copy.png",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/867 copy.png-ix8o8k21"
+    },
+    {
+      "id": "1",
+      "product": "Hyperburn",
+      "fileName": "2025_NEW_HB_RENDER-GRAPE.png",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm"
+    },
+    {
+      "id": "240001",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001d",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001d-3jsdycsk"
+    },
+    {
+      "id": "120001",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03-ny7uxi95"
+    },
+    {
+      "id": "60001",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02-nzm2sbnx"
+    },
+    {
+      "id": "180001",
+      "product": "iteration-source",
+      "fileName": "WAKE_UP_METABOLISM_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/WAKE_UP_METABOLISM_001a-912lrzn9"
+    },
+    {
+      "id": "240005",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-susugbcj"
+    },
+    {
+      "id": "300001",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-sw1cr9tb"
+    },
+    {
+      "id": "300003",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001d",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001d-tvttqnh5"
+    },
+    {
+      "id": "210001",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-fpdm6sam"
+    },
+    {
+      "id": "240002",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-q2tydhgc"
+    },
+    {
+      "id": "270001",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001d",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001d-asb6bzsf"
+    },
+    {
+      "id": "240003",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-ezthl76e"
+    },
+    {
+      "id": "240004",
+      "product": "iteration-source",
+      "fileName": "BINGING_VARIATIONS_HB_STATIC_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-nmy1lu79"
+    },
+    {
+      "id": "120002",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03-k1o8vrld"
+    },
+    {
+      "id": "120003",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03-vz9muaz6"
+    },
+    {
+      "id": "150001",
+      "product": "iteration-source",
+      "fileName": "WHY-WAIT-MONTHS_STATIC_ITERATION_002C",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/WHY-WAIT-MONTHS_STATIC_ITERATION_002C-189wd85h"
+    },
+    {
+      "id": "300002",
+      "product": "iteration-source",
+      "fileName": "WAKE_UP_METABOLISM_001a",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/WAKE_UP_METABOLISM_001a-tarfqzb8"
+    },
+    {
+      "id": "30003",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-nbg62zfy"
+    },
+    {
+      "id": "30002",
+      "product": "iteration-source",
+      "fileName": "2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02",
+      "url": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tproduct\tfileName\turl\n90001\tHyperburn\t867 copy.png\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/867 copy.png-ix8o8k21\n1\tHyperburn\t2025_NEW_HB_RENDER-GRAPE.png\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/Hyperburn/2025_NEW_HB_RENDER-GRAPE.png-askqmwgm\n240001\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001d\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001d-3jsdycsk\n120001\titeration-source\t2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03-ny7uxi95\n60001\titeration-source\t2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-TURN-OFF-MORNING-CRAVINGS-ADS-02-nzm2sbnx\n180001\titeration-source\tWAKE_UP_METABOLISM_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/WAKE_UP_METABOLISM_001a-912lrzn9\n240005\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-susugbcj\n300001\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-sw1cr9tb\n300003\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001d\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001d-tvttqnh5\n210001\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-fpdm6sam\n240002\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-q2tydhgc\n270001\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001d\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001d-asb6bzsf\n240003\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-ezthl76e\n240004\titeration-source\tBINGING_VARIATIONS_HB_STATIC_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/BINGING_VARIATIONS_HB_STATIC_001a-nmy1lu79\n120002\titeration-source\t2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03-k1o8vrld\n120003\titeration-source\t2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-WINNERS-NEW-TEMPLATES-03-vz9muaz6\n150001\titeration-source\tWHY-WAIT-MONTHS_STATIC_ITERATION_002C\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/WHY-WAIT-MONTHS_STATIC_ITERATION_002C-189wd85h\n300002\titeration-source\tWAKE_UP_METABOLISM_001a\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/WAKE_UP_METABOLISM_001a-tarfqzb8\n30003\titeration-source\t2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-nbg62zfy\n30002\titeration-source\t2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/product-renders/iteration-source/2025-01-OH-HB-APPLE-TO-HOUR-GLASS-SHAPE-02-o6t9z73d\n",
+  "stderr": "",
+  "execution_time_ms": 1555
+}
