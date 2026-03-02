@@ -1,0 +1,26 @@
+{
+  "query": "SELECT * FROM ugc_uploads WHERE id = 120001;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT * FROM ugc_uploads WHERE id = 120001;",
+  "rows": [
+    {
+      "id": "120001",
+      "fileName": "billo-121278-orig.mov",
+      "fileKey": "ugc-uploads/hyperburn/billo-121278-orig.mov-w6y2bsbl",
+      "videoUrl": "https://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/ugc-uploads/hyperburn/billo-121278-orig.mov-w6y2bsbl",
+      "product": "Hyperburn",
+      "audienceTag": "NULL",
+      "desiredOutputVolume": "1",
+      "status": "failed",
+      "transcript": "NULL",
+      "structureBlueprint": "NULL",
+      "blueprintApprovedAt": "NULL",
+      "errorMessage": "NULL",
+      "createdAt": "2026-03-02 08:25:57",
+      "updatedAt": "2026-03-02 08:25:59"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfileName\tfileKey\tvideoUrl\tproduct\taudienceTag\tdesiredOutputVolume\tstatus\ttranscript\tstructureBlueprint\tblueprintApprovedAt\terrorMessage\tcreatedAt\tupdatedAt\n120001\tbillo-121278-orig.mov\tugc-uploads/hyperburn/billo-121278-orig.mov-w6y2bsbl\thttps://d2xsxph8kpxj0f.cloudfront.net/310519663362584601/iRMuHk7nYQvS4BtpbvEbBz/ugc-uploads/hyperburn/billo-121278-orig.mov-w6y2bsbl\tHyperburn\tNULL\t1\tfailed\tNULL\tNULL\tNULL\tNULL\t2026-03-02 08:25:57\t2026-03-02 08:25:59\n",
+  "stderr": "",
+  "execution_time_ms": 1576
+}

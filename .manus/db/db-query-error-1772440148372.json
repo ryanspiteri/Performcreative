@@ -1,0 +1,8 @@
+{
+  "query": "SELECT id, product, status, error_message, created_at FROM ugc_uploads WHERE id = 120001;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, product, status, error_message, created_at FROM ugc_uploads WHERE id = 120001;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'error_message' in 'field list'"
+  ]
+}

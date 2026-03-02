@@ -1369,6 +1369,46 @@ Return JSON in this exact format:
         
         return { success: true, count: results.length };
       }),
+
+    // Retry transcription for a failed upload
+    retryTranscription: publicProcedure
+      .input(z.object({ uploadId: z.number() }))
+      .mutation(async ({ input }) => {
+        const upload = await db.getUgcUpload(input.uploadId);
+        if (!upload) throw new TRPCError({ code: "NOT_FOUND", message: "Upload not found" });
+        
+        // Reset to transcribing status
+        await db.updateUgcUpload(input.uploadId, { status: "transcribing", errorMessage: null });
+        
+        // Re-run background transcription
+        (async () => {
+          try {
+            console.log(`[UGC Retry] Retrying transcription for upload #${input.uploadId}`);
+            const { transcribeVideo } = await import("./services/whisper");
+            const { extractStructureBlueprint } = await import("./services/ugcClone");
+            
+            const transcriptText = await transcribeVideo(upload.videoUrl);
+            console.log(`[UGC Retry] Transcription complete for upload #${input.uploadId}`);
+            
+            const blueprint = await extractStructureBlueprint(transcriptText, upload.videoUrl);
+            console.log(`[UGC Retry] Structure extraction complete for upload #${input.uploadId}`);
+            
+            await db.updateUgcUpload(input.uploadId, {
+              transcript: transcriptText,
+              structureBlueprint: blueprint,
+              status: "structure_extracted",
+            });
+          } catch (error: any) {
+            console.error(`[UGC Retry] Failed for upload #${input.uploadId}:`, error);
+            await db.updateUgcUpload(input.uploadId, {
+              status: "failed",
+              errorMessage: error.message,
+            });
+          }
+        })();
+        
+        return { success: true };
+      }),
   }),
 
   headlineBank: router({

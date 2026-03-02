@@ -96,25 +96,22 @@ async function startServer() {
           await db.updateUgcUpload(id, { status: "transcribing" });
           
           // Import services dynamically to avoid circular dependencies
-          const { transcribeAudio } = await import("../_core/voiceTranscription");
+          // Use whisper.ts which extracts audio via ffmpeg first (handles video files correctly)
+          const { transcribeVideo } = await import("../services/whisper");
           const { extractStructureBlueprint } = await import("../services/ugcClone");
           
-          // Transcribe audio
-          const transcription = await transcribeAudio({ audioUrl: url });
+          // Transcribe: download video → extract audio with ffmpeg → send to Whisper API
+          const transcriptText = await transcribeVideo(url);
           
-          if ('error' in transcription) {
-            throw new Error(`Transcription failed: ${transcription.error}`);
-          }
+          console.log(`[UGC Upload] Transcription complete for upload #${id}, length: ${transcriptText.length} chars`);
           
-          console.log(`[UGC Upload] Transcription complete for upload #${id}`);
-          
-          // Extract structure
-          const blueprint = await extractStructureBlueprint(transcription.text, url);
+          // Extract structure blueprint from transcript
+          const blueprint = await extractStructureBlueprint(transcriptText, url);
           console.log(`[UGC Upload] Structure extraction complete for upload #${id}`);
           
           // Update database with results
           await db.updateUgcUpload(id, {
-            transcript: transcription.text,
+            transcript: transcriptText,
             structureBlueprint: blueprint,
             status: "structure_extracted",
           });

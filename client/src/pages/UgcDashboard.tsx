@@ -771,6 +771,10 @@ export default function UgcDashboard() {
     onSuccess: (result) => { toast.success(`${result.count} variants pushed to ClickUp!`); setSelectedVariants([]); refetch(); },
     onError: (error) => toast.error(`Failed to push to ClickUp: ${error.message}`),
   });
+  const retryTranscription = trpc.ugc.retryTranscription.useMutation({
+    onSuccess: () => { toast.success("Retrying transcription..."); refetch(); },
+    onError: (error) => toast.error(`Retry failed: ${error.message}`),
+  });
 
   if (isLoading) {
     return (
@@ -842,10 +846,23 @@ export default function UgcDashboard() {
                     <span className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide border ${
                       upload.status === "completed" ? "bg-green-500/10 border-green-500/25 text-green-400" :
                       upload.status === "generating_variants" ? "bg-yellow-500/10 border-yellow-500/25 text-yellow-400" :
+                      upload.status === "failed" ? "bg-red-500/10 border-red-500/25 text-red-400" :
                       "bg-gray-500/10 border-gray-500/25 text-gray-400"
                     }`}>
                       {upload.status?.replace(/_/g, " ")}
                     </span>
+                    {upload.status === "failed" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-3 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                        onClick={() => retryTranscription.mutate({ uploadId })}
+                        disabled={retryTranscription.isPending}
+                      >
+                        {retryTranscription.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                        Retry
+                      </Button>
+                    )}
                   </div>
                 </div>
                 {/* Stats row */}
