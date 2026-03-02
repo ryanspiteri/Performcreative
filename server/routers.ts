@@ -99,6 +99,14 @@ const faceSwapRouter = router({
   list: publicProcedure
     .query(async () => db.listFaceSwapJobs(50)),
 
+  getByVariant: publicProcedure
+    .input(z.object({ variantId: z.number() }))
+    .query(async ({ input }) => {
+      const jobs = await db.listFaceSwapJobs(200);
+      // Return the most recent job linked to this variant
+      return (jobs as any[]).find((j: any) => j.ugcVariantId === input.variantId) || null;
+    }),
+
   validatePortrait: publicProcedure
     .input(z.object({
       portraitBase64: z.string(),

@@ -1439,3 +1439,21 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] Fix magicHour.ts: implement three-step flow (face detection → face swap → poll)
 - [x] Fix face_swap_mode: use "individual-faces" with original_face path from detection result
 - [x] Confirmed API accepts payload: face swap job submitted successfully (150 credits, ID: cmm8zbaa900oy3r0zu4pswwl6)
+
+## MERGE CHARACTER SWAP INTO UGC CLONE ENGINE
+
+- [ ] Remove Character Swap sidebar link from DashboardLayout.tsx
+- [ ] Remove /character-swap route from App.tsx
+- [ ] Rename "Swap" button on variant card to "Generate Video" (keep for all variants, not just approved)
+- [ ] Reuse existing CharacterSwapModal from UgcDashboard.tsx (already has voice/accent/script/portrait fields)
+- [ ] Show inline output video on variant card once job completes (poll faceSwap.getJobStatus)
+- [ ] Remove standalone CharacterSwap.tsx page (or keep as dead file — prefer delete)
+
+## UGC CLONE ENGINE — UX/UI REDESIGN
+
+- [x] Rename "Swap" button to "Generate Video" on variant cards
+- [x] Add faceSwap.getByVariant procedure to fetch job linked to a specific variant
+- [x] Show inline video output on variant card (status indicator + video player when complete)
+- [x] Remove standalone CharacterSwapJobsPanel section (jobs shown inline on cards instead)
+- [ ] Polish Generate Video modal: cleaner layout, better step flow, cost estimate visible upfront
+- [x] Add progress steps indicator inside modal while job is running (Detecting → Voiceover → Swapping → Done)

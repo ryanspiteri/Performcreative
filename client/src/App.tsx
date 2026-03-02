@@ -18,7 +18,6 @@ import IterateWinners from "./pages/IterateWinners";
 // Template Tester removed - not in use
 import UgcUpload from "./pages/UgcUpload";
 import UgcDashboard from "./pages/UgcDashboard";
-import CharacterSwap from "./pages/CharacterSwap";
 import HeadlineBank from "./pages/HeadlineBank";
 import ParentSelection from "./pages/ParentSelection";
 import AppLayout from "./components/AppLayout";
@@ -39,7 +38,6 @@ function AuthenticatedRoutes() {
         <Route path="/ugc" component={UgcUpload} />
         <Route path="/ugc-clone" component={UgcUpload} />
         <Route path="/ugc/:id" component={UgcDashboard} />
-        <Route path="/character-swap" component={CharacterSwap} />
         <Route path="/headlines" component={HeadlineBank} />
         <Route path="/product-info" component={ProductInfoHub} />
         <Route path="/trigger" component={ManualTrigger} />

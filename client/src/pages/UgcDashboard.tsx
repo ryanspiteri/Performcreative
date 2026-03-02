@@ -557,13 +557,88 @@ function CharacterSwapModal({
   );
 }
 
+// ─── Job Status Steps ─────────────────────────────────────────────────────────
+const JOB_STEPS = [
+  { key: "pending",          label: "Queued" },
+  { key: "validating",       label: "Validating" },
+  { key: "generating_voice", label: "Voiceover" },
+  { key: "swapping",         label: "Swapping" },
+  { key: "merging",          label: "Merging" },
+  { key: "completed",        label: "Done" },
+];
+
+function JobProgressBar({ status }: { status: string }) {
+  const stepIndex = JOB_STEPS.findIndex(s => s.key === status);
+  const currentIdx = stepIndex === -1 ? 0 : stepIndex;
+  const isDone = status === "completed";
+  const isFailed = status === "failed";
+  return (
+    <div className="px-4 pb-4 pt-1">
+      {isFailed ? (
+        <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/5 border border-red-500/15 rounded-xl p-3">
+          <XCircle className="w-3.5 h-3.5 shrink-0" />
+          Generation failed — click Generate Video to retry
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-gray-500">
+              {isDone ? "Video ready" : `${JOB_STEPS[currentIdx]?.label ?? "Processing"}…`}
+            </span>
+            {!isDone && <Loader2 className="w-3 h-3 text-[#FF3838] animate-spin" />}
+          </div>
+          <div className="flex gap-1">
+            {JOB_STEPS.map((step, i) => (
+              <div
+                key={step.key}
+                className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+                  i < currentIdx ? "bg-[#FF3838]" :
+                  i === currentIdx && !isDone ? "bg-[#FF3838]/50 animate-pulse" :
+                  isDone ? "bg-[#FF3838]" :
+                  "bg-white/10"
+                }`}
+              />
+            ))}
+          </div>
+          <div className="flex justify-between">
+            {JOB_STEPS.map((step, i) => (
+              <span key={step.key} className={`text-[9px] ${
+                i <= currentIdx || isDone ? "text-gray-400" : "text-gray-700"
+              }`}>{step.label}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Variant Card ─────────────────────────────────────────────────────────────
 function VariantCard({
-  variant, selected, onToggle, onSwap,
+  variant, selected, onToggle, onSwap, product,
 }: {
-  variant: any; selected: boolean; onToggle: () => void; onSwap: () => void;
+  variant: any; selected: boolean; onToggle: () => void; onSwap: () => void; product: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const utils = trpc.useUtils();
+
+  // Poll for the job linked to this variant
+  const { data: job, refetch: refetchJob } = trpc.faceSwap.getByVariant.useQuery(
+    { variantId: variant.id },
+    {
+      refetchInterval: (data: any) => {
+        if (!data) return false;
+        const running = ["pending", "validating", "generating_voice", "swapping", "merging"];
+        return running.includes(data?.status) ? 4000 : false;
+      },
+    }
+  );
+
+  const pushMutation = trpc.faceSwap.pushToClickUp.useMutation({
+    onSuccess: () => { toast.success("Pushed to ClickUp"); refetchJob(); },
+    onError: (err) => toast.error(`ClickUp push failed: ${err.message}`),
+  });
+
   const statusColorMap: Record<string, string> = {
     approved: "text-green-400 bg-green-400/10 border-green-400/20",
     rejected: "text-red-400 bg-red-400/10 border-red-400/20",
@@ -571,10 +646,16 @@ function VariantCard({
     awaiting_approval: "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
   };
   const statusColor = statusColorMap[variant.status] || "text-gray-400 bg-gray-400/10 border-gray-400/20";
+  const hasActiveJob = !!job;
+  const jobRunning = job && ["pending", "validating", "generating_voice", "swapping", "merging"].includes(job.status);
+  const jobDone = job?.status === "completed";
+  const jobFailed = job?.status === "failed";
 
   return (
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
-      selected ? "border-[#FF3838]/40 bg-[#FF3838]/3 shadow-[0_0_0_1px_rgba(255,56,56,0.15)]" : "border-white/8 bg-white/2 hover:border-white/15"
+      selected ? "border-[#FF3838]/40 bg-[#FF3838]/3 shadow-[0_0_0_1px_rgba(255,56,56,0.15)]" :
+      jobDone ? "border-green-500/25 bg-green-500/3" :
+      "border-white/8 bg-white/2 hover:border-white/15"
     }`}>
       {/* Card Header */}
       <div className="p-4 flex items-start gap-3">
@@ -601,13 +682,25 @@ function VariantCard({
             <span className="text-[11px] text-gray-500">~{variant.runtime}s</span>
           </div>
         </div>
-        {/* Character Swap Button */}
+        {/* Generate Video Button */}
         <button
           onClick={onSwap}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FF3838]/10 hover:bg-[#FF3838]/20 border border-[#FF3838]/25 hover:border-[#FF3838]/50 text-[#FF3838] text-xs font-semibold transition-all"
+          disabled={!!jobRunning}
+          className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+            jobRunning
+              ? "bg-yellow-500/10 border-yellow-500/25 text-yellow-400 cursor-not-allowed opacity-70"
+              : jobDone
+              ? "bg-green-500/10 border-green-500/25 text-green-400 hover:bg-green-500/20"
+              : "bg-[#FF3838]/10 hover:bg-[#FF3838]/20 border-[#FF3838]/25 hover:border-[#FF3838]/50 text-[#FF3838]"
+          }`}
         >
-          <Film className="w-3.5 h-3.5" />
-          Swap
+          {jobRunning ? (
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" />Processing</>
+          ) : jobDone ? (
+            <><CheckCircle2 className="w-3.5 h-3.5" />Regenerate</>
+          ) : (
+            <><Film className="w-3.5 h-3.5" />Generate Video</>
+          )}
         </button>
       </div>
 
@@ -627,6 +720,61 @@ function VariantCard({
           </button>
         )}
       </div>
+
+      {/* ── Inline Job Status / Output ── */}
+      {hasActiveJob && !jobDone && !jobFailed && (
+        <div className="border-t border-white/5">
+          <JobProgressBar status={job.status} />
+        </div>
+      )}
+      {hasActiveJob && jobFailed && (
+        <div className="border-t border-white/5">
+          <JobProgressBar status="failed" />
+        </div>
+      )}
+      {jobDone && job?.outputVideoUrl && (
+        <div className="border-t border-white/5">
+          {/* Video player */}
+          <div className="px-4 pt-3 pb-2">
+            <video
+              src={job.outputVideoUrl}
+              controls
+              className="w-full rounded-xl border border-white/10 bg-black"
+              style={{ maxHeight: 320 }}
+            />
+          </div>
+          {/* Actions */}
+          <div className="px-4 pb-4 flex items-center gap-2">
+            <span className="text-[11px] text-green-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />Video ready
+              {job.estimatedCostUsd && <span className="text-gray-600 font-normal"> · {job.estimatedCostUsd}</span>}
+            </span>
+            <div className="flex-1" />
+            <a href={job.outputVideoUrl} download target="_blank" rel="noreferrer">
+              <Button size="sm" variant="outline" className="border-white/10 text-white hover:bg-white/5 rounded-xl h-7 text-xs px-3">
+                <Download className="w-3 h-3 mr-1" />Download
+              </Button>
+            </a>
+            {!job.clickupTaskId ? (
+              <Button
+                size="sm"
+                onClick={() => pushMutation.mutate({ jobId: job.id, product, priority: "High" })}
+                disabled={pushMutation.isPending}
+                className="bg-[#0347ED] hover:bg-[#0347ED]/90 text-white rounded-xl h-7 text-xs px-3"
+              >
+                {pushMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
+                Push to ClickUp
+              </Button>
+            ) : (
+              <a href={job.clickupTaskUrl} target="_blank" rel="noreferrer">
+                <Button size="sm" variant="outline" className="border-green-600/30 text-green-400 rounded-xl h-7 text-xs px-3">
+                  <ExternalLink className="w-3 h-3 mr-1" />View in ClickUp
+                </Button>
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1072,14 +1220,13 @@ export default function UgcDashboard() {
                   selected={selectedVariants.includes(variant.id)}
                   onToggle={() => toggleVariant(variant.id)}
                   onSwap={() => setSwapModalVariant(variant)}
+                  product={upload.product}
                 />
               ))}
             </div>
           </div>
         )}
 
-        {/* ── Character Swap Jobs ── */}
-        <CharacterSwapJobsPanel product={upload.product} />
       </div>
 
       {/* ── Character Swap Modal ── */}
