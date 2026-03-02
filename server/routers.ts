@@ -43,7 +43,7 @@ const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls ca
 const faceSwapRouter = router({
   create: publicProcedure
     .input(z.object({
-      sourceVideoUrl: z.string().url(),
+      sourceVideoUrl: z.string().optional(), // optional when ugcVariantId is provided
       portraitBase64: z.string(),
       portraitMimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
       portraitS3Url: z.string().url(),
@@ -53,11 +53,22 @@ const faceSwapRouter = router({
       ugcVariantId: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
+      // Resolve source video URL from ugcVariantId if not provided directly
+      let sourceVideoUrl = input.sourceVideoUrl || "";
+      if (!sourceVideoUrl && input.ugcVariantId) {
+        const variant = await db.getUgcVariant(input.ugcVariantId);
+        if (variant?.uploadId) {
+          const upload = await db.getUgcUpload(variant.uploadId);
+          sourceVideoUrl = upload?.videoUrl || "";
+        }
+      }
+      if (!sourceVideoUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Source video URL is required" });
+
       const durationMins = (input.videoDurationSeconds ?? 30) / 60;
       const estimatedCostUsd = `$${(durationMins * 2.16).toFixed(2)}`;
       const jobId = await db.createFaceSwapJob({
         ugcVariantId: input.ugcVariantId ?? null,
-        sourceVideoUrl: input.sourceVideoUrl,
+        sourceVideoUrl,
         portraitUrl: input.portraitS3Url,
         voiceId: input.voiceId ?? null,
         voiceoverScript: input.voiceoverScript ?? null,
@@ -66,7 +77,7 @@ const faceSwapRouter = router({
       });
       runFaceSwapPipeline({
         jobId,
-        sourceVideoUrl: input.sourceVideoUrl,
+        sourceVideoUrl,
         portraitBase64: input.portraitBase64,
         portraitMimeType: input.portraitMimeType,
         portraitS3Url: input.portraitS3Url,
@@ -107,6 +118,29 @@ const faceSwapRouter = router({
       const key = `face-swap-portraits/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { url } = await storagePut(key, buffer, input.mimeType);
       return { url, key };
+    }),
+
+  getVoicesByAccent: publicProcedure
+    .input(z.object({
+      accent: z.enum(["australian", "american", "all"]).default("all"),
+    }))
+    .query(async ({ input }) => {
+      const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+        headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY || "" },
+      });
+      if (!response.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch ElevenLabs voices" });
+      const data = await response.json() as { voices: any[] };
+      const voices = (data.voices || []).map((v: any) => ({
+        id: v.voice_id as string,
+        name: v.name as string,
+        accent: (v.labels?.accent || "") as string,
+        gender: (v.labels?.gender || "") as string,
+        age: (v.labels?.age || "") as string,
+        useCase: (v.labels?.use_case || "") as string,
+        previewUrl: (v.preview_url || "") as string,
+      }));
+      if (input.accent === "all") return voices.filter(v => v.accent === "australian" || v.accent === "american");
+      return voices.filter(v => v.accent === input.accent);
     }),
 
   pushToClickUp: publicProcedure

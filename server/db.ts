@@ -359,6 +359,13 @@ export async function createUgcVariant(data: any): Promise<number> {
   return (result as any)[0]?.insertId;
 }
 
+export async function getUgcVariant(id: number): Promise<any | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const results = await db.select().from(ugcVariants).where(eq(ugcVariants.id, id));
+  return results[0] || null;
+}
+
 export async function listUgcVariants(uploadId: number): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];

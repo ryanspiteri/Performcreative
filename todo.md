@@ -1417,3 +1417,12 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] TEST: Magic Hour job submission and polling
 - [x] TEST: ffmpeg audio merge produces valid MP4
 - [x] TEST: Full pipeline end-to-end with real UGC variant
+
+## UGC CHARACTER SWAP — DASHBOARD INTEGRATION
+
+- [x] ElevenLabs: Fetch and tag voices by accent (Australian / American)
+- [x] ROUTER: Add `faceSwap.getVoicesByAccent` query — returns ElevenLabs voices filtered by accent tag
+- [x] UI: Add "Character Swap" button to each variant card in UGC Dashboard
+- [x] UI: Character Swap modal on variant card — three script source options: (1) Use variant script (pre-filled), (2) Use original script (from upload transcript), (3) Write my own (blank textarea); accent selector (Australian / American), voice selector (filtered by accent), portrait upload with validation, cost estimate, submit button
+- [x] UI: Job status panel on UGC Dashboard — shows running/completed character swap jobs, with video player, download, and Push to ClickUp
+- [x] Remove standalone /character-swap page from sidebar nav (consolidate into UGC Dashboard)
