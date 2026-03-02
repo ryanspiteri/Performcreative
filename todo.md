@@ -1431,3 +1431,11 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] UI: Replace current script source options with three clear choices: (1) Same script as upload (original transcript), (2) Upload your own script (paste/type textarea), (3) Generate a UGC script (uses pipeline logic — archetype + tone + energy selectors → Claude generates script)
 - [x] ROUTER: Add `faceSwap.generateScript` mutation — takes uploadId + archetype + tone + energy, uses ugcClone variant generation logic, returns a single script
 - [x] UI: Generate Script option shows archetype/tone/energy dropdowns + Generate button → fills script textarea
+
+## MAGIC HOUR FIX — CORRECT ASSET UPLOAD FLOW
+
+- [x] Investigate Magic Hour Upload Asset URLs endpoint to understand pre-upload flow
+- [x] Test whether video_source: "url" accepts external S3 URLs directly (confirmed: public URLs work)
+- [x] Fix magicHour.ts: implement three-step flow (face detection → face swap → poll)
+- [x] Fix face_swap_mode: use "individual-faces" with original_face path from detection result
+- [x] Confirmed API accepts payload: face swap job submitted successfully (150 credits, ID: cmm8zbaa900oy3r0zu4pswwl6)

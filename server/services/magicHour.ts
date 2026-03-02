@@ -1,12 +1,14 @@
 /**
  * Magic Hour Face Swap Video Service
  * API base: https://api.magichour.ai/v1
- * Docs: https://docs.magichour.ai/integration/adding-api-to-your-app
  *
- * Flow:
- * 1. Submit face swap job with direct URL references (no pre-upload needed)
- * 2. Poll GET /v1/face-swap/{id} until complete
- * 3. Return download URL
+ * Correct three-step flow:
+ * 1. POST /v1/face-detection  → detect faces in the source video, get task ID
+ * 2. GET  /v1/face-detection/{id} → poll until complete, get faces[].path (e.g. "api-assets/id/0-0.png")
+ * 3. POST /v1/face-swap → submit swap with face_mappings[{ original_face, new_face }]
+ * 4. GET  /v1/video-projects/{id} → poll until complete, get downloads[].url
+ *
+ * Both video and portrait URLs can be public HTTPS URLs (S3, CDN, etc.) — no pre-upload needed.
  *
  * Status values: queued | rendering | complete | error | canceled
  */
@@ -32,7 +34,81 @@ async function mhFetch(endpoint: string, options: RequestInit = {}): Promise<Res
   return res;
 }
 
-// ─── Submit face swap job ────────────────────────────────────────────────────
+// ─── Step 1: Face Detection ───────────────────────────────────────────────────
+
+interface FaceDetectionSubmitResponse {
+  id: string;
+  credits_charged: number;
+}
+
+interface FaceDetectionResult {
+  id: string;
+  status: "queued" | "rendering" | "complete" | "error";
+  credits_charged: number;
+  faces: Array<{
+    path: string;  // e.g. "api-assets/id/0-0.png" — use as original_face in face_mappings
+    url: string;   // full URL to the detected face crop
+  }>;
+}
+
+async function submitFaceDetection(fileUrl: string): Promise<FaceDetectionSubmitResponse> {
+  const body = {
+    assets: { target_file_path: fileUrl },
+    confidence_score: 0.5,
+  };
+
+  console.log("[MagicHour] Submitting face detection for:", fileUrl);
+
+  const res = await mhFetch("/face-detection", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  console.log(`[MagicHour] Face detection submit (${res.status}):`, text);
+
+  if (!res.ok) {
+    throw new Error(`Magic Hour face detection submit failed (${res.status}): ${text}`);
+  }
+
+  return JSON.parse(text) as FaceDetectionSubmitResponse;
+}
+
+async function waitForFaceDetection(
+  taskId: string,
+  timeoutMs = 3 * 60 * 1000,
+  pollIntervalMs = 5_000
+): Promise<FaceDetectionResult> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const res = await mhFetch(`/face-detection/${taskId}`);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Magic Hour face detection poll failed (${res.status}): ${err}`);
+    }
+
+    const result = (await res.json()) as FaceDetectionResult;
+    console.log(`[MagicHour] Face detection ${taskId}: ${result.status}, faces found: ${result.faces?.length ?? 0}`);
+
+    if (result.status === "complete") {
+      if (!result.faces || result.faces.length === 0) {
+        throw new Error("Magic Hour face detection completed but no faces were found in the video. Ensure the video contains a clear, front-facing person.");
+      }
+      return result;
+    }
+
+    if (result.status === "error") {
+      throw new Error(`Magic Hour face detection failed for task ${taskId}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(`Magic Hour face detection timed out after ${timeoutMs / 1000}s`);
+}
+
+// ─── Step 2: Submit face swap job ────────────────────────────────────────────
 
 interface FaceSwapJobResponse {
   id: string;
@@ -40,8 +116,9 @@ interface FaceSwapJobResponse {
   credits_charged?: number;
 }
 
-export async function submitFaceSwapJob(params: {
+async function submitFaceSwapJob(params: {
   videoUrl: string;
+  originalFacePath: string;  // from face detection result: faces[0].path
   portraitUrl: string;
   name?: string;
   startSeconds?: number;
@@ -51,27 +128,38 @@ export async function submitFaceSwapJob(params: {
     name: params.name || `UGC Clone - ${new Date().toISOString()}`,
     start_seconds: params.startSeconds ?? 0,
     end_seconds: params.endSeconds ?? 60,
+    style: { version: "default" },
     assets: {
       video_file_path: params.videoUrl,
       video_source: "file",
-      image_file_path: params.portraitUrl,
+      face_swap_mode: "individual-faces",
+      face_mappings: [
+        {
+          original_face: params.originalFacePath,  // MH internal path from face detection
+          new_face: params.portraitUrl,             // public URL to portrait image
+        },
+      ],
     },
   };
+
+  console.log("[MagicHour] Submitting face swap job:", JSON.stringify(body, null, 2));
 
   const res = await mhFetch("/face-swap", {
     method: "POST",
     body: JSON.stringify(body),
   });
 
+  const text = await res.text();
+  console.log(`[MagicHour] Face swap submit (${res.status}):`, text);
+
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Magic Hour face swap submit failed (${res.status}): ${err}`);
+    throw new Error(`Magic Hour face swap submit failed (${res.status}): ${text}`);
   }
 
-  return (await res.json()) as FaceSwapJobResponse;
+  return JSON.parse(text) as FaceSwapJobResponse;
 }
 
-// ─── Poll job status ─────────────────────────────────────────────────────────
+// ─── Step 3: Poll face swap job status ───────────────────────────────────────
 
 interface VideoProjectStatus {
   id: string;
@@ -82,25 +170,24 @@ interface VideoProjectStatus {
 }
 
 export async function getFaceSwapJobStatus(jobId: string): Promise<VideoProjectStatus> {
-  const res = await mhFetch(`/face-swap/${jobId}`);
+  const res = await mhFetch(`/video-projects/${jobId}`);
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Magic Hour status check failed (${res.status}): ${err}`);
+    throw new Error(`Magic Hour video project status check failed (${res.status}): ${err}`);
   }
   return (await res.json()) as VideoProjectStatus;
 }
 
-// ─── Poll until complete (with timeout) ─────────────────────────────────────
-
-export async function waitForFaceSwapCompletion(
+async function waitForFaceSwapCompletion(
   jobId: string,
-  timeoutMs = 15 * 60 * 1000, // 15 minutes
+  timeoutMs = 15 * 60 * 1000,
   pollIntervalMs = 10_000
 ): Promise<VideoProjectStatus> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     const status = await getFaceSwapJobStatus(jobId);
+    console.log(`[MagicHour] Face swap job ${jobId}: ${status.status}`);
 
     if (status.status === "complete") {
       return status;
@@ -113,7 +200,6 @@ export async function waitForFaceSwapCompletion(
       throw new Error(`Magic Hour face swap job ${status.status}: ${errMsg}`);
     }
 
-    // Still queued or rendering — wait and retry
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
@@ -137,22 +223,40 @@ export interface MagicHourSwapResult {
 }
 
 /**
- * Submit face swap job with direct URL references, poll until complete, return result.
- * This is a long-running operation (2–10 minutes). Call from a background job.
+ * Full three-step character swap pipeline:
+ * 1. Detect faces in source video (get original_face path)
+ * 2. Submit face swap job (original_face → portrait)
+ * 3. Poll until complete, return output video URL
+ *
+ * Both sourceVideoUrl and portraitUrl must be publicly accessible HTTPS URLs.
  */
 export async function runMagicHourCharacterSwap(input: MagicHourSwapInput): Promise<MagicHourSwapResult> {
   const { sourceVideoUrl, portraitUrl, name, videoDurationSeconds = 30 } = input;
 
-  // Submit job with direct URL references
+  // ── Step 1: Detect faces in the source video ─────────────────────────────
+  console.log("[MagicHour] Step 1: Detecting faces in source video...");
+  const detectionTask = await submitFaceDetection(sourceVideoUrl);
+  const detectionResult = await waitForFaceDetection(detectionTask.id);
+
+  // Use the first detected face as the original_face for the swap
+  const originalFacePath = detectionResult.faces[0].path;
+  console.log(`[MagicHour] Detected face path: ${originalFacePath}`);
+
+  // ── Step 2: Submit face swap job ─────────────────────────────────────────
+  console.log("[MagicHour] Step 2: Submitting face swap job...");
   const job = await submitFaceSwapJob({
     videoUrl: sourceVideoUrl,
+    originalFacePath,
     portraitUrl,
     name: name || `UGC Clone - ${new Date().toISOString()}`,
     startSeconds: 0,
     endSeconds: videoDurationSeconds,
   });
 
-  // Poll until complete
+  console.log(`[MagicHour] Face swap job submitted: ${job.id}`);
+
+  // ── Step 3: Poll until complete ──────────────────────────────────────────
+  console.log("[MagicHour] Step 3: Polling for completion...");
   const result = await waitForFaceSwapCompletion(job.id);
 
   // Extract output URL
