@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X, UserRound } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
   { icon: Video, label: "UGC Clone Engine", path: "/ugc" },
+  { icon: UserRound, label: "Character Swap", path: "/character-swap" },
   // ASSETS (3-5)
   { icon: BookText, label: "Headline Bank", path: "/headlines" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },

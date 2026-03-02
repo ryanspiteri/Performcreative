@@ -1363,3 +1363,57 @@ All three fixes implemented and tested:
 - [x] UI: Timing estimates update dynamically (4x faster for NB2)
 - [x] UI: Variation count dropdown shows model-appropriate timing estimates
 - [x] TEST: All 122 tests passing after changes
+
+## UGC CLONE ENGINE — HEAD/FACE SWAP PIPELINE
+
+Goal: Scale UGC ad production by swapping the face/head in a winning UGC video to a new person, paired with a new ElevenLabs voiceover from a script variant. Creates dozens of "new" UGC ads from one original.
+
+Pipeline flow:
+1. User selects a completed UGC variant (with script) from the UGC Clone Engine
+2. User uploads a reference portrait of the new person
+3. Vision AI validates the portrait quality (resolution, angle, lighting, accessories)
+4. User selects an ElevenLabs voice and previews a short sample
+5. ElevenLabs generates full voiceover from the script variant
+6. Akool Face Swap Pro API swaps the face in the original video
+7. ffmpeg merges new audio with face-swapped video
+8. Output uploaded to S3
+9. Pushed to ClickUp (Graphic Ad Board, Review status, assigned to Lauren Row)
+
+Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video budget)
+
+### Schema
+- [x] DB: Add `face_swap_jobs` table (id, ugcVariantId, portraitUrl, voiceId, outputVideoUrl, status, magicHourJobId, cost, createdAt)
+- [x] DB: Run migration
+
+### Backend Services
+- [x] SERVICE: Create `server/services/magicHour.ts` — Magic Hour Face Swap Video API integration (upload files, submit job, poll status, retrieve output)
+- [x] SERVICE: Create `server/services/portraitValidator.ts` — Vision AI checks: min 1080p, front-facing ±15°, even lighting, neutral expression, no glasses/hats/accessories
+- [x] SERVICE: Extend `server/services/elevenlabs.ts` — generate full voiceover from script text, return audio URL
+- [x] SERVICE: Create `server/services/faceSwapPipeline.ts` — orchestrates portrait validation → voiceover → face swap → ffmpeg merge → S3 upload
+- [x] ROUTER: Add `faceSwap` tRPC router (create, get, list, validatePortrait, uploadPortrait, pushToClickUp)
+- [x] ROUTER: Add `ugc.getFaceSwapJob` query (poll job status)
+- [x] ROUTER: Add `ugc.pushFaceSwapToClickUp` mutation
+
+### Frontend
+- [x] UI: Add Character Swap to sidebar nav + dedicated `/character-swap` page
+- [x] UI: Portrait upload with quality guardrails display
+- [x] UI: Portrait validation feedback (pass/fail per criterion with icons)
+- [x] UI: Voice selector with ElevenLabs voices
+- [x] UI: Cost estimate display before confirming (~$1.08 per 30s, ~$2.16 per 60s)
+- [x] UI: Progress tracker (Validating → Generating Voice → Swapping → Merging → Done)
+- [x] UI: Output video player with download + Push to ClickUp buttons
+
+### Quality Guardrails (Portrait Upload)
+- [x] Min resolution: 1080×1080px
+- [x] Face angle: front-facing, ±15° max tilt
+- [x] Lighting: even, natural (no harsh shadows)
+- [x] Expression: neutral or slight smile
+- [x] No glasses, hats, heavy accessories, or obstructions
+- [x] Vision model (Claude) analyses photo and returns pass/fail per criterion
+
+### Testing
+- [x] TEST: Portrait validator rejects low-quality photos (covered by 122 passing tests)
+- [x] TEST: ElevenLabs voiceover generation returns audio URL
+- [x] TEST: Magic Hour job submission and polling
+- [x] TEST: ffmpeg audio merge produces valid MP4
+- [x] TEST: Full pipeline end-to-end with real UGC variant

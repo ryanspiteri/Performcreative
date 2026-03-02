@@ -249,3 +249,33 @@ export const headlineBank = mysqlTable("headline_bank", {
 
 export type HeadlineBank = typeof headlineBank.$inferSelect;
 export type InsertHeadlineBank = typeof headlineBank.$inferInsert;
+
+/**
+ * UGC Clone Engine — Face Swap Jobs.
+ * Tracks Magic Hour character swap jobs for UGC variants.
+ */
+export const faceSwapJobs = mysqlTable("face_swap_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  ugcVariantId: int("ugcVariantId"), // FK to ugcVariants (optional — can be standalone)
+  sourceVideoUrl: text("sourceVideoUrl").notNull(), // Original UGC video URL
+  portraitUrl: text("portraitUrl").notNull(), // Reference portrait URL (S3)
+  portraitValidation: json("portraitValidation"), // { passed, checks: [{name, passed, note}] }
+  voiceId: varchar("voiceId", { length: 128 }), // ElevenLabs voice ID
+  voiceoverScript: text("voiceoverScript"), // Script text for voiceover
+  voiceoverUrl: text("voiceoverUrl"), // Generated ElevenLabs audio URL (S3)
+  magicHourJobId: varchar("magicHourJobId", { length: 256 }), // Magic Hour job ID
+  magicHourStatus: varchar("magicHourStatus", { length: 64 }), // queued | processing | complete | failed
+  faceSwapVideoUrl: text("faceSwapVideoUrl"), // Face-swapped video URL (from Magic Hour)
+  outputVideoUrl: text("outputVideoUrl"), // Final merged video URL (S3)
+  creditsCharged: int("creditsCharged"), // Magic Hour credits used
+  estimatedCostUsd: varchar("estimatedCostUsd", { length: 16 }), // e.g. "$1.08"
+  status: mysqlEnum("status", ["pending", "validating", "generating_voice", "swapping", "merging", "completed", "failed"]).default("pending").notNull(),
+  clickupTaskId: varchar("clickupTaskId", { length: 256 }),
+  clickupTaskUrl: text("clickupTaskUrl"),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FaceSwapJob = typeof faceSwapJobs.$inferSelect;
+export type InsertFaceSwapJob = typeof faceSwapJobs.$inferInsert;

@@ -1,0 +1,23 @@
+CREATE TABLE `face_swap_jobs` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`ugcVariantId` int,
+	`sourceVideoUrl` text NOT NULL,
+	`portraitUrl` text NOT NULL,
+	`portraitValidation` json,
+	`voiceId` varchar(128),
+	`voiceoverScript` text,
+	`voiceoverUrl` text,
+	`magicHourJobId` varchar(256),
+	`magicHourStatus` varchar(64),
+	`faceSwapVideoUrl` text,
+	`outputVideoUrl` text,
+	`creditsCharged` int,
+	`estimatedCostUsd` varchar(16),
+	`status` enum('pending','validating','generating_voice','swapping','merging','completed','failed') NOT NULL DEFAULT 'pending',
+	`clickupTaskId` varchar(256),
+	`clickupTaskUrl` text,
+	`errorMessage` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `face_swap_jobs_id` PRIMARY KEY(`id`)
+);

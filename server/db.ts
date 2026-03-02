@@ -1,6 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -412,6 +412,36 @@ export async function deleteHeadline(id: number): Promise<void> {
   if (!db) throw new Error("Database not available");
   
   await db.delete(headlineBank).where(eq(headlineBank.id, id));
+}
+
+// ============================================================
+// Face Swap Jobs
+// ============================================================
+
+export async function createFaceSwapJob(data: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(faceSwapJobs).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function getFaceSwapJob(id: number): Promise<any | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const results = await db.select().from(faceSwapJobs).where(eq(faceSwapJobs.id, id)).limit(1);
+  return results[0] || null;
+}
+
+export async function updateFaceSwapJob(id: number, data: any): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(faceSwapJobs).set(data).where(eq(faceSwapJobs.id, id));
+}
+
+export async function listFaceSwapJobs(limit = 50): Promise<any[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(faceSwapJobs).orderBy(desc(faceSwapJobs.createdAt)).limit(limit);
 }
 
 // Canva token management

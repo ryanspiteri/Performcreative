@@ -19,6 +19,8 @@ import { SignJWT } from "jose";
 import { storagePut } from "./storage";
 import { ACTIVE_PRODUCTS } from "../drizzle/schema";
 import { canvaRouter } from "./routers/canva";
+import { runFaceSwapPipeline } from "./services/faceSwapPipeline";
+import { validatePortrait } from "./services/portraitValidator";
 
 const VALID_USERNAME = "ONEST";
 const VALID_PASSWORD = "UnlockGrowth";
@@ -35,9 +37,106 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
 
+// ============================================================
+// FACE SWAP ROUTER — declared before appRouter to avoid hoisting issues
+// ============================================================
+const faceSwapRouter = router({
+  create: publicProcedure
+    .input(z.object({
+      sourceVideoUrl: z.string().url(),
+      portraitBase64: z.string(),
+      portraitMimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
+      portraitS3Url: z.string().url(),
+      voiceId: z.string().optional(),
+      voiceoverScript: z.string().optional(),
+      videoDurationSeconds: z.number().optional().default(30),
+      ugcVariantId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const durationMins = (input.videoDurationSeconds ?? 30) / 60;
+      const estimatedCostUsd = `$${(durationMins * 2.16).toFixed(2)}`;
+      const jobId = await db.createFaceSwapJob({
+        ugcVariantId: input.ugcVariantId ?? null,
+        sourceVideoUrl: input.sourceVideoUrl,
+        portraitUrl: input.portraitS3Url,
+        voiceId: input.voiceId ?? null,
+        voiceoverScript: input.voiceoverScript ?? null,
+        estimatedCostUsd,
+        status: "pending",
+      });
+      runFaceSwapPipeline({
+        jobId,
+        sourceVideoUrl: input.sourceVideoUrl,
+        portraitBase64: input.portraitBase64,
+        portraitMimeType: input.portraitMimeType,
+        portraitS3Url: input.portraitS3Url,
+        voiceId: input.voiceId,
+        voiceoverScript: input.voiceoverScript,
+        videoDurationSeconds: input.videoDurationSeconds ?? 30,
+      }).catch(err => console.error(`[FaceSwap] Background pipeline error for job ${jobId}:`, err.message));
+      return { jobId, estimatedCostUsd };
+    }),
+
+  get: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const job = await db.getFaceSwapJob(input.id);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Face swap job not found" });
+      return job;
+    }),
+
+  list: publicProcedure
+    .query(async () => db.listFaceSwapJobs(50)),
+
+  validatePortrait: publicProcedure
+    .input(z.object({
+      portraitBase64: z.string(),
+      mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
+    }))
+    .mutation(async ({ input }) => validatePortrait(input.portraitBase64, input.mimeType)),
+
+  uploadPortrait: publicProcedure
+    .input(z.object({
+      base64: z.string(),
+      mimeType: z.string().default("image/jpeg"),
+      fileName: z.string().default("portrait.jpg"),
+    }))
+    .mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.base64, "base64");
+      const ext = input.mimeType.split("/")[1] || "jpg";
+      const key = `face-swap-portraits/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { url } = await storagePut(key, buffer, input.mimeType);
+      return { url, key };
+    }),
+
+  pushToClickUp: publicProcedure
+    .input(z.object({
+      jobId: z.number(),
+      product: z.string(),
+      priority: z.enum(["Low", "Medium", "High", "Urgent"]).default("High"),
+    }))
+    .mutation(async ({ input }) => {
+      const job = await db.getFaceSwapJob(input.jobId);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Face swap job not found" });
+      if (job.status !== "completed") throw new TRPCError({ code: "BAD_REQUEST", message: "Job is not completed yet" });
+      const { createScriptTask } = await import("./services/clickup");
+      const task = await createScriptTask(
+        `UGC Clone - ${input.product} - ${new Date().toLocaleDateString()}`,
+        "UGC Clone",
+        100,
+        `Character swap video ready for review.\n\nOutput Video: ${job.outputVideoUrl}\nCost: ${job.estimatedCostUsd}\nMagic Hour Job: ${job.magicHourJobId}`,
+        input.product,
+        input.priority,
+      );
+      await db.updateFaceSwapJob(input.jobId, { clickupTaskId: task.id, clickupTaskUrl: task.url });
+      return { taskId: task.id, taskUrl: task.url };
+    }),
+});
+
 export const appRouter = router({
   system: systemRouter,
   canva: canvaRouter,
+  faceSwap: faceSwapRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
