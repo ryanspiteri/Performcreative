@@ -1426,3 +1426,8 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] UI: Character Swap modal on variant card — three script source options: (1) Use variant script (pre-filled), (2) Use original script (from upload transcript), (3) Write my own (blank textarea); accent selector (Australian / American), voice selector (filtered by accent), portrait upload with validation, cost estimate, submit button
 - [x] UI: Job status panel on UGC Dashboard — shows running/completed character swap jobs, with video player, download, and Push to ClickUp
 - [x] Remove standalone /character-swap page from sidebar nav (consolidate into UGC Dashboard)
+
+## CHARACTER SWAP — SCRIPT SOURCE OPTIONS UPDATE
+- [x] UI: Replace current script source options with three clear choices: (1) Same script as upload (original transcript), (2) Upload your own script (paste/type textarea), (3) Generate a UGC script (uses pipeline logic — archetype + tone + energy selectors → Claude generates script)
+- [x] ROUTER: Add `faceSwap.generateScript` mutation — takes uploadId + archetype + tone + energy, uses ugcClone variant generation logic, returns a single script
+- [x] UI: Generate Script option shows archetype/tone/energy dropdowns + Generate button → fills script textarea

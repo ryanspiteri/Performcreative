@@ -165,6 +165,70 @@ const faceSwapRouter = router({
       await db.updateFaceSwapJob(input.jobId, { clickupTaskId: task.id, clickupTaskUrl: task.url });
       return { taskId: task.id, taskUrl: task.url };
     }),
+
+  generateScript: publicProcedure
+    .input(z.object({
+      uploadId: z.number(),
+      actorArchetype: z.string(),
+      voiceTone: z.string(),
+      energyLevel: z.enum(["low", "medium", "high"]),
+    }))
+    .mutation(async ({ input }) => {
+      const upload = await db.getUgcUpload(input.uploadId);
+      if (!upload) throw new TRPCError({ code: "NOT_FOUND", message: "Upload not found" });
+      if (!upload.transcript) throw new TRPCError({ code: "BAD_REQUEST", message: "Upload has no transcript yet" });
+      if (!upload.structureBlueprint) throw new TRPCError({ code: "BAD_REQUEST", message: "Upload has no structure blueprint yet — approve the blueprint first" });
+
+      const { generateVariants } = await import("./services/ugcClone");
+      const blueprint = upload.structureBlueprint as import("./services/ugcClone").StructureBlueprint;
+
+      const variants = await generateVariants({
+        uploadId: input.uploadId,
+        product: upload.product,
+        audienceTag: upload.audienceTag ?? undefined,
+        desiredOutputVolume: 1,
+        structureBlueprint: blueprint,
+        transcript: upload.transcript,
+      });
+
+      // Override archetype/tone/energy with user's selection
+      const variant = variants[0];
+      if (!variant) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Script generation failed" });
+
+      // Re-generate with specific archetype/tone/energy if different from what was returned
+      const { invokeLLM } = await import("./_core/llm");
+      const prompt = `You are generating ONE UGC script variant with specific persona settings.
+
+ORIGINAL TRANSCRIPT:
+${upload.transcript}
+
+STRUCTURE BLUEPRINT:
+- Hook: "${blueprint.hook.text}" (${blueprint.hook.strength} strength)
+- Body: ${blueprint.body.keyPoints.join(", ")}
+- CTA: "${blueprint.cta.text}" (${blueprint.cta.urgency} urgency)
+- Pacing: ${blueprint.pacing.wordsPerMinute} WPM, ${blueprint.pacing.energyLevel} energy
+- Compliance: ${blueprint.complianceLanguage.join("; ")}
+
+PRODUCT: ${upload.product}
+AUDIENCE: ${upload.audienceTag || "general fitness audience"}
+
+PERSONA SETTINGS:
+- Actor Archetype: ${input.actorArchetype}
+- Voice Tone: ${input.voiceTone}
+- Energy Level: ${input.energyLevel}
+
+Generate exactly ONE script variant matching these persona settings exactly. Preserve the structure, compliance language, and hook strength. Only change the surface phrasing to match the persona.`;
+
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are a UGC script variant generator. Return only the script text, no JSON, no labels." },
+          { role: "user", content: prompt },
+        ],
+      });
+
+      const scriptText = response.choices[0].message.content as string;
+      return { scriptText: scriptText.trim() };
+    }),
 });
 
 export const appRouter = router({

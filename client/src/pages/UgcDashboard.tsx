@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ScriptSource = "variant" | "original" | "custom";
+type ScriptSource = "original" | "custom" | "generate";
 
 // ─── Pipeline Stepper ─────────────────────────────────────────────────────────
 const PIPELINE_STEPS = [
@@ -118,7 +118,7 @@ function CharacterSwapModal({
   open: boolean; onClose: () => void; variant: any;
   originalTranscript: string; uploadId: number; product: string;
 }) {
-  const [scriptSource, setScriptSource] = useState<ScriptSource>("variant");
+  const [scriptSource, setScriptSource] = useState<ScriptSource>("original");
   const [customScript, setCustomScript] = useState("");
   const [accent, setAccent] = useState<"australian" | "american">("australian");
   const [voiceId, setVoiceId] = useState("");
@@ -139,9 +139,16 @@ function CharacterSwapModal({
   const validatePortraitMutation = trpc.faceSwap.validatePortrait.useMutation();
   const createJobMutation = trpc.faceSwap.create.useMutation();
 
+  const [generatedScript, setGeneratedScript] = useState("");
+  const [genArchetype, setGenArchetype] = useState("fitness enthusiast");
+  const [genTone, setGenTone] = useState("energetic");
+  const [genEnergy, setGenEnergy] = useState<"low" | "medium" | "high">("high");
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const generateScriptMutation = trpc.faceSwap.generateScript.useMutation();
+
   const activeScript =
-    scriptSource === "variant" ? (variant?.scriptText || "") :
     scriptSource === "original" ? (originalTranscript || "") :
+    scriptSource === "generate" ? generatedScript :
     customScript;
 
   const runtimeSec = variant?.runtime || 30;
@@ -213,14 +220,32 @@ function CharacterSwapModal({
     } finally { setIsSubmitting(false); }
   };
 
+  const handleGenerateScript = async () => {
+    setIsGeneratingScript(true);
+    try {
+      const result = await generateScriptMutation.mutateAsync({
+        uploadId,
+        actorArchetype: genArchetype,
+        voiceTone: genTone,
+        energyLevel: genEnergy,
+      });
+      setGeneratedScript(result.scriptText);
+      toast.success("Script generated!");
+    } catch (err: any) {
+      toast.error(`Script generation failed: ${err.message}`);
+    } finally { setIsGeneratingScript(false); }
+  };
+
   const handleClose = () => {
-    setScriptSource("variant"); setCustomScript(""); setAccent("australian");
-    setVoiceId(""); setPortraitFile(null); setPortraitPreview(null);
+    setScriptSource("original"); setCustomScript(""); setGeneratedScript("");
+    setGenArchetype("fitness enthusiast"); setGenTone("energetic"); setGenEnergy("high");
+    setAccent("australian"); setVoiceId("");
+    setPortraitFile(null); setPortraitPreview(null);
     setPortraitS3Url(null); setValidation(null);
     onClose();
   };
 
-  const canSubmit = !isSubmitting && !isUploading && !isValidating && !!portraitS3Url && !!voiceId && !!activeScript.trim();
+  const canSubmit = !isSubmitting && !isUploading && !isValidating && !isGeneratingScript && !!portraitS3Url && !!voiceId && !!activeScript.trim();
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -251,9 +276,9 @@ function CharacterSwapModal({
             </div>
             <div className="grid grid-cols-3 gap-2">
               {([
-                { value: "variant", label: "Variant Script", desc: "Generated variant", icon: "✨" },
-                { value: "original", label: "Original Script", desc: "Source video transcript", icon: "🎬" },
-                { value: "custom", label: "Write My Own", desc: "Paste or type freely", icon: "✏️" },
+                { value: "original", label: "Same as Upload", desc: "Original transcript", icon: "🎬" },
+                { value: "custom", label: "Upload Your Own", desc: "Paste or type freely", icon: "✏️" },
+                { value: "generate", label: "Generate Script", desc: "AI-written UGC script", icon: "✨" },
               ] as { value: ScriptSource; label: string; desc: string; icon: string }[]).map(opt => (
                 <button
                   key={opt.value}
@@ -270,20 +295,87 @@ function CharacterSwapModal({
                 </button>
               ))}
             </div>
-            <div className="rounded-xl border border-white/8 overflow-hidden">
-              {scriptSource === "custom" ? (
+
+            {/* Script content area — changes based on selected option */}
+            {scriptSource === "original" && (
+              <div className="rounded-xl border border-white/8 overflow-hidden">
+                <div className="bg-[#0D0F14] p-4 text-sm text-gray-300 whitespace-pre-wrap max-h-[110px] overflow-y-auto leading-relaxed">
+                  {originalTranscript || <span className="text-gray-600 italic">No transcript available for this upload</span>}
+                </div>
+              </div>
+            )}
+
+            {scriptSource === "custom" && (
+              <div className="rounded-xl border border-white/8 overflow-hidden">
                 <Textarea
                   value={customScript}
                   onChange={e => setCustomScript(e.target.value)}
                   placeholder="Paste or type your script here..."
                   className="bg-[#0D0F14] border-0 text-white placeholder:text-gray-600 min-h-[110px] resize-none rounded-xl text-sm focus-visible:ring-0"
                 />
-              ) : (
-                <div className="bg-[#0D0F14] p-4 text-sm text-gray-300 whitespace-pre-wrap max-h-[110px] overflow-y-auto leading-relaxed">
-                  {activeScript || <span className="text-gray-600 italic">No script available for this option</span>}
+              </div>
+            )}
+
+            {scriptSource === "generate" && (
+              <div className="space-y-3">
+                {/* Archetype / Tone / Energy row */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider">Archetype</label>
+                    <Select value={genArchetype} onValueChange={setGenArchetype}>
+                      <SelectTrigger className="bg-[#0D0F14] border-white/10 text-white rounded-lg h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0D0F14] border-white/10">
+                        {["fitness enthusiast","busy parent","health-conscious professional","athlete","wellness seeker"].map(a => (
+                          <SelectItem key={a} value={a} className="text-white text-xs hover:bg-white/5 focus:bg-white/5">{a}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider">Tone</label>
+                    <Select value={genTone} onValueChange={setGenTone}>
+                      <SelectTrigger className="bg-[#0D0F14] border-white/10 text-white rounded-lg h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0D0F14] border-white/10">
+                        {["energetic","conversational","authoritative","empathetic","humorous"].map(t => (
+                          <SelectItem key={t} value={t} className="text-white text-xs hover:bg-white/5 focus:bg-white/5">{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider">Energy</label>
+                    <Select value={genEnergy} onValueChange={v => setGenEnergy(v as "low"|"medium"|"high")}>
+                      <SelectTrigger className="bg-[#0D0F14] border-white/10 text-white rounded-lg h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0D0F14] border-white/10">
+                        {(["low","medium","high"] as const).map(e => (
+                          <SelectItem key={e} value={e} className="text-white text-xs hover:bg-white/5 focus:bg-white/5 capitalize">{e}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              )}
-            </div>
+                <button
+                  onClick={handleGenerateScript}
+                  disabled={isGeneratingScript}
+                  className="w-full py-2.5 rounded-xl border border-[#FF3838]/40 bg-[#FF3838]/8 text-[#FF3838] text-sm font-semibold hover:bg-[#FF3838]/15 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isGeneratingScript ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : <><Sparkles className="w-4 h-4" /> Generate Script</>}
+                </button>
+                {generatedScript && (
+                  <div className="rounded-xl border border-white/8 overflow-hidden">
+                    <div className="bg-[#0D0F14] p-4 text-sm text-gray-300 whitespace-pre-wrap max-h-[110px] overflow-y-auto leading-relaxed">
+                      {generatedScript}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Step 2: Accent + Voice ── */}
