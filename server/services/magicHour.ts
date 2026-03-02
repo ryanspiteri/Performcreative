@@ -1,21 +1,17 @@
 /**
  * Magic Hour Face Swap Video Service
- * API base: https://api.magichour.ai/api/v1
- * Docs: https://docs.magichour.ai/api-reference/video-projects/face-swap-video
+ * API base: https://api.magichour.ai/v1
+ * Docs: https://docs.magichour.ai/integration/adding-api-to-your-app
  *
  * Flow:
- * 1. Get pre-signed upload URLs for video + portrait
- * 2. PUT files to the signed URLs
- * 3. Submit face swap job with file_paths
- * 4. Poll GET /v1/video-projects/{id} until complete
- * 5. Return download URL
+ * 1. Submit face swap job with direct URL references (no pre-upload needed)
+ * 2. Poll GET /v1/face-swap/{id} until complete
+ * 3. Return download URL
+ *
+ * Status values: queued | rendering | complete | error | canceled
  */
 
-import fs from "fs";
-import path from "path";
-import os from "os";
-
-const MH_BASE = "https://api.magichour.ai/api/v1";
+const MH_BASE = "https://api.magichour.ai/v1";
 
 function getApiKey(): string {
   const key = process.env.MAGIC_HOUR_API_KEY;
@@ -36,85 +32,29 @@ async function mhFetch(endpoint: string, options: RequestInit = {}): Promise<Res
   return res;
 }
 
-// ─── Upload URLs ────────────────────────────────────────────────────────────
-
-interface UploadUrlItem {
-  upload_url: string;
-  expires_at: string;
-  file_path: string;
-}
-
-interface UploadUrlsResponse {
-  items: UploadUrlItem[];
-}
-
-export async function getUploadUrls(items: { type: "video" | "image" | "audio"; extension: string }[]): Promise<UploadUrlItem[]> {
-  const res = await mhFetch("/files/upload-urls", {
-    method: "POST",
-    body: JSON.stringify({ items }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Magic Hour upload-urls failed (${res.status}): ${err}`);
-  }
-  const data = (await res.json()) as UploadUrlsResponse;
-  return data.items;
-}
-
-// ─── Upload file bytes to pre-signed URL ────────────────────────────────────
-
-export async function uploadFileToMagicHour(uploadUrl: string, fileBuffer: Buffer, contentType: string): Promise<void> {
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body: fileBuffer as unknown as BodyInit,
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Magic Hour file upload failed (${res.status}): ${err}`);
-  }
-}
-
-// ─── Download a remote URL to a buffer ──────────────────────────────────────
-
-export async function downloadToBuffer(url: string): Promise<Buffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status}`);
-  const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
-}
-
 // ─── Submit face swap job ────────────────────────────────────────────────────
-
-interface FaceSwapJobRequest {
-  videoFilePath: string;     // file_path from upload
-  portraitFilePath: string;  // file_path from upload
-  name?: string;
-  startSeconds?: number;
-  endSeconds?: number;
-}
 
 interface FaceSwapJobResponse {
   id: string;
-  credits_charged: number;
+  status: string;
+  credits_charged?: number;
 }
 
-export async function submitFaceSwapJob(req: FaceSwapJobRequest): Promise<FaceSwapJobResponse> {
+export async function submitFaceSwapJob(params: {
+  videoUrl: string;
+  portraitUrl: string;
+  name?: string;
+  startSeconds?: number;
+  endSeconds?: number;
+}): Promise<FaceSwapJobResponse> {
   const body = {
-    name: req.name || `UGC Clone - ${new Date().toISOString()}`,
-    start_seconds: req.startSeconds ?? 0,
-    end_seconds: req.endSeconds ?? 60,
-    style: { version: "default" },
+    name: params.name || `UGC Clone - ${new Date().toISOString()}`,
+    start_seconds: params.startSeconds ?? 0,
+    end_seconds: params.endSeconds ?? 60,
     assets: {
-      face_swap_mode: "all-faces",
-      video_file_path: req.videoFilePath,
+      video_file_path: params.videoUrl,
       video_source: "file",
-      face_mappings: [
-        {
-          new_face: req.portraitFilePath,
-          // No original_face needed for all-faces mode
-        },
-      ],
+      image_file_path: params.portraitUrl,
     },
   };
 
@@ -135,14 +75,14 @@ export async function submitFaceSwapJob(req: FaceSwapJobRequest): Promise<FaceSw
 
 interface VideoProjectStatus {
   id: string;
-  status: "queued" | "processing" | "complete" | "error";
+  status: "queued" | "rendering" | "complete" | "error" | "canceled";
   credits_charged?: number;
-  downloads?: Array<{ url: string; type: string }>;
-  error?: string;
+  downloads?: Array<{ url: string; expires_at?: string }>;
+  error?: { code?: string; message?: string } | string;
 }
 
 export async function getFaceSwapJobStatus(jobId: string): Promise<VideoProjectStatus> {
-  const res = await mhFetch(`/video-projects/${jobId}`);
+  const res = await mhFetch(`/face-swap/${jobId}`);
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Magic Hour status check failed (${res.status}): ${err}`);
@@ -154,7 +94,7 @@ export async function getFaceSwapJobStatus(jobId: string): Promise<VideoProjectS
 
 export async function waitForFaceSwapCompletion(
   jobId: string,
-  timeoutMs = 10 * 60 * 1000, // 10 minutes
+  timeoutMs = 15 * 60 * 1000, // 15 minutes
   pollIntervalMs = 10_000
 ): Promise<VideoProjectStatus> {
   const deadline = Date.now() + timeoutMs;
@@ -166,18 +106,21 @@ export async function waitForFaceSwapCompletion(
       return status;
     }
 
-    if (status.status === "error") {
-      throw new Error(`Magic Hour face swap job failed: ${status.error || "unknown error"}`);
+    if (status.status === "error" || status.status === "canceled") {
+      const errMsg = typeof status.error === "object"
+        ? status.error?.message || JSON.stringify(status.error)
+        : status.error || "unknown error";
+      throw new Error(`Magic Hour face swap job ${status.status}: ${errMsg}`);
     }
 
-    // Still queued or processing — wait and retry
+    // Still queued or rendering — wait and retry
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
   throw new Error(`Magic Hour face swap job timed out after ${timeoutMs / 1000}s`);
 }
 
-// ─── Full upload + swap flow ─────────────────────────────────────────────────
+// ─── Full swap flow ──────────────────────────────────────────────────────────
 
 export interface MagicHourSwapInput {
   sourceVideoUrl: string;   // Public URL to the original UGC video
@@ -194,56 +137,38 @@ export interface MagicHourSwapResult {
 }
 
 /**
- * Full pipeline: download source files → upload to Magic Hour → submit swap → poll → return result.
- * This is a long-running operation (2–10 minutes). Call from a background job or with a long timeout.
+ * Submit face swap job with direct URL references, poll until complete, return result.
+ * This is a long-running operation (2–10 minutes). Call from a background job.
  */
 export async function runMagicHourCharacterSwap(input: MagicHourSwapInput): Promise<MagicHourSwapResult> {
   const { sourceVideoUrl, portraitUrl, name, videoDurationSeconds = 30 } = input;
 
-  // 1. Get upload URLs for video + portrait
-  const uploadUrls = await getUploadUrls([
-    { type: "video", extension: "mp4" },
-    { type: "image", extension: "png" },
-  ]);
-
-  const [videoUpload, portraitUpload] = uploadUrls;
-
-  // 2. Download source files and upload to Magic Hour storage
-  const [videoBuffer, portraitBuffer] = await Promise.all([
-    downloadToBuffer(sourceVideoUrl),
-    downloadToBuffer(portraitUrl),
-  ]);
-
-  await Promise.all([
-    uploadFileToMagicHour(videoUpload.upload_url, videoBuffer, "video/mp4"),
-    uploadFileToMagicHour(portraitUpload.upload_url, portraitBuffer, "image/png"),
-  ]);
-
-  // 3. Submit face swap job
+  // Submit job with direct URL references
   const job = await submitFaceSwapJob({
-    videoFilePath: videoUpload.file_path,
-    portraitFilePath: portraitUpload.file_path,
+    videoUrl: sourceVideoUrl,
+    portraitUrl,
     name: name || `UGC Clone - ${new Date().toISOString()}`,
     startSeconds: 0,
     endSeconds: videoDurationSeconds,
   });
 
-  // 4. Poll until complete
+  // Poll until complete
   const result = await waitForFaceSwapCompletion(job.id);
 
-  // 5. Extract output URL
+  // Extract output URL
   const outputUrl = result.downloads?.[0]?.url;
   if (!outputUrl) {
     throw new Error("Magic Hour job completed but no download URL found");
   }
 
   // Estimate cost: ~$0.0024 per credit at Creator tier
-  const costUsd = ((result.credits_charged ?? job.credits_charged ?? 0) * 0.0024).toFixed(2);
+  const credits = result.credits_charged ?? job.credits_charged ?? 0;
+  const costUsd = (credits * 0.0024).toFixed(2);
 
   return {
     jobId: job.id,
     outputVideoUrl: outputUrl,
-    creditsCharged: result.credits_charged ?? job.credits_charged ?? 0,
+    creditsCharged: credits,
     estimatedCostUsd: `$${costUsd}`,
   };
 }
