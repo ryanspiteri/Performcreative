@@ -1350,3 +1350,16 @@ All three fixes implemented and tested:
 - [x] Remove actorArchetype from IterationPipelineInput interface
 - [x] Remove archetype voice injection from iteration brief generation
 - [x] Keep archetype picker on video pipeline (Browse Creatives) only
+
+## NANO BANANA 2 MODEL SELECTOR
+
+- [x] FEATURE: Add Nano Banana 2 (gemini-3.1-flash-image-preview) as selectable model for Iterate Winners
+- [x] SCHEMA: Add `imageModel` enum column to `pipeline_runs` table (nano_banana_pro | nano_banana_2)
+- [x] SERVICE: Update `nanoBananaPro.ts` to support both models via `model` option parameter
+- [x] SERVICE: Update `iterationPipeline.ts` to read `imageModel` from run config and pass to all generation calls
+- [x] ROUTER: Add `imageModel` input field to `triggerIteration` procedure
+- [x] UI: Add model selector card UI to Iterate Winners page (Nano Banana Pro vs Nano Banana 2)
+- [x] UI: Cost calculator updates dynamically based on selected model (~3x cheaper for NB2)
+- [x] UI: Timing estimates update dynamically (4x faster for NB2)
+- [x] UI: Variation count dropdown shows model-appropriate timing estimates
+- [x] TEST: All 122 tests passing after changes

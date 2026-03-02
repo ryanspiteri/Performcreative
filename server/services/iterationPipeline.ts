@@ -3,7 +3,7 @@ import { analyzeStaticAd } from "./claude";
 
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
-import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
+import { generateProductAdWithNanoBananaPro, type ImageModel } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import axios from "axios";
 import { ENV } from "../_core/env";
@@ -38,6 +38,7 @@ export interface IterationPipelineInput {
   variationTypes?: string[];
   variationCount?: number;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
+  imageModel?: ImageModel;
 }
 
 /**
@@ -150,9 +151,10 @@ export async function runIterationStage3(runId: number, run: any) {
       briefData = null;
     }
 
-    // Use Nano Banana Pro (Imagen 3) for production-quality product ad generation
-    // Provides high-fidelity text rendering and better product integration
-    console.log("[Iteration] Using Nano Banana Pro (Imagen 3) for variation generation");
+    // Read image model from run config (defaults to Nano Banana Pro for backwards compat)
+    const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
+    const { MODEL_LABELS } = await import("./nanoBananaPro");
+    console.log(`[Iteration] Using image model: ${MODEL_LABELS[imageModel]}`);
 
     // Get product render from database
     const renders = await db.listProductRenders(product);
@@ -202,6 +204,7 @@ export async function runIterationStage3(runId: number, run: any) {
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
+          model: imageModel,
           useCompositing: true, // Two-pass: generate background, then composite real product render
           productPosition: "center",
           productScale: 0.45,
@@ -249,6 +252,7 @@ export async function runIterationStage3(runId: number, run: any) {
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
+          model: imageModel,
           useCompositing: true, // Two-pass: generate background, then composite real product render
           productPosition: "center",
           productScale: 0.45,
@@ -398,9 +402,10 @@ export async function regenerateIterationVariation(
   }
   const productRender = productRenders[0];
 
-  // Get aspect ratio and creativity level from run config
+  // Get aspect ratio, creativity level, and image model from run config
   const aspectRatio = run.aspectRatio || "1:1";
   const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
+  const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
 
   let finalUrl: string;
   
@@ -409,10 +414,6 @@ export async function regenerateIterationVariation(
     console.log(`[Iteration] Text-only regeneration for variation ${variationIndex + 1} - reusing existing background`);
     console.log(`[Iteration] New headline: "${headline}"`);
     
-    // Reuse the existing composited image as-is
-    // Note: This is a simplified approach. Ideally we'd recomposite with Bannerbear,
-    // but that requires storing the original background URL separately.
-    // For now, we'll regenerate with the same background prompt to maintain consistency.
     const geminiPrompt = buildReferenceBasedPrompt({
       headline,
       subheadline: subheadline || undefined,
@@ -428,6 +429,7 @@ export async function regenerateIterationVariation(
       controlImageUrl: variations[variationIndex].url, // Use the EXISTING variation as control instead of source
       productRenderUrl: productRender.url,
       aspectRatio: aspectRatio as any,
+      model: imageModel,
       useCompositing: true,
       productPosition: "center",
       productScale: 0.45,
@@ -454,6 +456,7 @@ export async function regenerateIterationVariation(
       controlImageUrl: sourceUrl, // Use original source as control
       productRenderUrl: productRender.url,
       aspectRatio: aspectRatio as any,
+      model: imageModel,
       useCompositing: true,
       productPosition: "center",
       productScale: 0.45,

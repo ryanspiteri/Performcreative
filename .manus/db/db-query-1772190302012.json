@@ -1,0 +1,50 @@
+{
+  "query": "SELECT u.id, u.fileName, u.product, u.status, u.desiredOutputVolume, COUNT(v.id) as variant_count FROM ugc_uploads u LEFT JOIN ugc_variants v ON v.uploadId = u.id GROUP BY u.id ORDER BY u.id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT u.id, u.fileName, u.product, u.status, u.desiredOutputVolume, COUNT(v.id) as variant_count FROM ugc_uploads u LEFT JOIN ugc_variants v ON v.uploadId = u.id GROUP BY u.id ORDER BY u.id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "60001",
+      "fileName": "WhatsApp Video 2026-02-25 at 17.58.35.mp4",
+      "product": "Hyperburn",
+      "status": "failed",
+      "desiredOutputVolume": "1",
+      "variant_count": "0"
+    },
+    {
+      "id": "30007",
+      "fileName": "billo-121278-orig.mov",
+      "product": "Hyperburn",
+      "status": "failed",
+      "desiredOutputVolume": "1",
+      "variant_count": "0"
+    },
+    {
+      "id": "30006",
+      "fileName": "candice 2.mp4",
+      "product": "Hyperburn",
+      "status": "failed",
+      "desiredOutputVolume": "1",
+      "variant_count": "0"
+    },
+    {
+      "id": "30005",
+      "fileName": "candice 2.mp4",
+      "product": "Hyperburn",
+      "status": "failed",
+      "desiredOutputVolume": "1",
+      "variant_count": "0"
+    },
+    {
+      "id": "30004",
+      "fileName": "candice 2.mp4",
+      "product": "Hyperburn",
+      "status": "structure_extracted",
+      "desiredOutputVolume": "1",
+      "variant_count": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfileName\tproduct\tstatus\tdesiredOutputVolume\tvariant_count\n60001\tWhatsApp Video 2026-02-25 at 17.58.35.mp4\tHyperburn\tfailed\t1\t0\n30007\tbillo-121278-orig.mov\tHyperburn\tfailed\t1\t0\n30006\tcandice 2.mp4\tHyperburn\tfailed\t1\t0\n30005\tcandice 2.mp4\tHyperburn\tfailed\t1\t0\n30004\tcandice 2.mp4\tHyperburn\tstructure_extracted\t1\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1586
+}

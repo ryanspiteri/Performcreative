@@ -634,6 +634,7 @@ Return JSON in this exact format:
         variationTypes: z.array(z.enum(["headline_only", "background_only", "layout_only", "benefit_callouts_only", "props_only", "talent_swap", "full_remix"])).optional(),
         variationCount: z.number().min(1).max(50).optional(),
         aspectRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]).optional(),
+        imageModel: z.enum(["nano_banana_pro", "nano_banana_2"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const runId = await db.createPipelineRun({
@@ -651,6 +652,7 @@ Return JSON in this exact format:
           aspectRatio: input.aspectRatio || "1:1",
           variationTypes: input.variationTypes ? JSON.stringify(input.variationTypes) : null,
           variationCount: input.variationCount || 3,
+          imageModel: input.imageModel || "nano_banana_pro",
         });
         runIterationStages1to2(runId, input).catch(err => {
           console.error("[Pipeline] Iteration pipeline stages 1-2 failed:", err);

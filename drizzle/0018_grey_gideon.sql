@@ -1,0 +1,1 @@
+ALTER TABLE `pipeline_runs` ADD `imageModel` enum('nano_banana_pro','nano_banana_2') DEFAULT 'nano_banana_pro';

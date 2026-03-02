@@ -16,6 +16,7 @@ const PRODUCTS = [
 type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
 type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
+type ImageModel = "nano_banana_pro" | "nano_banana_2";
 
 
 export default function IterateWinners() {
@@ -32,6 +33,7 @@ export default function IterateWinners() {
   const [perVariationStrategies, setPerVariationStrategies] = useState<VariationType[]>(Array(5).fill('full_remix'));
   const [usePerVariationMode, setUsePerVariationMode] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
+  const [imageModel, setImageModel] = useState<ImageModel>("nano_banana_pro");
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
@@ -106,8 +108,11 @@ export default function IterateWinners() {
   }, []);
 
   // Calculate cost — Two-pass compositing: 2x Gemini calls per variation (background + original)
-  // Gemini pricing: $0.12 per image for 1:1/4:5, $0.24 for 9:16/16:9
-  const perImageCost = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.12 : 0.24;
+  // Nano Banana Pro: $0.12/image (1:1/4:5), $0.24 (9:16/16:9)
+  // Nano Banana 2:   $0.04/image (1:1/4:5), $0.08 (9:16/16:9) — ~3x cheaper
+  const perImageCostPro = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.12 : 0.24;
+  const perImageCostNB2 = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.04 : 0.08;
+  const perImageCost = imageModel === 'nano_banana_2' ? perImageCostNB2 : perImageCostPro;
   const estimatedCost = variationCount * perImageCost * 2; // 2x for two-pass compositing
 
   // Start the iteration pipeline
@@ -134,6 +139,7 @@ export default function IterateWinners() {
         variationTypes: usePerVariationMode ? perVariationStrategies : [variationType], // Per-variation or single
         variationCount,
         aspectRatio,
+        imageModel,
       });
       setRunId(result.runId);
       setLocation(`/results/${result.runId}`);
@@ -180,13 +186,20 @@ export default function IterateWinners() {
                     ${estimatedCost.toFixed(2)}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {variationCount} variation{variationCount === 1 ? '' : 's'} × ${aspectRatio === '1:1' || aspectRatio === '4:5' ? '0.12' : '0.24'} per image
+                    {variationCount} variation{variationCount === 1 ? '' : 's'} × ${perImageCost.toFixed(2)} per image ({imageModel === 'nano_banana_2' ? 'Nano Banana 2' : 'Nano Banana Pro'})
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-400 mb-2">Estimated Time</div>
-                  <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm font-semibold text-amber-300">
-                    {variationCount * 2}-{variationCount * 3} min
+                  <div className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                    imageModel === 'nano_banana_2'
+                      ? 'bg-green-500/10 border border-green-500/30 text-green-300'
+                      : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+                  }`}>
+                    {imageModel === 'nano_banana_2'
+                      ? `${Math.ceil(variationCount * 0.5)}–${variationCount} min`
+                      : `${variationCount * 2}–${variationCount * 3} min`
+                    }
                   </div>
                   <div className="text-xs text-gray-500 mt-2">Resolution: {aspectRatio === '1:1' ? '2048×2048' : aspectRatio === '4:5' ? '2048×2560' : aspectRatio === '9:16' ? '2304×4096' : '4096×2304'}</div>
                 </div>
@@ -383,27 +396,52 @@ export default function IterateWinners() {
             </label>
             <div className="bg-white/5 rounded-xl p-6">
               {/* Warning Banner for Nano Banana Pro */}
-              <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-amber-300 mb-1">⏱️ Premium Quality = Longer Wait</p>
-                  <p className="text-xs text-amber-200/90 leading-relaxed">
-                    Nano Banana Pro generates production-quality images with perfect text rendering, but takes <strong>2-3 minutes per image</strong>. Generating {variationCount} variation{variationCount === 1 ? '' : 's'} will take approximately <strong>{variationCount * 2}-{variationCount * 3} minutes</strong>. Please be patient whilst we create your high-quality variations.
-                  </p>
+              {imageModel === 'nano_banana_pro' && (
+                <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-300 mb-1">🍌 Nano Banana Pro — Premium Quality = Longer Wait</p>
+                    <p className="text-xs text-amber-200/90 leading-relaxed">
+                      Nano Banana Pro generates production-quality images with perfect text rendering, but takes <strong>2–3 minutes per image</strong>. Generating {variationCount} variation{variationCount === 1 ? '' : 's'} will take approximately <strong>{variationCount * 2}–{variationCount * 3} minutes</strong>.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
+              {imageModel === 'nano_banana_2' && (
+                <div className="mb-4 bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-green-300 mb-1">⚡ Nano Banana 2 — Fast Generation</p>
+                    <p className="text-xs text-green-200/90 leading-relaxed">
+                      Nano Banana 2 is 4× faster and ~3× cheaper. Generating {variationCount} variation{variationCount === 1 ? '' : 's'} will take approximately <strong>{Math.ceil(variationCount * 0.5)}–{variationCount} minutes</strong>. Ranked #1 in Image Arena.
+                    </p>
+                  </div>
+                </div>
+              )}
               
               <select
                 value={variationCount}
                 onChange={(e) => setVariationCount(parseInt(e.target.value))}
                 className="w-full px-4 py-3 rounded-lg bg-white/10 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:border-transparent transition-all"
               >
-                <option value={3}>3 variations (~6-9 minutes)</option>
-                <option value={5}>5 variations (~10-15 minutes)</option>
-                <option value={10}>10 variations (~20-30 minutes)</option>
+                {imageModel === 'nano_banana_2' ? (
+                  <>
+                    <option value={3}>3 variations (~2–3 minutes)</option>
+                    <option value={5}>5 variations (~3–5 minutes)</option>
+                    <option value={10}>10 variations (~5–10 minutes)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value={3}>3 variations (~6–9 minutes)</option>
+                    <option value={5}>5 variations (~10–15 minutes)</option>
+                    <option value={10}>10 variations (~20–30 minutes)</option>
+                  </>
+                )}
               </select>
               <p className="text-xs text-gray-400 mt-3">
-                Limited to 10 variations max due to Nano Banana Pro's generation time. Quality over quantity — each variation is production-ready.
+                {imageModel === 'nano_banana_2'
+                  ? 'Nano Banana 2 is 4× faster — run more variations in less time.'
+                  : 'Limited to 10 variations max due to Nano Banana Pro’s generation time. Quality over quantity — each variation is production-ready.'}
               </p>
             </div>
           </div>
@@ -428,6 +466,56 @@ export default function IterateWinners() {
             </div>
           </div>
 
+
+          {/* Image Model Selector */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Image Generation Model</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setImageModel('nano_banana_pro')}
+                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                  imageModel === 'nano_banana_pro'
+                    ? 'bg-purple-500/10 border-purple-500 focus:ring-purple-500'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8 focus:ring-white/20'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">🍌</span>
+                  <span className="font-semibold text-sm text-white">Nano Banana Pro</span>
+                  {imageModel === 'nano_banana_pro' && (
+                    <span className="ml-auto text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">Selected</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">Highest quality. Advanced reasoning, perfect text rendering. ~$0.12/image, 2–3 min per variation.</p>
+                <div className="mt-2 flex gap-2">
+                  <span className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">Best quality</span>
+                  <span className="text-xs bg-white/5 text-gray-400 px-2 py-0.5 rounded">Slower</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setImageModel('nano_banana_2')}
+                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                  imageModel === 'nano_banana_2'
+                    ? 'bg-green-500/10 border-green-500 focus:ring-green-500'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8 focus:ring-white/20'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">⚡</span>
+                  <span className="font-semibold text-sm text-white">Nano Banana 2</span>
+                  {imageModel === 'nano_banana_2' && (
+                    <span className="ml-auto text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">Selected</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">4× faster, ~3× cheaper. Ranked #1 in Image Arena. ~$0.04/image, 30–60 sec per variation.</p>
+                <div className="mt-2 flex gap-2">
+                  <span className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">#1 Image Arena</span>
+                  <span className="text-xs bg-white/5 text-gray-400 px-2 py-0.5 rounded">4× faster</span>
+                </div>
+              </button>
+            </div>
+          </div>
 
           {/* Upload Area */}
           <div className="mb-8">

@@ -75,6 +75,7 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoUploadUrl: text("videoUploadUrl"),
   videoFunnelStage: mysqlEnum("videoFunnelStage", ["cold", "warm", "retargeting", "retention"]).default("cold"),
   videoArchetypes: json("videoArchetypes"),
+  imageModel: mysqlEnum("imageModel", ["nano_banana_pro", "nano_banana_2"]).default("nano_banana_pro"),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
