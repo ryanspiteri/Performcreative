@@ -1457,3 +1457,11 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] Remove standalone CharacterSwapJobsPanel section (jobs shown inline on cards instead)
 - [ ] Polish Generate Video modal: cleaner layout, better step flow, cost estimate visible upfront
 - [x] Add progress steps indicator inside modal while job is running (Detecting → Voiceover → Swapping → Done)
+
+## STATIC PIPELINE — MIGRATE TO GEMINI (Round 30)
+- [x] Replace generateStaticAdVariations (Bannerbear/Flux Pro) in staticPipeline.ts with Gemini generation
+- [x] Use same buildReferenceBasedPrompt + generateProductAdWithNanoBananaPro pattern as Iterate Winners
+- [x] Pass product render URL, brief, and reference image to Gemini prompt
+- [x] Verify TypeScript compiles without errors (0 errors)
+- [x] Run full test suite (122/122 passing)
+- [ ] Save checkpoint

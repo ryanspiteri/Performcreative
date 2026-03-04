@@ -1,9 +1,72 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
-import { generateStaticAdVariations, ImageSelections } from "./imageCompositing";
+import { ImageSelections } from "./imageCompositing";
+import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
+import { buildReferenceBasedPrompt } from "./geminiPromptBuilder";
 import { createScriptTask } from "./clickup";
 import axios from "axios";
 import { ENV } from "../_core/env";
+
+/**
+ * Generate ad creative variations using Gemini (Nano Banana Pro)
+ * Replaces the legacy Bannerbear/Flux Pro generateStaticAdVariations function.
+ */
+async function generateStaticAdVariationsWithGemini(
+  brief: string,
+  referenceImageUrl: string,
+  product: string,
+  selections: ImageSelections | undefined,
+  teamNotes?: string
+): Promise<Array<{ url: string; s3Key: string; variation: string; headline: string; subheadline: string | null }>> {
+  // Get product render from DB
+  const renders = await db.listProductRenders(product);
+  const productRender = renders.find((r: any) => r.isDefault) || renders[0];
+  if (!productRender) throw new Error(`No product render found for ${product}`);
+
+  const images = selections?.images || [];
+  const variationCount = images.length || 3;
+  const results: Array<{ url: string; s3Key: string; variation: string; headline: string; subheadline: string | null }> = [];
+
+  for (let i = 0; i < variationCount; i++) {
+    const sel = images[i] || {};
+    const headline = sel.headline || `ONEST ${product.toUpperCase()} — VARIATION ${i + 1}`;
+    const subheadline = sel.subheadline || null;
+    const backgroundDesc = sel.background?.description || sel.background?.title || "Premium supplement ad with bold typography and clean background";
+
+    const basePrompt = buildReferenceBasedPrompt({
+      headline,
+      subheadline: subheadline || undefined,
+      productName: `ONEST Health ${product}`,
+      backgroundStyleDescription: backgroundDesc,
+      aspectRatio: "1:1",
+    });
+
+    const fullPrompt = teamNotes
+      ? `${basePrompt}\n\n=== REVISION NOTES ===\n${teamNotes}\n\nApply these revision notes carefully while maintaining the overall style.`
+      : `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations through unique colour combinations, lighting angles, and composition choices.`;
+
+    console.log(`[Static] Generating variation ${i + 1}/${variationCount} with Gemini...`);
+    const result = await generateProductAdWithNanoBananaPro({
+      prompt: fullPrompt,
+      controlImageUrl: referenceImageUrl || undefined,
+      productRenderUrl: productRender.url,
+      aspectRatio: "1:1",
+      useCompositing: true,
+      productPosition: "center",
+      productScale: 0.45,
+    });
+
+    results.push({
+      url: result.imageUrl,
+      s3Key: result.imageUrl.split("/").pop() || "",
+      variation: `Variation ${i + 1}`,
+      headline,
+      subheadline,
+    });
+  }
+
+  return results;
+}
 
 const STAGE_TIMEOUT = 10 * 60 * 1000; // 10 minutes per stage (Claude API calls can be slow)
 const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
@@ -129,11 +192,10 @@ export async function runStaticStage4(runId: number, run: any, selections: Image
   try {
     const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
     const variations = await withTimeout(
-      generateStaticAdVariations(
+      generateStaticAdVariationsWithGemini(
         run.staticBrief || "",
         ad.imageUrl || "",
         run.product,
-        run.foreplayAdBrand || "Competitor",
         selections
       ),
       STAGE_TIMEOUT * 2,
@@ -228,7 +290,7 @@ export async function runStaticRevision(runId: number, run: any, teamNotes: stri
     const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
 
     const variations = await withTimeout(
-      generateStaticAdVariations(run.staticBrief || "", ad.imageUrl || "", run.product, run.foreplayAdBrand || "Competitor", undefined, teamNotes),
+      generateStaticAdVariationsWithGemini(run.staticBrief || "", ad.imageUrl || "", run.product, undefined, teamNotes),
       STAGE_TIMEOUT * 2,
       "Revision: Image Generation"
     );
