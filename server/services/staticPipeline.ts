@@ -51,7 +51,7 @@ async function generateStaticAdVariationsWithGemini(
       controlImageUrl: referenceImageUrl || undefined,
       productRenderUrl: productRender.url,
       aspectRatio: "1:1",
-      useCompositing: true,
+      useCompositing: false, // Single-pass: Gemini receives both reference + product render
       productPosition: "center",
       productScale: 0.45,
     });

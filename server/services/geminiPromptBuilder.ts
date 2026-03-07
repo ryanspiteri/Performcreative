@@ -102,7 +102,11 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
   // Build prompt
   const prompt = `You are creating a premium supplement advertisement image for paid social media advertising (Meta/TikTok).
 
-I am providing you with a REFERENCE IMAGE (the competitor ad). Study this reference carefully and replicate its:
+I am providing you with TWO images:
+- Image 1: A REFERENCE AD (competitor ad) — use this for STYLE REFERENCE ONLY
+- Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output
+
+STUDY Image 1 carefully and replicate its:
 - Overall layout and composition
 - Text placement, size, and styling approach
 - Color palette and mood
@@ -113,7 +117,7 @@ I am providing you with a REFERENCE IMAGE (the competitor ad). Study this refere
 - Typography hierarchy
 - Overall aesthetic and vibe
 
-Your goal is to create a NEW version of this ad for ${productName} that MATCHES the visual style of the reference whilst using the new copy below.
+Your goal is to create a NEW version of this ad for ${productName} that MATCHES the visual style of Image 1 whilst using the new copy below and integrating the ONEST product from Image 2.
 
 === NEW COPY FOR THIS VERSION ===
 Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
@@ -144,17 +148,19 @@ The background should:
 - Include visual elements that support the headline concept described above
 
 === PRODUCT INTEGRATION ===
-The ${productName} supplement bottle must be integrated into the scene in a similar way to how the reference image integrates its product.
+CRITICAL — PRODUCT SOURCE RULE:
+You MUST use ONLY Image 2 (the ONEST product render) as the product in your output.
+Do NOT copy, replicate, or draw the product shown in Image 1 (the reference ad). That is a different brand — treat it as invisible when it comes to the product itself. Only use Image 1 for style, layout, composition, and atmosphere reference.
 
-Study the reference image carefully:
-- Is the product floating or grounded? Match that approach.
-- How do background elements interact with the product (wrapping around, behind, in front)? Replicate that relationship.
-- What lighting effects are used on the product? Apply similar lighting to our product.
-- Are there shadows, reflections, or depth cues? Add similar effects.
-- How prominent is the product in the frame? Match that prominence level.
-- Where is the product positioned (center, left, right, offset)? Use similar positioning.
+Integrate the ${productName} bottle (from Image 2) into the scene following the same approach as Image 1:
+- Is the product in Image 1 floating or grounded? Match that approach for the ONEST bottle.
+- How do background elements interact with the product in Image 1 (wrapping around, behind, in front)? Replicate that relationship with the ONEST bottle.
+- What lighting effects are used on the product in Image 1? Apply similar lighting to the ONEST bottle.
+- Are there shadows, reflections, or depth cues in Image 1? Add similar effects to the ONEST bottle.
+- How prominent is the product in Image 1? Match that prominence level.
+- Where is the product positioned in Image 1 (center, left, right, offset)? Use similar positioning for the ONEST bottle.
 
-CRITICAL: The product label and branding on the bottle must be preserved and clearly visible. Do not obscure or alter the product's existing design.
+CRITICAL: The product label and branding on the ONEST bottle (Image 2) must be preserved and clearly visible. Do not obscure, alter, or redraw the product's existing design. Do not invent a new product — use the exact bottle from Image 2.
 
 === QUALITY STANDARDS ===
 - Match the production quality of the reference image

@@ -1477,3 +1477,12 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] Verify TypeScript compiles without errors (0 errors)
 - [x] Run full test suite (122/122 passing)
 - [ ] Save checkpoint
+
+## ROUND 12 — ITERATE WINNERS IMAGE QUALITY RESTORATION
+
+- [x] DIAGNOSIS: Identified two-pass compositing as root cause of flat backgrounds and pasted-on product artefacts
+- [x] DOCUMENTATION: Created full technical documentation of image generation logic, both prompts, and fix plan
+- [x] FIX: Restored single-pass Gemini approach — iterationPipeline.ts all 4 call sites set to useCompositing: false
+- [x] FIX: staticPipeline.ts also restored to single-pass (useCompositing: false)
+- [x] FIX: Updated buildReferenceBasedPrompt to explicitly label Image 1 as style reference and Image 2 as the ONEST product to use — prevents Gemini copying competitor product
+- [x] VERIFY: 0 TypeScript errors, 122/122 tests passing
