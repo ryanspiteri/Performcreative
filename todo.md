@@ -1465,3 +1465,15 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] Verify TypeScript compiles without errors (0 errors)
 - [x] Run full test suite (122/122 passing)
 - [ ] Save checkpoint
+
+## BUG — ITERATE WINNERS STATIC STUCK ON GENERATE
+- [ ] Diagnose why iterate winners static pipeline hangs on generate step
+- [ ] Fix root cause
+- [ ] Verify pipeline completes end-to-end
+
+## BUG FIX — DOUBLE PRODUCT IN COMPOSITING MODE
+- [x] Fix nanoBananaPro.ts: use buildBackgroundOnlyPrompt in Pass 1 instead of single-pass prompt + weak override
+- [x] Extract headline/subheadline/backgroundStyle from the prompt to pass to buildBackgroundOnlyPrompt
+- [x] Verify TypeScript compiles without errors (0 errors)
+- [x] Run full test suite (122/122 passing)
+- [ ] Save checkpoint

@@ -1,0 +1,50 @@
+{
+  "query": "SELECT id, product, status, iterationStage, LEFT(errorMessage, 200) as errorMessage, updatedAt FROM pipeline_runs WHERE iterationStage IS NOT NULL ORDER BY updatedAt DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user By5XkGQEgEMb8WB.3b48d8604568 --database iRMuHk7nYQvS4BtpbvEbBz --execute SELECT id, product, status, iterationStage, LEFT(errorMessage, 200) as errorMessage, updatedAt FROM pipeline_runs WHERE iterationStage IS NOT NULL ORDER BY updatedAt DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "840001",
+      "product": "Hyperburn",
+      "status": "running",
+      "iterationStage": "stage_3_generation",
+      "errorMessage": "NULL",
+      "updatedAt": "2026-03-07 04:42:40"
+    },
+    {
+      "id": "810001",
+      "product": "Hyperburn",
+      "status": "failed",
+      "iterationStage": "stage_3_generation",
+      "errorMessage": "Stage 3 failed: Nano Banana 2 generation failed: No parts in Gemini API response",
+      "updatedAt": "2026-03-05 12:42:06"
+    },
+    {
+      "id": "780001",
+      "product": "Hyperburn",
+      "status": "running",
+      "iterationStage": "stage_3b_variation_approval",
+      "errorMessage": "NULL",
+      "updatedAt": "2026-03-04 09:49:49"
+    },
+    {
+      "id": "750002",
+      "product": "Hyperburn",
+      "status": "running",
+      "iterationStage": "stage_3b_variation_approval",
+      "errorMessage": "NULL",
+      "updatedAt": "2026-02-27 07:24:58"
+    },
+    {
+      "id": "600003",
+      "product": "Hyperburn",
+      "status": "completed",
+      "iterationStage": "completed",
+      "errorMessage": "NULL",
+      "updatedAt": "2026-02-26 04:37:27"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tproduct\tstatus\titerationStage\terrorMessage\tupdatedAt\n840001\tHyperburn\trunning\tstage_3_generation\tNULL\t2026-03-07 04:42:40\n810001\tHyperburn\tfailed\tstage_3_generation\tStage 3 failed: Nano Banana 2 generation failed: No parts in Gemini API response\t2026-03-05 12:42:06\n780001\tHyperburn\trunning\tstage_3b_variation_approval\tNULL\t2026-03-04 09:49:49\n750002\tHyperburn\trunning\tstage_3b_variation_approval\tNULL\t2026-02-27 07:24:58\n600003\tHyperburn\tcompleted\tcompleted\tNULL\t2026-02-26 04:37:27\n",
+  "stderr": "",
+  "execution_time_ms": 1567
+}

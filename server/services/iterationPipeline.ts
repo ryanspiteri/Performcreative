@@ -3,12 +3,41 @@ import { analyzeStaticAd } from "./claude";
 
 // Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
-import { generateProductAdWithNanoBananaPro, type ImageModel } from "./nanoBananaPro";
+import { generateProductAdWithNanoBananaPro, type ImageModel, type NanoBananaProResult } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import axios from "axios";
 import { ENV } from "../_core/env";
 
 const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+const VARIATION_TIMEOUT = 4 * 60 * 1000; // 4 minutes per variation (2 Gemini passes × 2 min each)
+
+/**
+ * Generate a single variation with timeout + automatic fallback to nano_banana_pro if nano_banana_2 fails.
+ */
+async function generateVariationWithFallback(
+  options: Parameters<typeof generateProductAdWithNanoBananaPro>[0],
+  variationIndex: number
+): Promise<NanoBananaProResult> {
+  const label = `Variation ${variationIndex + 1}`;
+  try {
+    return await withTimeout(
+      generateProductAdWithNanoBananaPro(options),
+      VARIATION_TIMEOUT,
+      `${label} (${options.model || 'nano_banana_pro'})`
+    );
+  } catch (err: any) {
+    // If using nano_banana_2 and it failed, retry once with nano_banana_pro
+    if (options.model === 'nano_banana_2') {
+      console.warn(`[Iteration] ${label} failed with Nano Banana 2: ${err.message}. Retrying with Nano Banana Pro...`);
+      return await withTimeout(
+        generateProductAdWithNanoBananaPro({ ...options, model: 'nano_banana_pro' }),
+        VARIATION_TIMEOUT,
+        `${label} (nano_banana_pro fallback)`
+      );
+    }
+    throw err;
+  }
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -199,7 +228,7 @@ export async function runIterationStage3(runId: number, run: any) {
         console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
         console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
 
-        const result = await generateProductAdWithNanoBananaPro({
+        const result = await generateVariationWithFallback({
           prompt: geminiPrompt,
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
@@ -208,7 +237,7 @@ export async function runIterationStage3(runId: number, run: any) {
           useCompositing: true, // Two-pass: generate background, then composite real product render
           productPosition: "center",
           productScale: 0.45,
-        });
+        }, i);
 
         const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
 
@@ -247,7 +276,7 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
         });
         
-        const result = await generateProductAdWithNanoBananaPro({
+        const result = await generateVariationWithFallback({
           prompt: fallbackPrompt,
           controlImageUrl: sourceUrl, // Pass control image as visual reference
           productRenderUrl: productRender.url,
@@ -256,7 +285,7 @@ export async function runIterationStage3(runId: number, run: any) {
           useCompositing: true, // Two-pass: generate background, then composite real product render
           productPosition: "center",
           productScale: 0.45,
-        });
+        }, i);
         
         const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
 
