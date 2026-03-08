@@ -122,14 +122,30 @@ Your goal is to create a NEW version of this ad for ${productName} that MATCHES 
 === NEW COPY FOR THIS VERSION ===
 Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
 
-Render the headline${subheadline ? ' and subheadline' : ''} in the SAME STYLE as the reference image:
+TEXT RENDERING — CRITICAL (if the text is blurry, soft, thin, or illegible, the image has failed):
+
+HEADLINE RULES (non-negotiable):
+- Font weight: 900 weight / ultra-bold / black weight / heavy — NOT regular, NOT medium, NOT light
+- Case: UPPERCASE always — every letter capitalised
+- Size: The headline must be LARGE and dominant — it should occupy the top 30–35% of the frame
+- Edge quality: Every letter must have a hard, pixel-sharp edge — zero anti-aliased softness, zero blur, zero feathering
+- Contrast: Maximum contrast between text and background — white or near-white text on dark backgrounds; dark text on light backgrounds — NEVER grey text on grey background, NEVER low-contrast combinations
+- Two-colour treatment: If the reference headline uses two colours (e.g., white body text + orange accent words), replicate that exact split. Study which words are accented and apply the same accent colour to the equivalent emphasis words in the new headline.
+- Placement: Match the vertical position from the reference (top-aligned, centered, bottom-aligned) — do not move it
+
+SUBHEADLINE RULES (if a subheadline is provided):${subheadline ? `
+- Size: Noticeably smaller than the headline — approximately 40–50% of headline font size
+- Weight: Regular weight (400) — NOT bold
+- Case: Sentence case (first word capitalised only)
+- Contrast: Same high-contrast requirement as headline
+- Placement: Directly below the headline, tight spacing` : `
+- No subheadline — do not add any secondary text`}
+
+TYPOGRAPHY PLACEMENT:
 - Match the text placement from the reference (top, center, bottom, overlaying product, etc.)
-- Match the text size proportions from the reference
-- Match the typography style (bold/regular, uppercase/mixed case, font weight) from the reference
-- Match the text color and effects (stroke, shadow, glow, outline) from the reference
 - If the reference has text at the top, put it at the top
 - If the reference has text overlaying the product, do the same
-- Replicate whatever text approach the reference uses
+- Replicate whatever text layout approach the reference uses
 
 === VISUAL CONCEPT ===
 ${analysis.visualConceptDescription}

@@ -183,6 +183,7 @@ async function generateProductAdWithNanaBananaPro_internal(
       console.log(`[NanaBanana] Using control image: ${controlImageUrl}`);
       const controlImageData = await fetchImageAsBase64(controlImageUrl);
       contents.push({
+        role: "user",
         parts: [
           {
             inline_data: {
@@ -198,6 +199,7 @@ async function generateProductAdWithNanaBananaPro_internal(
       console.log(`[NanaBanana] Using product render: ${productRenderUrl}`);
       const productImageData = await fetchImageAsBase64(productRenderUrl);
       contents.push({
+        role: "user",
         parts: [
           {
             inline_data: {
@@ -210,6 +212,7 @@ async function generateProductAdWithNanaBananaPro_internal(
     }
 
     contents.push({
+      role: "user",
       parts: [{ text: prompt }],
     });
 
