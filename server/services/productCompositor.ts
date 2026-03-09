@@ -78,7 +78,7 @@ export async function compositeProductOnBackground(
     productPosition = "center",
     productScale = 0.45,
     verticalOffset = 0,
-    addShadow = true,
+    addShadow = false,
     addGlow = false,
     glowColor = "#00ff88",
   } = options;
@@ -237,21 +237,39 @@ function calculatePosition(
 
 /**
  * Create a soft drop shadow from the product silhouette.
+ * Produces a proper RGBA buffer so Sharp composites it correctly without a black box.
  */
 async function createDropShadow(
   productBuffer: Buffer,
   width: number,
   height: number
 ): Promise<Buffer> {
-  // Extract alpha channel, tint it dark, and blur
-  return sharp(productBuffer)
+  // Extract the alpha channel as a greyscale mask
+  const alphaMask = await sharp(productBuffer)
     .resize(width, height)
     .ensureAlpha()
     .extractChannel(3)
-    .toColourspace("b-w")
-    .tint({ r: 0, g: 0, b: 0 })
-    .blur(12)
-    .modulate({ brightness: 0.3 })
+    .blur(14)
+    .toBuffer();
+
+  // Build a black RGBA image the same size, using the blurred alpha mask as opacity
+  // This produces a proper RGBA shadow buffer that Sharp can composite correctly
+  const blackLayer = await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .png()
+    .toBuffer();
+
+  // Composite the alpha mask onto the black layer to produce a dark semi-transparent shadow
+  return sharp(blackLayer)
+    .composite([{ input: alphaMask, blend: 'dest-in' }])
+    .modulate({ brightness: 0.4 })
+    .png()
     .toBuffer();
 }
 
@@ -351,14 +369,15 @@ The background should:
 - Create dramatic, premium atmosphere
 - Use cinematic lighting and depth
 - Feel like a high-budget supplement advertisement
-- ${spaceDescription}
+- Fill the ENTIRE canvas edge-to-edge with the scene — no empty patches, no dark voids, no placeholder areas
+- The centre of the image should have slightly softer/less busy detail so the product composited on top reads clearly
 
 === COMPOSITION ===
 - Aspect ratio: ${aspectRatio}
-- Leave a clear, unobstructed area ${spaceDescription.toLowerCase()} for the product to be composited later
-- The product space should be approximately 40-50% of the canvas width
-- Ensure the headline text does NOT overlap with the product space
-- Create visual flow that draws the eye from headline to the product space
+- Fill the ENTIRE canvas — the product will be composited on top, so the background must be complete
+- The centre area should have subtle, less-busy detail (e.g. soft light, gradient, atmospheric haze) so the product stands out when placed there
+- Ensure the headline text is in the top third and does NOT overlap with the centre of the image
+- Create visual flow that draws the eye from headline down toward the centre product area
 
 === CRITICAL RULES ===
 ✗ Do NOT include any product bottle, jar, container, or supplement packaging

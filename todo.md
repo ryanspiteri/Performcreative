@@ -1491,3 +1491,9 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 
 - [x] Enable useCompositing: true at all 4 call sites in iterationPipeline.ts
 - [x] Update buildBackgroundOnlyPrompt in productCompositor.ts with explicit text rendering rules
+
+## ROUND 14 — BLACK BOX FIX (COMPOSITOR)
+
+- [x] Disable addShadow by default (was causing black rectangle from malformed greyscale buffer)
+- [x] Rewrite createDropShadow to produce proper RGBA buffer using dest-in blend
+- [x] Update background-only prompt: fill entire canvas, no dark void in centre, soft detail in product area
