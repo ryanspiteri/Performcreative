@@ -1486,3 +1486,8 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 - [x] FIX: staticPipeline.ts also restored to single-pass (useCompositing: false)
 - [x] FIX: Updated buildReferenceBasedPrompt to explicitly label Image 1 as style reference and Image 2 as the ONEST product to use — prevents Gemini copying competitor product
 - [x] VERIFY: 0 TypeScript errors, 122/122 tests passing
+
+## ROUND 13 — TWO-PASS COMPOSITING
+
+- [x] Enable useCompositing: true at all 4 call sites in iterationPipeline.ts
+- [x] Update buildBackgroundOnlyPrompt in productCompositor.ts with explicit text rendering rules

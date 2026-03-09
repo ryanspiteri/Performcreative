@@ -327,11 +327,22 @@ CRITICAL INSTRUCTION: Do NOT include any product bottle, container, jar, or supp
 === COPY TO RENDER ===
 Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
 
-Render the headline${subheadline ? ' and subheadline' : ''} as bold, premium text:
-- Large, impactful headline text that is clearly legible
-- Use bold sans-serif typography with high contrast against the background
-- Text should be positioned at the top or top-third of the image
-- Add subtle text effects (shadow, outline, or glow) for readability
+TEXT RENDERING — CRITICAL (if the text is blurry, soft, thin, or illegible, the image has failed):
+
+HEADLINE RULES (non-negotiable):
+- Font weight: 900 weight / ultra-bold / black weight / heavy — NOT regular, NOT medium, NOT light
+- Case: UPPERCASE always — every letter capitalised
+- Size: Large and dominant — top 30–35% of the frame
+- Edge quality: Hard pixel-sharp edges — zero blur, zero feathering
+- Contrast: Maximum contrast — white on dark, dark on light — NEVER grey on grey
+- Two-colour treatment: If the reference uses two colours (e.g. white + orange accent), replicate that split
+- Placement: Top-aligned, fully inside canvas with 5% padding from all edges
+
+SUBHEADLINE (if provided):
+- Size: 40–50% of headline font size, regular weight (400), sentence case
+- Placed directly below headline, tight spacing
+
+ALL TEXT must be fully inside the canvas — never clipped or cut off at any edge.
 
 === BACKGROUND & ATMOSPHERE ===
 ${backgroundStyleDescription}
