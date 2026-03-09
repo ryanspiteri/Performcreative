@@ -234,7 +234,7 @@ export async function runIterationStage3(runId: number, run: any) {
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           model: imageModel,
-          useCompositing: true, // Two-pass: Gemini generates background only, Sharp composites real product render
+          useCompositing: false, // Single-pass: Gemini generates full scene including product
           productPosition: "center",
           productScale: 0.45,
         }, i);
@@ -282,7 +282,7 @@ export async function runIterationStage3(runId: number, run: any) {
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           model: imageModel,
-          useCompositing: true, // Two-pass: Gemini generates background only, Sharp composites real product render
+          useCompositing: false, // Single-pass: Gemini generates full scene including product
           productPosition: "center",
           productScale: 0.45,
         }, i);
@@ -459,7 +459,7 @@ export async function regenerateIterationVariation(
       productRenderUrl: productRender.url,
       aspectRatio: aspectRatio as any,
       model: imageModel,
-      useCompositing: true, // Two-pass: Gemini generates background only, Sharp composites real product render
+      useCompositing: false, // Single-pass: Gemini generates full scene including product
       productPosition: "center",
       productScale: 0.45,
     });
@@ -486,7 +486,7 @@ export async function regenerateIterationVariation(
       productRenderUrl: productRender.url,
       aspectRatio: aspectRatio as any,
       model: imageModel,
-      useCompositing: true, // Two-pass: Gemini generates background only, Sharp composites real product render
+      useCompositing: false, // Single-pass: Gemini generates full scene including product
       productPosition: "center",
       productScale: 0.45,
     });
