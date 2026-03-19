@@ -123,22 +123,57 @@ export async function createProductRender(data: InsertProductRender) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(productRenders).values(data);
-  return (result as any)[0]?.insertId;
+  const insertId = (result as any)[0]?.insertId;
+  if (insertId != null) {
+    // Set this render as the default for the product; clear default on others
+    await db.update(productRenders).set({ isDefault: 0 }).where(eq(productRenders.product, data.product));
+    await db.update(productRenders).set({ isDefault: 1 }).where(eq(productRenders.id, insertId));
+  }
+  return insertId;
 }
 
 export async function listProductRenders(product?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (product) {
-    return db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.createdAt));
+    return db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.isDefault), desc(productRenders.createdAt));
   }
-  return db.select().from(productRenders).orderBy(desc(productRenders.createdAt));
+  return db.select().from(productRenders).orderBy(desc(productRenders.isDefault), desc(productRenders.createdAt));
+}
+
+/** Returns the default render for the product (isDefault=1), or the most recent if none set. */
+export async function getDefaultProductRender(product: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const withDefault = await db.select().from(productRenders).where(and(eq(productRenders.product, product), eq(productRenders.isDefault, 1))).limit(1);
+  if (withDefault.length > 0) return withDefault[0];
+  const fallback = await db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.createdAt)).limit(1);
+  return fallback[0] ?? null;
 }
 
 export async function getProductRendersByProduct(product: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.createdAt));
+  return db.select().from(productRenders).where(eq(productRenders.product, product)).orderBy(desc(productRenders.isDefault), desc(productRenders.createdAt));
+}
+
+export async function setDefaultProductRender(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const row = await db.select().from(productRenders).where(eq(productRenders.id, id)).limit(1);
+  if (row.length === 0) throw new Error("Product render not found");
+  const product = row[0].product;
+  await db.update(productRenders).set({ isDefault: 0 }).where(eq(productRenders.product, product));
+  await db.update(productRenders).set({ isDefault: 1 }).where(eq(productRenders.id, id));
+}
+
+/** Returns all child pipeline runs for a given parent run ID. */
+export async function getChildRunsByParentId(parentRunId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(pipelineRuns)
+    .where(and(eq(pipelineRuns.parentRunId, parentRunId), eq(pipelineRuns.variationLayer, "child")))
+    .orderBy(desc(pipelineRuns.createdAt));
 }
 
 export async function deleteProductRender(id: number) {
