@@ -19,8 +19,7 @@ async function generateStaticAdVariationsWithGemini(
   teamNotes?: string
 ): Promise<Array<{ url: string; s3Key: string; variation: string; headline: string; subheadline: string | null }>> {
   // Get product render from DB
-  const renders = await db.listProductRenders(product);
-  const productRender = renders.find((r: any) => r.isDefault) || renders[0];
+  const productRender = await db.getDefaultProductRender(product);
   if (!productRender) throw new Error(`No product render found for ${product}`);
 
   const images = selections?.images || [];
@@ -46,15 +45,19 @@ async function generateStaticAdVariationsWithGemini(
       : `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations through unique colour combinations, lighting angles, and composition choices.`;
 
     console.log(`[Static] Generating variation ${i + 1}/${variationCount} with Gemini...`);
-    const result = await generateProductAdWithNanoBananaPro({
-      prompt: fullPrompt,
-      controlImageUrl: referenceImageUrl || undefined,
-      productRenderUrl: productRender.url,
-      aspectRatio: "1:1",
-      useCompositing: false, // Single-pass: Gemini receives both reference + product render
-      productPosition: "center",
-      productScale: 0.45,
-    });
+    const result = await withTimeout(
+      generateProductAdWithNanoBananaPro({
+        prompt: fullPrompt,
+        controlImageUrl: referenceImageUrl || undefined,
+        productRenderUrl: productRender.url,
+        aspectRatio: "1:1",
+        useCompositing: false, // Single-pass: Gemini receives both reference + product render
+        productPosition: "center",
+        productScale: 0.45,
+      }),
+      VARIATION_TIMEOUT,
+      `Stage 4: Variation ${i + 1}/${variationCount}`
+    );
 
     results.push({
       url: result.imageUrl,
@@ -70,6 +73,7 @@ async function generateStaticAdVariationsWithGemini(
 
 const STAGE_TIMEOUT = 10 * 60 * 1000; // 10 minutes per stage (Claude API calls can be slow)
 const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
+const VARIATION_TIMEOUT = 4 * 60 * 1000; // 4 minutes per image variation (matches iteration pipeline)
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([

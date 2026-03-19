@@ -680,7 +680,7 @@ export function IterationResults({ run }: { run: any }) {
           </div>
           {iterationStage === "stage_3_generation" && (
             <p className="text-gray-500 text-xs mt-2">
-              Generating backgrounds with Flux Pro and compositing with Bannerbear. This may take 1-2 minutes per image...
+              Generating variations with Nano Banana Pro. This may take 2–4 minutes per image...
             </p>
           )}
           {iterationStage === "stage_4_clickup" && (
