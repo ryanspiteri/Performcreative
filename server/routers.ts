@@ -22,8 +22,8 @@ import { canvaRouter } from "./routers/canva";
 import { runFaceSwapPipeline } from "./services/faceSwapPipeline";
 import { validatePortrait } from "./services/portraitValidator";
 
-const VALID_USERNAME = "ONEST";
-const VALID_PASSWORD = "UnlockGrowth";
+const VALID_USERNAME = "ryan@onesthealth.com";
+const VALID_PASSWORD = "TeamOnest";
 
 // Timeout utility to prevent hanging forever
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
