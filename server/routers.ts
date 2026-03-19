@@ -687,13 +687,13 @@ Return JSON in this exact format:
       .mutation(async ({ input }) => {
         const { previewBannerbearTemplate } = await import("./services/bannerbear");
 
-        // If no product render URL provided, fetch the latest from DB
+        // If no product render URL provided, fetch the default from DB
         let productRenderUrl = input.productRenderUrl;
         if (!productRenderUrl) {
-          const renders = await db.listProductRenders('Hyperburn');
-          if (renders.length > 0) {
-            productRenderUrl = renders[0].url;
-            console.log(`[Preview] Using DB product render: ${renders[0].fileName}`);
+          const defaultRender = await db.getDefaultProductRender('Hyperburn');
+          if (defaultRender) {
+            productRenderUrl = defaultRender.url;
+            console.log(`[Preview] Using default product render: ${defaultRender.fileName}`);
           }
         }
 
@@ -835,6 +835,11 @@ Return JSON in this exact format:
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
         sourceImageUrl: z.string(),
         sourceImageName: z.string().optional(),
+        sourceType: z.enum(["own_ad", "competitor_ad"]).optional(),
+        adaptationMode: z.enum(["concept", "style"]).optional(),
+        foreplayAdId: z.string().optional(),
+        foreplayAdTitle: z.string().optional(),
+        foreplayAdBrand: z.string().optional(),
         creativityLevel: z.enum(["SAFE", "BOLD", "WILD"]).optional(),
         variationTypes: z.array(z.enum(["headline_only", "background_only", "layout_only", "benefit_callouts_only", "props_only", "talent_swap", "full_remix"])).optional(),
         variationCount: z.number().min(1).max(50).optional(),
@@ -842,17 +847,23 @@ Return JSON in this exact format:
         imageModel: z.enum(["nano_banana_pro", "nano_banana_2"]).optional(),
       }))
       .mutation(async ({ input }) => {
+        const sourceType = input.sourceType ?? "own_ad";
+        if (sourceType === "competitor_ad" && !input.adaptationMode) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "adaptationMode (concept or style) is required when sourceType is competitor_ad" });
+        }
         const runId = await db.createPipelineRun({
           pipelineType: "iteration",
           status: "running",
           product: input.product,
           priority: input.priority,
           triggerSource: "manual",
-          foreplayAdId: "iteration-" + Date.now(),
-          foreplayAdTitle: input.sourceImageName || "Winning Ad Iteration",
-          foreplayAdBrand: "ONEST Health",
+          foreplayAdId: input.foreplayAdId ?? "iteration-" + Date.now(),
+          foreplayAdTitle: input.foreplayAdTitle ?? input.sourceImageName ?? (sourceType === "competitor_ad" ? "Competitor Ad" : "Winning Ad Iteration"),
+          foreplayAdBrand: input.foreplayAdBrand ?? (sourceType === "own_ad" ? "ONEST Health" : undefined),
           iterationSourceUrl: input.sourceImageUrl,
           iterationStage: "stage_1_analysis",
+          iterationSourceType: sourceType,
+          iterationAdaptationMode: sourceType === "competitor_ad" ? input.adaptationMode ?? null : null,
           creativityLevel: input.creativityLevel || "BOLD",
           aspectRatio: input.aspectRatio || "1:1",
           variationTypes: input.variationTypes ? JSON.stringify(input.variationTypes) : null,
@@ -1077,6 +1088,13 @@ Return JSON in this exact format:
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.deleteProductRender(input.id);
+        return { success: true };
+      }),
+
+    setDefault: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.setDefaultProductRender(input.id);
         return { success: true };
       }),
   }),
