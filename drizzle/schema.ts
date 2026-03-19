@@ -58,6 +58,10 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoStage: varchar("videoStage", { length: 64 }),
   videoBriefOptions: json("videoBriefOptions"),
   iterationSourceUrl: text("iterationSourceUrl"),
+  /** own_ad = user's winning ad; competitor_ad = Foreplay static (adapt for ONEST) */
+  iterationSourceType: mysqlEnum("iterationSourceType", ["own_ad", "competitor_ad"]).default("own_ad"),
+  /** When competitor_ad: concept = adapt concept/angle; style = replicate visual style, swap product+copy */
+  iterationAdaptationMode: mysqlEnum("iterationAdaptationMode", ["concept", "style"]),
   iterationAnalysis: text("iterationAnalysis"),
   iterationBrief: text("iterationBrief"),
   iterationStage: varchar("iterationStage", { length: 64 }),
@@ -97,6 +101,8 @@ export const productRenders = mysqlTable("product_renders", {
   url: text("url").notNull(),
   mimeType: varchar("mimeType", { length: 64 }).default("image/png").notNull(),
   fileSize: int("fileSize"),
+  /** When true, this render is used as the default for the product in pipelines. One per product. */
+  isDefault: int("isDefault").default(0).notNull(), // 1 = default, 0 = not (MySQL has no boolean)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
