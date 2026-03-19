@@ -17,7 +17,7 @@ describe("Gemini Image Generation Service", () => {
     vi.clearAllMocks();
   });
 
-  it("should have GOOGLE_AI_API_KEY configured", () => {
+  it("should have GOOGLE_AI_API_KEY configured (or use dummy in tests)", () => {
     expect(process.env.GOOGLE_AI_API_KEY).toBeDefined();
   });
 

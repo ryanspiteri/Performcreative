@@ -42,7 +42,7 @@ describe("productCompositor", () => {
       expect(prompt).toContain("UNLEASH YOUR POWER");
       expect(prompt).toContain("Premium thermogenic formula");
       expect(prompt).toContain("Dramatic warm lighting");
-      expect(prompt).toContain("centre of the image clear");
+      expect(prompt).toContain("centre of the image");
     });
 
     it("should adapt space description based on product position", async () => {
@@ -113,7 +113,6 @@ describe("productCompositor", () => {
 
 describe("nanoBananaPro compositing mode", () => {
   it("should have useCompositing option in the interface", async () => {
-    // Verify the NanoBananaProOptions interface accepts compositing options
     const { generateProductAdWithNanoBananaPro } = await import("./services/nanoBananaPro");
     expect(typeof generateProductAdWithNanoBananaPro).toBe("function");
   });

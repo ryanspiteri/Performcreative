@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { extractStructureBlueprint, generateVariants } from "./services/ugcClone";
+import { ENV } from "./_core/env";
+
+const hasForgeKey = !!ENV.forgeApiKey?.trim();
 
 describe("UGC Clone Engine", () => {
   describe("Structure Extraction", () => {
     it("should extract structure blueprint from transcript", async () => {
+      if (!hasForgeKey) return; // Skip: requires BUILT_IN_FORGE_API_KEY
       const sampleTranscript = `
         Hey, are you tired of feeling sluggish all day? I was too, until I discovered Hyperburn.
         This thermogenic powerhouse has completely transformed my energy levels.
@@ -30,6 +33,7 @@ describe("UGC Clone Engine", () => {
 
   describe("Variant Generation", () => {
     it("should generate controlled script variants", async () => {
+      if (!hasForgeKey) return; // Skip: requires BUILT_IN_FORGE_API_KEY
       const mockBlueprint = {
         hook: {
           text: "Hey, are you tired of feeling sluggish all day?",
