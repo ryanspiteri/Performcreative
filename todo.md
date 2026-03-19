@@ -1501,3 +1501,11 @@ Cost per output: ~$0.80 per 30s video, ~$1.55 per 60s video (within $2/video bud
 ## ROUND 15 — REVERT TO SINGLE-PASS
 
 - [x] Set useCompositing: false at all 4 call sites in iterationPipeline.ts
+
+## CEO REVIEW — COMPETITOR AD ITERATE (Round 16 review items)
+
+- [ ] [P1] Add tests for getDefaultProductRender and setDefaultProductRender — these DB functions are now critical path for every pipeline run (replaced renders[0] in 3 call sites). Test: isDefault=1 found, fallback-to-latest, no renders → null, setDefault clears other rows. Easy to add alongside existing pipeline.test.ts pattern.
+- [ ] [P2] Add structured logging to competitor ad pipeline steps — entry/exit logs in analyseCompetitorAd (brand, product, adaptationMode) and generateCompetitorIterationBrief, plus a WARNING log when brief JSON parse falls back to empty variations. Without this, debugging a failed competitor iteration in 3 weeks is blind.
+- [ ] [P2] Merge duplicate axios client setup across analyseWinningAd, analyseCompetitorAd, generateIterationBrief, generateCompetitorIterationBrief — 4 functions each create an identical axios.create() block. Extract to a shared module-level constant in iterationPipeline.ts. Touch only after tests exist for these paths.
+- [ ] [P2] SSRF mitigation — analyseCompetitorAd fetches imageUrl from server via axios. URL comes from Foreplay DB (trusted source) but has no domain allowlist. Add a check: only allow URLs matching foreplay CDN or S3 domains. Low risk for internal tool but worth hardening before any external access.
+- [ ] [P3] Remove dead compositing code — useCompositing is false at all 4 call sites (Round 15 revert). productCompositor.ts and the useCompositing flag machinery build but never execute. Consider removing or clearly marking as DISABLED until the two-pass approach is ready to revisit.
