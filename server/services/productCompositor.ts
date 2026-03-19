@@ -375,6 +375,7 @@ The background should:
 === COMPOSITION ===
 - Aspect ratio: ${aspectRatio}
 - Fill the ENTIRE canvas — the product will be composited on top, so the background must be complete
+- ${spaceDescription}
 - The centre area should have subtle, less-busy detail (e.g. soft light, gradient, atmospheric haze) so the product stands out when placed there
 - Ensure the headline text is in the top third and does NOT overlap with the centre of the image
 - Create visual flow that draws the eye from headline down toward the centre product area

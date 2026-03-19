@@ -11,6 +11,18 @@ import { ENV } from "../_core/env";
 const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const VARIATION_TIMEOUT = 4 * 60 * 1000; // 4 minutes per variation (2 Gemini passes × 2 min each)
 
+// Shared Anthropic API client — used by all Claude analysis and brief generation functions
+const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
+const claudeClient = axios.create({
+  baseURL: ANTHROPIC_BASE,
+  headers: {
+    "x-api-key": ENV.anthropicApiKey,
+    "anthropic-version": "2023-06-01",
+    "Content-Type": "application/json",
+  },
+  timeout: 600000,
+});
+
 /**
  * Generate a single variation with timeout + automatic fallback to nano_banana_pro if nano_banana_2 fails.
  */
@@ -58,11 +70,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // Stage 3: System generates 3 variation images using the approved brief
 // Stage 4: ClickUp tasks created for the variations
 
+export type IterationSourceType = "own_ad" | "competitor_ad";
+export type IterationAdaptationMode = "concept" | "style";
+
 export interface IterationPipelineInput {
   product: string;
   priority: string;
-  sourceImageUrl: string; // URL of the user's uploaded winning ad
+  /** URL of source image: uploaded winning ad (own_ad) or competitor image (competitor_ad). */
+  sourceImageUrl: string;
   sourceImageName?: string;
+  /** own_ad = our winning ad; competitor_ad = Foreplay static, adapt for ONEST */
+  sourceType?: IterationSourceType;
+  /** When sourceType === "competitor_ad": concept = adapt angle; style = replicate style, swap product+copy */
+  adaptationMode?: IterationAdaptationMode;
+  /** Competitor metadata (when sourceType === "competitor_ad") */
+  foreplayAdId?: string;
+  foreplayAdTitle?: string;
+  foreplayAdBrand?: string;
   creativityLevel?: "SAFE" | "BOLD" | "WILD";
   variationTypes?: string[];
   variationCount?: number;
@@ -98,15 +122,24 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     console.warn("[Iteration] Failed to load product info:", err.message);
   }
 
-  // ---- STAGE 1: Analyse the winning ad ----
+  const sourceType: IterationSourceType = input.sourceType ?? "own_ad";
+  const adaptationMode = input.adaptationMode;
+
+  // ---- STAGE 1: Analyse the source ad ----
   try {
-    await db.updatePipelineRun(runId, { iterationStage: "stage_1_analysis" });
-    console.log(`[Iteration] Stage 1: Analysing winning ad...`);
+    await db.updatePipelineRun(runId, {
+      iterationStage: "stage_1_analysis",
+      iterationSourceType: sourceType,
+      iterationAdaptationMode: adaptationMode ?? null,
+    });
+    console.log(`[Iteration] Stage 1: Analysing ${sourceType === "competitor_ad" ? "competitor" : "winning"} ad...`);
 
     const analysis = await withTimeout(
-      analyseWinningAd(input.sourceImageUrl, input.product),
+      sourceType === "competitor_ad"
+        ? analyseCompetitorAd(input.sourceImageUrl, input.product, adaptationMode ?? "concept", input.foreplayAdBrand)
+        : analyseWinningAd(input.sourceImageUrl, input.product),
       STEP_TIMEOUT,
-      "Stage 1: Winning Ad Analysis"
+      "Stage 1: Ad Analysis"
     );
 
     await db.updatePipelineRun(runId, {
@@ -129,15 +162,19 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     console.log(`[Iteration] Stage 2: Generating iteration brief...`);
     const run = await db.getPipelineRun(runId);
     const analysis = run?.iterationAnalysis || "";
+    const runSourceType = (run?.iterationSourceType as IterationSourceType) ?? sourceType;
+    const runAdaptationMode = run?.iterationAdaptationMode as IterationAdaptationMode | null | undefined;
 
     const brief = await withTimeout(
-      generateIterationBrief(
-        analysis,
-        input.product,
-        productInfoContext,
-        input.variationCount || 3,
-        input.variationTypes
-      ),
+      runSourceType === "competitor_ad"
+        ? generateCompetitorIterationBrief(analysis, input.product, productInfoContext, runAdaptationMode ?? "concept", input.foreplayAdBrand)
+        : generateIterationBrief(
+            analysis,
+            input.product,
+            productInfoContext,
+            input.variationCount || 3,
+            input.variationTypes
+          ),
       STEP_TIMEOUT,
       "Stage 2: Iteration Brief"
     );
@@ -185,10 +222,8 @@ export async function runIterationStage3(runId: number, run: any) {
     const { MODEL_LABELS } = await import("./nanoBananaPro");
     console.log(`[Iteration] Using image model: ${MODEL_LABELS[imageModel]}`);
 
-    // Get product render from database
-    const renders = await db.listProductRenders(product);
-    const productRender = renders.find((r: any) => r.isDefault) || renders[0];
-    
+    // Get default product render from database
+    const productRender = await db.getDefaultProductRender(product);
     if (!productRender) {
       throw new Error(`No product render found for ${product}`);
     }
@@ -424,12 +459,11 @@ export async function regenerateIterationVariation(
       ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
       : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
 
-  // Get product render
-  const productRenders = await db.getProductRendersByProduct(product);
-  if (productRenders.length === 0) {
+  // Get default product render
+  const productRender = await db.getDefaultProductRender(product);
+  if (!productRender) {
     throw new Error(`No product render found for ${product}`);
   }
-  const productRender = productRenders[0];
 
   // Get aspect ratio, creativity level, and image model from run config
   const aspectRatio = run.aspectRatio || "1:1";
@@ -516,17 +550,6 @@ export async function regenerateIterationVariation(
  * copy, layout, and what makes it work.
  */
 async function analyseWinningAd(imageUrl: string, product: string): Promise<string> {
-  const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
-  const claudeClient = axios.create({
-    baseURL: ANTHROPIC_BASE,
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 600000,
-  });
-
   const system = `You are an elite creative director and performance marketing analyst for ONEST Health, an Australian supplement brand. You are analysing one of ONEST's OWN winning ads — not a competitor's. Your job is to deconstruct exactly what makes this ad work so the team can create variations that keep the winning formula but test new angles.
 
 Be extremely specific about every visual and copy element. The goal is to preserve the visual DNA while varying the messaging.`;
@@ -633,6 +656,75 @@ Provide your analysis in these sections:
 }
 
 /**
+ * Analyse a competitor ad — for "concept" mode extract concept/angle/emotional hook;
+ * for "style" mode extract layout, colours, typography, composition (replicate style, swap product+copy).
+ */
+async function analyseCompetitorAd(
+  imageUrl: string,
+  product: string,
+  adaptationMode: IterationAdaptationMode,
+  competitorBrand?: string
+): Promise<string> {
+  const isConcept = adaptationMode === "concept";
+  const system = isConcept
+    ? `You are an elite creative strategist for ONEST Health. You are analysing a COMPETITOR's ad (${competitorBrand || "another brand"}) to extract the CONCEPT and angle — not to copy it. Your job is to identify the emotional hook, audience appeal, persuasion mechanism, and narrative framework so ONEST can ADAPT that concept for ${product} with our own visual style and messaging. Be specific about what makes the ad work conceptually.`
+    : `You are an elite creative director for ONEST Health. You are analysing a COMPETITOR's ad (${competitorBrand || "another brand"}) to extract the exact VISUAL STYLE — layout, composition, colour palette, typography, product placement, and mood. Your job is to describe the style in enough detail that we can REPLICATE it for an ONEST ${product} ad, replacing only the product and copy. Be extremely specific about visual elements.`;
+
+  const content: any[] = [];
+  if (imageUrl && imageUrl.startsWith("http")) {
+    try {
+      const imgRes = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+        timeout: 30000,
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" },
+      });
+      const base64 = Buffer.from(imgRes.data).toString("base64");
+      let mediaType = imgRes.headers["content-type"] || "image/jpeg";
+      if (mediaType.includes(";")) mediaType = mediaType.split(";")[0].trim();
+      if (!mediaType.startsWith("image/")) mediaType = "image/jpeg";
+      content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } });
+    } catch (imgErr: any) {
+      content.push({ type: "text", text: `[Image could not be downloaded from ${imageUrl}]` });
+    }
+  }
+
+  const prompt = isConcept
+    ? `Analyse this COMPETITOR ad (${competitorBrand || "other brand"}) and extract the CONCEPT we can adapt for ONEST Health's ${product}.
+
+Focus on:
+1. CONCEPT & ANGLE — What is the core idea or hook? (e.g. transformation, social proof, myth-busting, before/after)
+2. EMOTIONAL TRIGGERS — What feelings does it target? (e.g. FOMO, belonging, achievement)
+3. PERSUASION MECHANISM — How does it convince? (e.g. authority, scarcity, testimonials)
+4. TARGET AUDIENCE — Who is this speaking to?
+5. NARRATIVE FRAMEWORK — Hook → body → CTA structure
+6. WHAT TO ADAPT — How should ONEST use this same concept with our own visual style and ${product} messaging?
+
+Output a structured analysis so we can brief ONEST creatives that ADAPT the concept (not copy the competitor's look).`
+    : `Analyse this COMPETITOR ad (${competitorBrand || "other brand"}) and extract the exact VISUAL STYLE so we can replicate it for ONEST Health's ${product}.
+
+Focus on:
+1. LAYOUT — Composition, product position, text zones, negative space (percentages)
+2. COLOUR PALETTE — Background, text, accent colours (hex-like)
+3. TYPOGRAPHY — Font weight, size, effects, placement
+4. MOOD & LIGHTING — Tone, lighting direction, effects
+5. PRODUCT PRESENTATION — Size, angle, placement
+6. WHAT TO REPLICATE — Exact style notes so we generate an ONEST ad that LOOKS like this but with our product and copy.
+
+Output a structured analysis so we can brief image generation to MATCH this style and swap in ONEST product + copy.`;
+
+  content.push({ type: "text", text: prompt });
+  const res = await claudeClient.post("/messages", {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 6000,
+    system,
+    messages: [{ role: "user", content }],
+  });
+  const resContent = res.data?.content;
+  if (Array.isArray(resContent)) return resContent.map((c: any) => c.text || "").join("\n");
+  return resContent?.text || JSON.stringify(resContent);
+}
+
+/**
  * Generate an iteration brief — 3 new copy angles that keep the visual DNA
  * but test different headlines, subheadlines, and angles.
  */
@@ -643,17 +735,6 @@ async function generateIterationBrief(
   variationCount: number = 3,
   variationTypes?: string[]
 ): Promise<string> {
-  const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
-  const claudeClient = axios.create({
-    baseURL: ANTHROPIC_BASE,
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 600000,
-  });
-
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
 
 Return ONLY valid JSON. No markdown, no code blocks, no explanation.`;
@@ -799,6 +880,70 @@ Return JSON in this exact format with ${variationCount} variations:
     text = JSON.stringify({ raw: text, variations: [] });
   }
 
+  return text;
+}
+
+/**
+ * Generate an iteration brief from a COMPETITOR ad analysis.
+ * concept: adapt the concept/angle for ONEST with our own visual style.
+ * style: replicate the visual style; use ONEST product and copy only.
+ */
+async function generateCompetitorIterationBrief(
+  analysis: string,
+  product: string,
+  productInfo: string,
+  adaptationMode: IterationAdaptationMode,
+  competitorBrand?: string
+): Promise<string> {
+  const isConcept = adaptationMode === "concept";
+  const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."} Return ONLY valid JSON. No markdown, no code blocks.`;
+
+  const userPrompt = `Based on this analysis of a COMPETITOR ad (${competitorBrand || "other brand"}):
+
+${analysis}
+
+${productInfo ? `\nONEST Product Information for ${product}:\n${productInfo}` : ""}
+
+Generate an iteration brief with 3 variations for ONEST Health's ${product}.
+${isConcept ? "Each variation should ADAPT the competitor's concept/angle for ONEST — our visual style, our messaging, our product. Test different ways to execute the same conceptual hook." : "Each variation should REPLICATE the competitor's visual style (layout, colours, typography, mood) but with ONEST product and ONEST-only copy. Test different headline/angle within that style."}
+
+Return JSON in this exact format:
+{
+  "originalHeadline": "headline or concept from competitor ad",
+  "originalAngle": "description of competitor's angle",
+  "preserveElements": ["elements we are preserving or adapting"],
+  "targetAudience": "target audience",
+  "variations": [
+    {
+      "number": 1,
+      "angle": "Angle name",
+      "angleDescription": "Why this angle",
+      "headline": "ONEST HEADLINE (3-8 words, all caps)",
+      "subheadline": "Supporting subheadline",
+      "benefitCallouts": ["Benefit 1", "Benefit 2"],
+      "backgroundNote": "Background/style note for this variation"
+    },
+    { "number": 2, ... },
+    { "number": 3, ... }
+  ]
+}`;
+
+  const res = await claudeClient.post("/messages", {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4096,
+    system,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+  let text = "";
+  const resContent = res.data?.content;
+  if (Array.isArray(resContent)) text = resContent.map((c: any) => c.text || "").join("\n");
+  else text = resContent?.text || JSON.stringify(resContent);
+  text = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  try {
+    JSON.parse(text);
+  } catch {
+    text = JSON.stringify({ raw: text, variations: [] });
+  }
   return text;
 }
 

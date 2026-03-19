@@ -63,12 +63,11 @@ async function generateChildVariationsForSingleParent(
   // Get diverse variation types for children
   const variationTypes = getDiverseVariationTypes(childCount);
 
-  // Get product render
-  const productRenders = await db.listProductRenders(product);
-  if (productRenders.length === 0) {
-    throw new Error(`No product renders found for ${product}`);
+  // Get default product render
+  const productRender = await db.getDefaultProductRender(product);
+  if (!productRender) {
+    throw new Error(`No product render found for ${product}`);
   }
-  const productRender = productRenders[0];
 
   // Generate each child
   for (let i = 0; i < childCount; i++) {
@@ -148,8 +147,7 @@ async function generateChildVariationsForSingleParent(
  * Get all children for a parent run
  */
 export async function getChildrenForParent(parentRunId: number) {
-  const allRuns = await db.listPipelineRuns();
-  return allRuns.filter(run => run.parentRunId === parentRunId && run.variationLayer === "child");
+  return db.getChildRunsByParentId(parentRunId);
 }
 
 /**

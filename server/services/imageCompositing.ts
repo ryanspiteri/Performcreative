@@ -96,14 +96,15 @@ export async function generateStaticAdVariations(
     console.log(`[ImageCompositing] Using user-selected product render`);
   } else {
     try {
-      const renders = await db.getProductRendersByProduct(product);
-      if (renders.length > 0) {
-        productRenderUrl = renders[Math.floor(Math.random() * renders.length)].url;
-        console.log(`[ImageCompositing] Using uploaded render for ${product}`);
+      const defaultRender = await db.getDefaultProductRender(product);
+      if (defaultRender) {
+        productRenderUrl = defaultRender.url;
+        console.log(`[ImageCompositing] Using default render for ${product}`);
       } else {
         const allRenders = await db.listProductRenders();
         if (allRenders.length > 0) {
-          productRenderUrl = allRenders[0].url;
+          const first = allRenders[0];
+          productRenderUrl = first.url;
           console.log(`[ImageCompositing] Using fallback render`);
         } else {
           productRenderUrl = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663362584601/RAmNrJZaIJJFuitQ.png";
