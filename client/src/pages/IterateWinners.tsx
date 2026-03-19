@@ -17,12 +17,24 @@ type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
 type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
 type ImageModel = "nano_banana_pro" | "nano_banana_2";
+type SourceType = "own_ad" | "competitor_ad";
+type AdaptationMode = "concept" | "style";
 
+type CompetitorCreative = {
+  id: string;
+  title: string;
+  brandName: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+};
 
 export default function IterateWinners() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<"upload" | "running" | "results">("upload");
   const [product, setProduct] = useState(PRODUCTS[0]);
+  const [sourceType, setSourceType] = useState<SourceType>("own_ad");
+  const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>("concept");
+  const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorCreative | null>(null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [uploadedImageName, setUploadedImageName] = useState<string>("");
   const [uploading, setUploading] = useState(false);
@@ -38,6 +50,14 @@ export default function IterateWinners() {
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
+  const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery(undefined, { enabled: sourceType === "competitor_ad" });
+  const competitorStatics: CompetitorCreative[] = (staticsQuery.data || []).map((c) => ({
+    id: c.id,
+    title: c.title ?? "Untitled",
+    brandName: c.brandName ?? "Unknown",
+    imageUrl: c.imageUrl ?? undefined,
+    thumbnailUrl: c.thumbnailUrl ?? undefined,
+  }));
 
   // Sync per-variation strategies array when variation count changes
   useEffect(() => {
@@ -115,28 +135,40 @@ export default function IterateWinners() {
   const perImageCost = imageModel === 'nano_banana_2' ? perImageCostNB2 : perImageCostPro;
   const estimatedCost = variationCount * perImageCost * 2; // 2x for two-pass compositing
 
+  const sourceImageUrl = sourceType === "competitor_ad" ? (selectedCompetitor?.imageUrl || null) : uploadedImageUrl;
+  const hasSource = !!sourceImageUrl;
+
   // Start the iteration pipeline
   const handleStartPipeline = async () => {
-    if (!uploadedImageUrl) {
-      toast.error("Please upload a winning ad first");
+    if (!hasSource) {
+      toast.error(sourceType === "competitor_ad" ? "Please select a competitor ad" : "Please upload a winning ad first");
       return;
     }
-
-    // Show confirmation dialog
+    if (sourceType === "competitor_ad" && !selectedCompetitor) {
+      toast.error("Please select a competitor ad from the gallery");
+      return;
+    }
     setShowConfirmation(true);
   };
 
   const confirmAndStart = async () => {
     setShowConfirmation(false);
-    
+    if (!sourceImageUrl) return;
     try {
       const result = await triggerIteration.mutateAsync({
         product,
         priority: "Medium",
-        sourceImageUrl: uploadedImageUrl!,
-        sourceImageName: uploadedImageName,
+        sourceImageUrl,
+        sourceImageName: sourceType === "own_ad" ? uploadedImageName : selectedCompetitor?.title ?? "Competitor Ad",
+        sourceType,
+        ...(sourceType === "competitor_ad" && {
+          adaptationMode,
+          foreplayAdId: selectedCompetitor?.id,
+          foreplayAdTitle: selectedCompetitor?.title,
+          foreplayAdBrand: selectedCompetitor?.brandName,
+        }),
         creativityLevel,
-        variationTypes: usePerVariationMode ? perVariationStrategies : [variationType], // Per-variation or single
+        variationTypes: usePerVariationMode ? perVariationStrategies : [variationType],
         variationCount,
         aspectRatio,
         imageModel,
@@ -226,6 +258,95 @@ export default function IterateWinners() {
               ))}
             </div>
           </div>
+
+          {/* Source: Our ad vs Competitor ad */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Source</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setSourceType("own_ad"); setSelectedCompetitor(null); }}
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  sourceType === "own_ad"
+                    ? "bg-[#FF3838] text-white"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                Our winning ad
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSourceType("competitor_ad"); setUploadedImageUrl(null); setUploadedImageName(""); }}
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  sourceType === "competitor_ad"
+                    ? "bg-[#FF3838] text-white"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                Competitor ad
+              </button>
+            </div>
+          </div>
+
+          {sourceType === "competitor_ad" && (
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Adapt for ONEST</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdaptationMode("concept")}
+                    className={`px-4 py-2 rounded-lg text-sm ${adaptationMode === "concept" ? "bg-[#0347ED] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
+                  >
+                    Adapt concept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdaptationMode("style")}
+                    className={`px-4 py-2 rounded-lg text-sm ${adaptationMode === "style" ? "bg-[#0347ED] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
+                  >
+                    Match style
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {adaptationMode === "concept" ? "Use the competitor’s idea/angle with ONEST visuals and copy." : "Replicate layout and look; swap in ONEST product and copy only."}
+                </p>
+              </div>
+              <div className="mb-8">
+                <label className="block text-sm font-medium text-gray-300 mb-3">Pick a competitor ad (Foreplay static)</label>
+                {staticsQuery.isLoading ? (
+                  <div className="text-gray-400 py-8 text-center">Loading competitor ads…</div>
+                ) : staticsQuery.isError ? (
+                  <div className="text-red-400 py-8 text-center border border-red-500/20 rounded-xl">Failed to load competitor ads — try syncing from Foreplay on Browse Creatives.</div>
+                ) : competitorStatics.length === 0 ? (
+                  <div className="text-gray-400 py-8 text-center border border-white/10 rounded-xl">No static ads in library. Sync from Foreplay on Browse Creatives.</div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-3 max-h-64 overflow-y-auto">
+                    {competitorStatics.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => { setSelectedCompetitor(c); }}
+                        className={`rounded-xl overflow-hidden border-2 text-left transition-all ${
+                          selectedCompetitor?.id === c.id ? "border-[#FF3838] ring-2 ring-[#FF3838]/30" : "border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        {c.thumbnailUrl || c.imageUrl ? (
+                          <img src={c.thumbnailUrl || c.imageUrl} alt={c.title} className="w-full aspect-square object-cover" />
+                        ) : (
+                          <div className="w-full aspect-square bg-white/5 flex items-center justify-center text-gray-500 text-xs">No preview</div>
+                        )}
+                        <div className="p-2 bg-[#0D0F12]">
+                          <div className="text-xs text-white truncate">{c.title}</div>
+                          <div className="text-xs text-gray-500 truncate">{c.brandName}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Creativity Slider */}
           <div className="mb-8">
@@ -517,7 +638,7 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* Upload Area */}
+          {sourceType === "own_ad" && (
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Upload Your Winning Ad</label>
             <div
@@ -602,6 +723,7 @@ export default function IterateWinners() {
               )}
             </div>
           </div>
+          )}
 
           {/* How it works */}
           <div className="mb-8 p-5 rounded-xl bg-white/[0.02] border border-white/5">
@@ -611,7 +733,7 @@ export default function IterateWinners() {
             </h3>
             <div className="grid grid-cols-4 gap-4">
               {[
-                { step: "1", title: "Upload", desc: "Your winning ad" },
+                { step: "1", title: sourceType === "competitor_ad" ? "Select" : "Upload", desc: sourceType === "competitor_ad" ? "Pick competitor ad" : "Your winning ad" },
                 { step: "2", title: "Analyse", desc: "AI extracts visual DNA" },
                 { step: "3", title: "Brief", desc: "New copy angles" },
                 { step: "4", title: "Generate", desc: "Variation images" },
@@ -630,9 +752,9 @@ export default function IterateWinners() {
           {/* Start Button */}
           <button
             onClick={handleStartPipeline}
-            disabled={!uploadedImageUrl || triggerIteration.isPending}
+            disabled={!hasSource || triggerIteration.isPending}
             className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
-              uploadedImageUrl && !triggerIteration.isPending
+              hasSource && !triggerIteration.isPending
                 ? "bg-gradient-to-r from-[#A78BFA] to-pink-600 text-white hover:from-[#9F7AEA] hover:to-pink-500 shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
                 : "bg-white/5 text-gray-600 cursor-not-allowed"
             }`}
