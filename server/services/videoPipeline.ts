@@ -2036,15 +2036,16 @@ function formatScriptForClickUp(script: any, runId: number, appUrl: string): str
   if (meta.actorArchetype) content += `**Actor Archetype:** ${meta.actorArchetype}\n`;
   content += `\n## STRATEGIC THESIS\n${script.strategicThesis}\n\n`;
   content += `## HOOK\n${script.hook}\n\n`;
-  content += `## FULL SCRIPT\n\n**[View 3-Column Script on ONEST Pipeline →](${scriptViewUrl})**\n\n`;
+  content += `## FULL SCRIPT\n\n**[View on ONEST Pipeline →](${scriptViewUrl})**\n\n`;
   if (script.script && Array.isArray(script.script)) {
+    content += `| TIMESTAMP | VISUAL | DIALOGUE |\n|---|---|---|\n`;
     for (const row of script.script) {
-      content += `**${row.timestamp}**\n`;
-      content += `Visual: ${row.visual}\n`;
-      content += `Dialogue: ${row.dialogue}\n`;
-      if (row.transitionLine) content += `Transition: ${row.transitionLine}\n`;
-      content += `\n`;
+      const ts = (row.timestamp || "").replace(/\|/g, "\\|");
+      const vis = (row.visual || "").replace(/\|/g, "\\|");
+      const dia = (row.dialogue || "").replace(/\|/g, "\\|");
+      content += `| ${ts} | ${vis} | ${dia} |\n`;
     }
+    content += `\n`;
   }
   if (typeof vd === "object" && (vd.style || vd.talent || vd.setting)) {
     content += `## VISUAL DIRECTION BRIEF\n`;
