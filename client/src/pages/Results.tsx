@@ -911,26 +911,11 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
                   </thead>
                   <tbody>
                     {script.script.map((row: any, i: number) => (
-                      <>
-                        <tr key={`row-${i}`} className="border-b border-white/5">
-                          <td className="py-3 pr-4 text-orange-400 font-medium align-top whitespace-nowrap">{row.timestamp}</td>
-                          <td className="py-3 pr-4 text-gray-300 align-top">{row.visual}</td>
-                          <td className="py-3 text-gray-300 align-top">{row.dialogue}</td>
-                        </tr>
-                        {row.transitionLine && (
-                          <tr key={`trans-${i}`} className="border-b border-white/5">
-                            <td colSpan={3} className="py-2 px-4">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-                                <span className="text-[11px] text-amber-400/80 italic whitespace-nowrap px-2">
-                                  {row.transitionLine}
-                                </span>
-                                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
+                      <tr key={`row-${i}`} className="border-b border-white/5">
+                        <td className="py-3 pr-4 text-orange-400 font-medium align-top whitespace-nowrap">{row.timestamp}</td>
+                        <td className="py-3 pr-4 text-gray-300 align-top">{row.visual}</td>
+                        <td className="py-3 text-gray-300 align-top">{row.dialogue}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
