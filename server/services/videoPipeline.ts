@@ -1,7 +1,7 @@
 import * as db from "../db";
 import { transcribeVideo } from "./whisper";
 import { createMultipleScriptTasks } from "./clickup";
-import { withTimeout, callClaude, claudeClient, STEP_TIMEOUT, STAGE_4_TIMEOUT, buildProductInfoContext } from "./_shared";
+import { withTimeout, callClaude, STEP_TIMEOUT, STAGE_4_TIMEOUT, buildProductInfoContext } from "./_shared";
 
 // ============================================================
 // SCRIPT STYLE DEFINITIONS — COPY FRAMEWORK v3.0
