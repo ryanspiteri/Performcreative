@@ -23,15 +23,22 @@ function getApiKey(): string {
 
 async function mhFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const url = `${MH_BASE}${endpoint}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${getApiKey()}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
-  return res;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000); // 60s per-request timeout
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${getApiKey()}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ─── Step 1: Face Detection ───────────────────────────────────────────────────
