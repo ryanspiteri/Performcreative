@@ -1,40 +1,7 @@
-import axios from "axios";
-import { ENV } from "../_core/env";
 import * as db from "../db";
 import { transcribeVideo } from "./whisper";
 import { createMultipleScriptTasks } from "./clickup";
-
-const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
-
-const claudeClient = axios.create({
-  baseURL: ANTHROPIC_BASE,
-  headers: {
-    "x-api-key": ENV.anthropicApiKey,
-    "anthropic-version": "2023-06-01",
-    "Content-Type": "application/json",
-  },
-  timeout: 600000,
-});
-
-async function callClaude(messages: any[], system?: string, maxTokens = 4096): Promise<string> {
-  const body: any = { model: "claude-sonnet-4-20250514", max_tokens: maxTokens, messages };
-  if (system) body.system = system;
-  const res = await claudeClient.post("/messages", body);
-  const content = res.data?.content;
-  if (Array.isArray(content)) return content.map((c: any) => c.text || "").join("\n");
-  return content?.text || JSON.stringify(content);
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
-    ),
-  ]);
-}
-
-const STEP_TIMEOUT = 10 * 60 * 1000;
+import { withTimeout, callClaude, claudeClient, STEP_TIMEOUT, STAGE_4_TIMEOUT, buildProductInfoContext } from "./_shared";
 
 // ============================================================
 // SCRIPT STYLE DEFINITIONS — COPY FRAMEWORK v3.0
@@ -1056,56 +1023,28 @@ Return your response in this EXACT JSON format:
 
   const response = await callClaude([{ role: "user", content: prompt }], system, 8000);
 
-  try {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      // Ensure concepts array exists
-      if (!parsed.concepts && (parsed.drConcepts || parsed.ugcConcepts)) {
-        parsed.concepts = [
-          ...(parsed.drConcepts || []).map((c: any) => ({ ...c, styleId: "DR" })),
-          ...(parsed.ugcConcepts || []).map((c: any) => ({ ...c, styleId: "UGC" })),
-        ];
-      }
-      // Ensure funnelStage is set
-      if (!parsed.funnelStage) parsed.funnelStage = funnelStage;
-      return parsed;
-    }
-  } catch (e) {
-    console.error("[VideoPipeline] Failed to parse brief JSON:", e);
+  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error(`[VideoPipeline] Claude returned no JSON object in brief response. Raw: ${response.substring(0, 500)}`);
   }
 
-  // Fallback
-  const fallbackConcepts: VideoBriefConcept[] = styleConfig.filter(s => s.quantity > 0).flatMap(s =>
-    Array.from({ length: s.quantity }, (_, i) => ({
-      title: `${s.styleId} Script ${i + 1}: ${product}`,
-      hookLine: s.styleId === "UGC" ? "Okay so I need to tell you about this..." : "What if everything you knew about supplements was wrong?",
-      structure: "Hook → Problem → Solution → Proof → CTA",
-      keyAngle: "Product differentiation",
-      sellingStrategy: `Sell ${product} through its key benefits and ONEST's transparent labelling`,
-      ctaApproach: s.styleId === "UGC" ? "Link in bio — honestly just try it" : "Visit onest.com.au",
-      styleId: s.styleId,
-      subStructureId: s.styleId === "DR" ? "DR-1" : s.styleId === "UGC" ? "UGC-1" : s.styleId === "FOUNDER" ? "FL-1" : "BR-1",
-    }))
-  );
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    throw new Error(`[VideoPipeline] Failed to parse brief JSON: ${(e as Error).message}. Raw: ${jsonMatch[0].substring(0, 500)}`);
+  }
 
-  return {
-    funnelStage,
-    competitorConceptAnalysis: "Analysis could not be generated. Please review the transcript and visual analysis manually.",
-    hookStyle: "Unknown — review transcript",
-    hookArchetype: "UNKNOWN",
-    narrativeFramework: "Unknown — review transcript",
-    persuasionMechanism: "Unknown — review transcript",
-    productSellingAngle: `Sell ${product} through its unique benefits and ONEST's brand values of transparency and quality.`,
-    onestAdaptation: `Adapt the competitor's approach for ONEST ${product}. Focus on the product's unique benefits and ONEST's brand values.`,
-    concepts: fallbackConcepts,
-    targetAudience: "Health-conscious adults 25-55",
-    toneAndEnergy: "Energetic and authentic",
-    awarenessLevel: "PROBLEM_AWARE",
-    primaryObjection: "Price or scepticism about supplements",
-    competitiveRepositioning: "ONEST's transparent labelling vs competitors' proprietary blends",
-    stackOpportunity: productIntel?.stackPartners.join(", ") || "None",
-  };
+  // Ensure concepts array exists (handle legacy field names)
+  if (!parsed.concepts && (parsed.drConcepts || parsed.ugcConcepts)) {
+    parsed.concepts = [
+      ...(parsed.drConcepts || []).map((c: any) => ({ ...c, styleId: "DR" })),
+      ...(parsed.ugcConcepts || []).map((c: any) => ({ ...c, styleId: "UGC" })),
+    ];
+  }
+  // Ensure funnelStage is set
+  if (!parsed.funnelStage) parsed.funnelStage = funnelStage;
+  return parsed;
 }
 
 // ============================================================
@@ -1749,26 +1688,8 @@ export function estimatePipelineCost(styleConfig: StyleConfig[], duration: numbe
 // ============================================================
 
 // Helper to load product info context
-async function loadProductInfoContext(product: string): Promise<string> {
-  try {
-    const info = await db.getProductInfo(product);
-    if (info) {
-      const parts: string[] = [];
-      if ((info as any).ingredients) parts.push(`Ingredients: ${(info as any).ingredients}`);
-      if ((info as any).benefits) parts.push(`Benefits: ${(info as any).benefits}`);
-      if ((info as any).claims) parts.push(`Claims: ${(info as any).claims}`);
-      if ((info as any).targetAudience) parts.push(`Target Audience: ${(info as any).targetAudience}`);
-      if ((info as any).keySellingPoints) parts.push(`Key Selling Points: ${(info as any).keySellingPoints}`);
-      if ((info as any).flavourVariants) parts.push(`Flavour Variants: ${(info as any).flavourVariants}`);
-      if ((info as any).pricing) parts.push(`Pricing: ${(info as any).pricing}`);
-      if ((info as any).additionalNotes) parts.push(`Notes: ${(info as any).additionalNotes}`);
-      return parts.join("\n");
-    }
-  } catch (err: any) {
-    console.warn("[VideoPipeline] Failed to load product info:", err.message);
-  }
-  return "";
-}
+// loadProductInfoContext — now imported from _shared.ts as buildProductInfoContext
+const loadProductInfoContext = buildProductInfoContext;
 
 function getProductIntelligence(product: string) {
   return PRODUCT_INTELLIGENCE[product] || {
@@ -1938,6 +1859,7 @@ export async function runVideoPipelineStages1to3(runId: number, input: {
  */
 export async function runVideoPipelineStage4(runId: number, run: any) {
   console.log(`[VideoPipeline] Resuming stage 4 for run #${runId}`);
+  const stageStart = Date.now();
   const brief: VideoBriefOptions = (run.videoBriefOptions as any) || {};
   const duration = run.videoDuration || 60;
   const sourceType = run.videoSourceType || "competitor";
@@ -1954,6 +1876,12 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
 
   const allScripts: any[] = [];
   for (let i = 0; i < concepts.length; i++) {
+    // Check outer timeout before starting next script
+    if (Date.now() - stageStart > STAGE_4_TIMEOUT) {
+      console.error(`[VideoPipeline] Stage 4 timed out after ${Math.round((Date.now() - stageStart) / 60000)}min. ${allScripts.length}/${concepts.length} scripts completed.`);
+      await db.updatePipelineRun(runId, { scriptsJson: allScripts });
+      throw new Error(`Stage 4 timed out after ${Math.round((Date.now() - stageStart) / 60000)} minutes. ${allScripts.length}/${concepts.length} scripts were generated successfully.`);
+    }
     const concept = concepts[i];
     const styleLabel = SCRIPT_STYLES.find(s => s.id === concept.styleId)?.label || concept.styleId;
     const label = `${styleLabel} ${i + 1}`;
