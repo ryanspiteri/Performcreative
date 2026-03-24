@@ -21,21 +21,10 @@ import { ACTIVE_PRODUCTS } from "../drizzle/schema";
 import { canvaRouter } from "./routers/canva";
 import { runFaceSwapPipeline } from "./services/faceSwapPipeline";
 import { validatePortrait } from "./services/portraitValidator";
+import { withTimeout, STEP_TIMEOUT } from "./services/_shared";
 
 const VALID_USERNAME = "ryan@onesthealth.com";
 const VALID_PASSWORD = "TeamOnest";
-
-// Timeout utility to prevent hanging forever
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
-    ),
-  ]);
-}
-
-const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
 
 // ============================================================
 // FACE SWAP ROUTER — declared before appRouter to avoid hoisting issues
@@ -627,83 +616,6 @@ Return JSON in this exact format:
     getActiveProducts: publicProcedure.query(() => {
       return ACTIVE_PRODUCTS;
     }),
-
-    // Get available Bannerbear templates (fetched live from Bannerbear API)
-    getBannerbearTemplates: publicProcedure.query(async () => {
-      const { listBannerbearTemplates } = await import("./services/bannerbear");
-      try {
-        const templates = await listBannerbearTemplates();
-        return templates.map(t => ({
-          uid: t.uid,
-          name: t.name,
-          width: t.width,
-          height: t.height,
-          layers: t.layers,
-          previewUrl: t.previewUrl,
-          tags: t.tags,
-          layerMapping: t.layerMapping || null,
-        }));
-      } catch (err: any) {
-        console.error("[Router] Failed to list Bannerbear templates:", err.message);
-        // Fallback to hardcoded list if API fails
-        return [
-          { uid: 'wXmzGBDakV3vZLN7gj', name: 'Hyperburn Helps', width: 0, height: 0, layers: [] as string[], previewUrl: undefined, tags: [] as string[], layerMapping: null as Record<string, string> | null },
-          { uid: 'E9YaWrZMqPrNZnRd74', name: 'Blue Purple Gradient', width: 0, height: 0, layers: [] as string[], previewUrl: undefined, tags: [] as string[], layerMapping: null as Record<string, string> | null },
-        ];
-      }
-    }),
-
-    // Get template details including layer names
-    getBannerbearTemplateLayers: publicProcedure
-      .input(z.object({ templateUid: z.string() }))
-      .query(async ({ input }) => {
-        const { getTemplateInfo } = await import("./services/bannerbear");
-        const info = await getTemplateInfo(input.templateUid);
-        return {
-          uid: info.uid,
-          name: info.name,
-          width: info.width,
-          height: info.height,
-          layers: ((info as any).current_defaults || info.available_modifications || []).map((m: any) => ({
-            name: m.name,
-            type: m.type || 'unknown',
-          })),
-          previewUrl: info.preview_url,
-        };
-      }),
-
-    // Preview/test a Bannerbear template with dummy or custom data
-    previewBannerbearTemplate: publicProcedure
-      .input(z.object({
-        templateUid: z.string(),
-        headline: z.string().optional(),
-        subheadline: z.string().optional(),
-        benefitCallout: z.string().optional(),
-        backgroundImageUrl: z.string().optional(),
-        productRenderUrl: z.string().optional(),
-        logoUrl: z.string().optional(),
-        textColor: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const { previewBannerbearTemplate } = await import("./services/bannerbear");
-
-        // If no product render URL provided, fetch the default from DB
-        let productRenderUrl = input.productRenderUrl;
-        if (!productRenderUrl) {
-          const defaultRender = await db.getDefaultProductRender('Hyperburn');
-          if (defaultRender) {
-            productRenderUrl = defaultRender.url;
-            console.log(`[Preview] Using default product render: ${defaultRender.fileName}`);
-          }
-        }
-
-        const result = await previewBannerbearTemplate({
-          ...input,
-          productRenderUrl,
-          textColor: input.textColor || '#FFFFFF',
-        });
-        return result;
-      }),
 
     // Team approval endpoint for Stage 6
     teamApprove: publicProcedure

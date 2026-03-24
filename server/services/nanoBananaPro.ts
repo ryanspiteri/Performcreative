@@ -78,70 +78,9 @@ export async function generateProductAdWithNanoBananaPro(
   const modelId = MODEL_IDS[model];
   const modelLabel = MODEL_LABELS[model];
 
-  // TWO-PASS COMPOSITING MODE
-  // Pass 1: Generate background + text only (NO product) using background-only prompt
-  // Pass 2: Sharp composites the real product render on top
-  // This guarantees pixel-perfect product labels with no AI product hallucination
-  if (useCompositing && productRenderUrl) {
-    console.log(`[NanaBanana] Using TWO-PASS compositing mode (${modelLabel}) for pixel-perfect labels`);
-    const { compositeProductOnBackground, buildBackgroundOnlyPrompt } = await import("./productCompositor");
-
-    // Extract headline and background style from the incoming prompt so we can
-    // rebuild it as a background-only prompt (strips all product integration instructions)
-    const headlineMatch = prompt.match(/Headline:\s*"([^"]+)"/);
-    const subheadlineMatch = prompt.match(/Subheadline:\s*"([^"]+)"/);
-    const backgroundMatch = prompt.match(/=== BACKGROUND & ATMOSPHERE ===\n([\s\S]+?)\n===/);
-    const productNameMatch = prompt.match(/for ([A-Za-z0-9 ]+) that MATCHES/) ||
-                             prompt.match(/supplement bottle.*?([A-Za-z0-9 ]+) must be/);
-
-    const extractedHeadline = headlineMatch?.[1] || "PREMIUM SUPPLEMENT";
-    const extractedSubheadline = subheadlineMatch?.[1];
-    const extractedBackground = backgroundMatch?.[1]?.trim() ||
-      "Dramatic premium lighting with cinematic depth and atmospheric effects";
-    const extractedProductName = productNameMatch?.[1]?.trim() || "ONEST Health Supplement";
-
-    const backgroundOnlyPrompt = buildBackgroundOnlyPrompt({
-      headline: extractedHeadline,
-      subheadline: extractedSubheadline,
-      productName: extractedProductName,
-      backgroundStyleDescription: extractedBackground,
-      aspectRatio,
-      productPosition: productPosition as any,
-    });
-
-    console.log(`[NanaBanana] Pass 1 — background-only prompt (headline: "${extractedHeadline}")`);
-
-    // Pass 1: Generate background + text only (no product)
-    // NOTE: We still pass controlImageUrl so Gemini can match the reference style,
-    // but the background-only prompt explicitly forbids drawing any product.
-    const bgResult = await generateProductAdWithNanaBananaPro_internal({
-      prompt: backgroundOnlyPrompt,
-      controlImageUrl,
-      aspectRatio,
-      resolution,
-      modelId,
-      modelLabel,
-    });
-
-    console.log(`[NanaBanana] Pass 1 complete: background generated at ${bgResult.imageUrl}`);
-
-    // Pass 2: Composite real product render onto the background
-    const composited = await compositeProductOnBackground({
-      backgroundUrl: bgResult.imageUrl,
-      productRenderUrl,
-      productPosition: productPosition as any,
-      productScale,
-      addShadow: true,
-      addGlow: false,
-    });
-
-    console.log(`[NanaBanana] Pass 2 complete: composited image at ${composited.imageUrl}`);
-
-    return {
-      imageUrl: composited.imageUrl,
-      s3Key: composited.s3Key,
-    };
-  }
+  // NOTE: Two-pass compositing (useCompositing) was disabled in Round 15.
+  // The productCompositor module has been removed. If two-pass compositing is
+  // needed again, it should be rebuilt from scratch.
 
   return generateProductAdWithNanaBananaPro_internal({
     prompt,

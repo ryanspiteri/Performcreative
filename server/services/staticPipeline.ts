@@ -1,11 +1,9 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
-import { ImageSelections } from "./imageCompositing";
 import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt } from "./geminiPromptBuilder";
 import { createScriptTask } from "./clickup";
-import axios from "axios";
-import { ENV } from "../_core/env";
+import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency, type ImageSelections } from "./_shared";
 
 /**
  * Generate ad creative variations using Gemini (Nano Banana Pro)
@@ -24,9 +22,9 @@ async function generateStaticAdVariationsWithGemini(
 
   const images = selections?.images || [];
   const variationCount = images.length || 3;
-  const results: Array<{ url: string; s3Key: string; variation: string; headline: string; subheadline: string | null }> = [];
 
-  for (let i = 0; i < variationCount; i++) {
+  // Build all variation tasks up-front, then run with concurrency=2
+  const tasks = Array.from({ length: variationCount }, (_, i) => () => {
     const sel = images[i] || {};
     const headline = sel.headline || `ONEST ${product.toUpperCase()} — VARIATION ${i + 1}`;
     const subheadline = sel.subheadline || null;
@@ -45,44 +43,31 @@ async function generateStaticAdVariationsWithGemini(
       : `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations through unique colour combinations, lighting angles, and composition choices.`;
 
     console.log(`[Static] Generating variation ${i + 1}/${variationCount} with Gemini...`);
-    const result = await withTimeout(
+    return withTimeout(
       generateProductAdWithNanoBananaPro({
         prompt: fullPrompt,
         controlImageUrl: referenceImageUrl || undefined,
         productRenderUrl: productRender.url,
         aspectRatio: "1:1",
-        useCompositing: false, // Single-pass: Gemini receives both reference + product render
+        useCompositing: false,
         productPosition: "center",
         productScale: 0.45,
       }),
       VARIATION_TIMEOUT,
       `Stage 4: Variation ${i + 1}/${variationCount}`
-    );
-
-    results.push({
+    ).then(result => ({
       url: result.imageUrl,
       s3Key: result.imageUrl.split("/").pop() || "",
       variation: `Variation ${i + 1}`,
       headline,
       subheadline,
-    });
-  }
+    }));
+  });
 
-  return results;
+  return runWithConcurrency(tasks, 2);
 }
 
-const STAGE_TIMEOUT = 10 * 60 * 1000; // 10 minutes per stage (Claude API calls can be slow)
-const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes per step (Claude API calls can be slow)
-const VARIATION_TIMEOUT = 4 * 60 * 1000; // 4 minutes per image variation (matches iteration pipeline)
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
-    ),
-  ]);
-}
+const STAGE_TIMEOUT = STEP_TIMEOUT; // Alias for backward compat — same 10 min value
 
 // ============================================================
 // STATIC PIPELINE — 7-Stage Flow with Selection Gate
@@ -104,24 +89,9 @@ export async function runStaticPipeline(runId: number, input: StaticPipelineInpu
   const ad = input.selectedAdImage;
 
   // Fetch product info from DB for AI context
-  let productInfoContext = "";
-  try {
-    const info = await db.getProductInfo(input.product);
-    if (info) {
-      const parts: string[] = [];
-      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
-      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
-      if (info.claims) parts.push(`Claims: ${info.claims}`);
-      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
-      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
-      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
-      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
-      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
-      productInfoContext = parts.join("\n");
-      console.log(`[Static] Loaded product info for ${input.product}: ${productInfoContext.slice(0, 100)}...`);
-    }
-  } catch (err: any) {
-    console.warn("[Static] Failed to load product info:", err.message);
+  const productInfoContext = await buildProductInfoContext(input.product);
+  if (productInfoContext) {
+    console.log(`[Static] Loaded product info for ${input.product}: ${productInfoContext.slice(0, 100)}...`);
   }
 
   // ---- STAGE 1: Claude Vision analyzes the competitor static ad ----
@@ -403,18 +373,11 @@ Each background prompt MUST be 150+ words and describe ONLY the background scene
 - 2-5 words that appear on ALL 3 images
 - e.g., "Clinically Dosed Formula" or "Zero Fillers. Real Results."`;
 
-  const res = await axios.post("https://api.anthropic.com/v1/messages", {
+  const res = await claudeClient.post("/messages", {
     model: "claude-sonnet-4-20250514",
     max_tokens: 6000,
     system,
     messages: [{ role: "user", content: prompt }],
-  }, {
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 120000,
   });
 
   const content = res.data?.content;
@@ -533,18 +496,11 @@ Return EXACTLY this JSON format:
   ]
 }`;
 
-    const res = await axios.post("https://api.anthropic.com/v1/messages", {
+    const res = await claudeClient.post("/messages", {
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
       system: "You are simulating a panel of 10 harsh but fair advertising experts. You do NOT rubber-stamp. You give honest, specific scores and feedback. Most first-round work scores 70-85.",
       messages: [{ role: "user", content: prompt }],
-    }, {
-      headers: {
-        "x-api-key": ENV.anthropicApiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      timeout: 120000,
     });
 
     const responseText = Array.isArray(res.data?.content) ? res.data.content.map((c: any) => c.text || "").join("") : "";
@@ -602,7 +558,7 @@ Return EXACTLY this JSON format:
 }
 
 async function iterateBrief(brief: string, feedback: string, product: string): Promise<string> {
-  const res = await axios.post("https://api.anthropic.com/v1/messages", {
+  const res = await claudeClient.post("/messages", {
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,
     system: `You are an expert creative director refining a creative brief for ONEST Health's ${product} product based on expert feedback. Make MEANINGFUL improvements — don't just rephrase.`,
@@ -610,13 +566,6 @@ async function iterateBrief(brief: string, feedback: string, product: string): P
       role: "user",
       content: `Improve this creative brief based on expert feedback:\n\nCURRENT BRIEF:\n${brief}\n\nEXPERT FEEDBACK:\n${feedback}\n\nReturn the improved brief. Address each piece of feedback specifically. Make the visual direction MORE specific, the headlines MORE compelling, and the strategy MORE targeted.`,
     }],
-  }, {
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 120000,
   });
 
   const content = res.data?.content;
@@ -683,18 +632,11 @@ Return EXACTLY this JSON format:
   "suggestedAdjustments": ["adjustment 1", "adjustment 2"]
 }`;
 
-  const res = await axios.post("https://api.anthropic.com/v1/messages", {
+  const res = await claudeClient.post("/messages", {
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,
     system: "You are simulating a panel of 10 HARSH advertising experts. You do NOT rubber-stamp. If an image lacks a headline, CTA, or looks like amateur content, you score it below 50. You compare against real paid social ads from major brands.",
     messages: [{ role: "user", content: prompt }],
-  }, {
-    headers: {
-      "x-api-key": ENV.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    timeout: 120000,
   });
 
   const responseText = Array.isArray(res.data?.content) ? res.data.content.map((c: any) => c.text || "").join("") : "";

@@ -97,6 +97,31 @@ export async function buildProductInfoContext(product: string): Promise<string> 
   return "";
 }
 
+// ─── Concurrency helper ─────────────────────────────────────────────────────
+
+/**
+ * Run async tasks with a concurrency limit.
+ * Returns results in the same order as the input tasks.
+ */
+export async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const i = nextIndex++;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 // ─── Shared types ───────────────────────────────────────────────────────────
 
 /** Selection data passed from the UI selection gate to image generation. */

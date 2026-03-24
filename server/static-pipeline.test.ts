@@ -143,12 +143,10 @@ describe("pipeline.getActiveProducts", () => {
   });
 });
 
-describe("imageCompositing helpers", () => {
+describe("ImageSelections type", () => {
   it("ImageSelections interface allows null subheadlines", async () => {
-    // Import the type and verify it compiles correctly
-    const { ImageSelections } = await import("./services/imageCompositing") as any;
+    const { ImageSelections } = await import("./services/_shared") as any;
 
-    // Test that the interface shape is correct by creating a valid object
     const selections = {
       images: [
         { headline: "H1", subheadline: null, background: { title: "BG1", description: "d", prompt: "p" } },
@@ -162,13 +160,5 @@ describe("imageCompositing helpers", () => {
     expect(selections.images[0].subheadline).toBeNull();
     expect(selections.images[1].subheadline).toBe("Sub 2");
     expect(selections.benefits).toBe("Science-Backed");
-  });
-
-  it("buildTextOverlaySvg handles null subheadline", async () => {
-    // We can't directly test the private function, but we can verify
-    // the module exports correctly
-    const mod = await import("./services/imageCompositing");
-    expect(mod.generateStaticAdVariations).toBeDefined();
-    expect(typeof mod.generateStaticAdVariations).toBe("function");
   });
 });

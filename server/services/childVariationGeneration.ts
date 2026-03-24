@@ -6,8 +6,9 @@
  */
 
 import * as db from "../db";
-import { generateProductAd } from "./geminiImage";
+import { generateProductAdWithNanoBananaPro } from "./nanoBananaPro";
 import { buildChildVariationPrompt, getDiverseVariationTypes, type ChildVariationType } from "./childVariationPrompts";
+import { withTimeout, VARIATION_TIMEOUT } from "./_shared";
 
 /**
  * Generate child variations for multiple parent runs
@@ -104,17 +105,23 @@ async function generateChildVariationsForSingleParent(
 
       console.log(`[ChildGen] Prompt for child #${childRunId}: ${prompt.substring(0, 150)}...`);
 
-      // Generate image with Gemini
-      const geminiImages = await generateProductAd({
-        prompt,
-        productRenderUrl: productRender.url,
-        aspectRatio: aspectRatio as any,
-        resolution: "2K",
-        variationCount: 1,
-      });
+      // Generate image with Nano Banana Pro (same model as parent pipeline)
+      const result = await withTimeout(
+        generateProductAdWithNanoBananaPro({
+          prompt,
+          controlImageUrl: parentImageUrl,
+          productRenderUrl: productRender.url,
+          aspectRatio: aspectRatio as any,
+          useCompositing: false,
+          productPosition: "center",
+          productScale: 0.45,
+        }),
+        VARIATION_TIMEOUT,
+        `Child ${i + 1}/${childCount} for parent #${parentRunId}`
+      );
 
-      const childImageUrl = geminiImages[0].url;
-      const childImageS3Key = geminiImages[0].s3Key;
+      const childImageUrl = result.imageUrl;
+      const childImageS3Key = result.s3Key;
 
       // Update child run with result
       await db.updatePipelineRun(childRunId, {

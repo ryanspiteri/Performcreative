@@ -1,27 +1,10 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
-
-// Legacy imageCompositing import removed - now using Gemini 3 Pro Image exclusively
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
 import { generateProductAdWithNanoBananaPro, type ImageModel, type NanoBananaProResult } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
+import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
 import axios from "axios";
-import { ENV } from "../_core/env";
-
-const STEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes
-const VARIATION_TIMEOUT = 4 * 60 * 1000; // 4 minutes per variation (2 Gemini passes × 2 min each)
-
-// Shared Anthropic API client — used by all Claude analysis and brief generation functions
-const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
-const claudeClient = axios.create({
-  baseURL: ANTHROPIC_BASE,
-  headers: {
-    "x-api-key": ENV.anthropicApiKey,
-    "anthropic-version": "2023-06-01",
-    "Content-Type": "application/json",
-  },
-  timeout: 600000,
-});
 
 /**
  * Generate a single variation with timeout + automatic fallback to nano_banana_pro if nano_banana_2 fails.
@@ -49,15 +32,6 @@ async function generateVariationWithFallback(
     }
     throw err;
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
-    ),
-  ]);
 }
 
 // ============================================================
@@ -102,24 +76,9 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
   console.log(`[Iteration] Starting iteration pipeline run #${runId}`);
 
   // Fetch product info
-  let productInfoContext = "";
-  try {
-    const info = await db.getProductInfo(input.product);
-    if (info) {
-      const parts: string[] = [];
-      if (info.ingredients) parts.push(`Ingredients: ${info.ingredients}`);
-      if (info.benefits) parts.push(`Benefits: ${info.benefits}`);
-      if (info.claims) parts.push(`Claims: ${info.claims}`);
-      if (info.targetAudience) parts.push(`Target Audience: ${info.targetAudience}`);
-      if (info.keySellingPoints) parts.push(`Key Selling Points: ${info.keySellingPoints}`);
-      if (info.flavourVariants) parts.push(`Flavour Variants: ${info.flavourVariants}`);
-      if (info.pricing) parts.push(`Pricing: ${info.pricing}`);
-      if (info.additionalNotes) parts.push(`Notes: ${info.additionalNotes}`);
-      productInfoContext = parts.join("\n");
-      console.log(`[Iteration] Loaded product info for ${input.product}`);
-    }
-  } catch (err: any) {
-    console.warn("[Iteration] Failed to load product info:", err.message);
+  const productInfoContext = await buildProductInfoContext(input.product);
+  if (productInfoContext) {
+    console.log(`[Iteration] Loaded product info for ${input.product}`);
   }
 
   const sourceType: IterationSourceType = input.sourceType ?? "own_ad";
@@ -208,13 +167,12 @@ export async function runIterationStage3(runId: number, run: any) {
     const product = run.product;
     const sourceUrl = run.iterationSourceUrl || "";
 
-    // Parse the brief to extract the 3 variations
+    // Parse the brief to extract the 3 variations — fail if brief is not valid JSON
     let briefData: any;
     try {
       briefData = JSON.parse(brief);
     } catch {
-      console.warn("[Iteration] Brief is not JSON, using as plain text");
-      briefData = null;
+      throw new Error(`[Iteration] Brief stored in DB is not valid JSON. Cannot generate variations without structured brief data.`);
     }
 
     // Read image model from run config (defaults to Nano Banana Pro for backwards compat)
@@ -243,11 +201,10 @@ export async function runIterationStage3(runId: number, run: any) {
     console.log(`[Iteration] Generating ${variationCount} variations`);
 
     if (briefData?.variations && Array.isArray(briefData.variations)) {
-      // Generate each variation with enhanced prompt system
-      for (let i = 0; i < variationCount; i++) {
+      // Generate variations concurrently (2 at a time to avoid API rate limits)
+      const tasks = Array.from({ length: variationCount }, (_, i) => async () => {
         const v = briefData.variations[i] || {};
-        
-        // Build reference-based Gemini prompt
+
         const basePrompt = buildReferenceBasedPrompt({
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: v.subheadline || undefined,
@@ -256,37 +213,35 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
           targetAudience: briefData.targetAudience || undefined,
         });
-        
-        // Add variation-specific uniqueness instruction
+
         const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
 
         console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
-        console.log(`[Iteration] Prompt: ${geminiPrompt.substring(0, 150)}...`);
 
         const result = await generateVariationWithFallback({
           prompt: geminiPrompt,
-          controlImageUrl: sourceUrl, // Pass control image as visual reference
+          controlImageUrl: sourceUrl,
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           model: imageModel,
-          useCompositing: false, // Single-pass: Gemini generates full scene including product
+          useCompositing: false,
           productPosition: "center",
           productScale: 0.45,
         }, i);
 
-        const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
-
-        geminiResults.push({
-          url: geminiImages[0].url,
-          s3Key: geminiImages[0].s3Key,
+        return {
+          url: result.imageUrl,
+          s3Key: result.imageUrl.split('/').pop() || '',
           headline: v.headline || `VARIATION ${i + 1}`,
           subheadline: v.subheadline || null,
           angle: v.angle || null,
           backgroundNote: v.backgroundNote || null,
           productImageUrl: productRender.url,
           controlImageUrl: sourceUrl,
-        });
-      }
+        };
+      });
+
+      geminiResults.push(...await runWithConcurrency(tasks, 2));
     } else {
       // Fallback: 3 generic variations with enhanced prompts
       const fallbackHeadlines = [
@@ -872,12 +827,11 @@ Return JSON in this exact format with ${variationCount} variations:
   // Clean up any markdown code blocks
   text = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
-  // Validate it's valid JSON
+  // Validate it's valid JSON — fail explicitly so the caller can retry or surface the error
   try {
     JSON.parse(text);
   } catch {
-    console.warn("[Iteration] Brief is not valid JSON, wrapping in object");
-    text = JSON.stringify({ raw: text, variations: [] });
+    throw new Error(`[Iteration] Claude returned invalid JSON for brief. Raw response: ${text.substring(0, 500)}`);
   }
 
   return text;
