@@ -1,6 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns, captionExamples } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -484,6 +484,82 @@ export async function listFaceSwapJobs(limit = 50): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(faceSwapJobs).orderBy(desc(faceSwapJobs.createdAt)).limit(limit);
+}
+
+// ============================================================
+// Organic Content Pipeline
+// ============================================================
+
+export async function createOrganicRun(data: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(organicRuns).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function getOrganicRun(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(organicRuns).where(eq(organicRuns.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateOrganicRun(id: number, data: any): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(organicRuns).set(data).where(eq(organicRuns.id, id));
+}
+
+export async function listOrganicRuns(type?: string, limit = 50) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (type) {
+    return db.select().from(organicRuns)
+      .where(eq(organicRuns.type, type as any))
+      .orderBy(desc(organicRuns.createdAt))
+      .limit(limit);
+  }
+  return db.select().from(organicRuns).orderBy(desc(organicRuns.createdAt)).limit(limit);
+}
+
+/** List all content (both ad pipeline_runs and organic_runs) for the Content Library. */
+export async function listAllContent(limit = 50) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [adRuns, organicRunsList] = await Promise.all([
+    db.select().from(pipelineRuns).orderBy(desc(pipelineRuns.createdAt)).limit(limit),
+    db.select().from(organicRuns).orderBy(desc(organicRuns.createdAt)).limit(limit),
+  ]);
+  return { adRuns, organicRuns: organicRunsList };
+}
+
+// ============================================================
+// Caption Examples (few-shot training data)
+// ============================================================
+
+export async function createCaptionExample(data: any): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(captionExamples).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function listCaptionExamples(pillar?: string, purpose?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions = [];
+  if (pillar) conditions.push(eq(captionExamples.pillar, pillar));
+  if (purpose) conditions.push(eq(captionExamples.purpose, purpose));
+  if (conditions.length > 0) {
+    return db.select().from(captionExamples).where(and(...conditions)).orderBy(desc(captionExamples.createdAt));
+  }
+  return db.select().from(captionExamples).orderBy(desc(captionExamples.createdAt));
+}
+
+export async function deleteCaptionExample(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(captionExamples).where(eq(captionExamples.id, id));
 }
 
 // Canva token management

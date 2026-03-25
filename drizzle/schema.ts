@@ -285,3 +285,69 @@ export const faceSwapJobs = mysqlTable("face_swap_jobs", {
 
 export type FaceSwapJob = typeof faceSwapJobs.$inferSelect;
 export type InsertFaceSwapJob = typeof faceSwapJobs.$inferInsert;
+
+// ============================================================
+// ORGANIC CONTENT PIPELINE — Tables
+// ============================================================
+
+/**
+ * Organic content runs — separate from ad pipeline_runs.
+ * Tracks organic video, caption, and visual content generation.
+ */
+export const organicRuns = mysqlTable("organic_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  type: mysqlEnum("type", ["organic_video", "caption", "visual_content"]).notNull(),
+  status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending").notNull(),
+  /** Current pipeline stage for organic_video type */
+  stage: varchar("stage", { length: 64 }),
+  /** Content strategy metadata */
+  contentPillar: varchar("contentPillar", { length: 64 }),
+  contentPurpose: varchar("contentPurpose", { length: 64 }),
+  contentFormat: varchar("contentFormat", { length: 32 }),
+  topic: text("topic"),
+  /** Organic video pipeline fields */
+  videoInputPath: text("videoInputPath"),
+  videoInputType: mysqlEnum("videoInputType", ["local", "url"]).default("local"),
+  autoEditOutputUrl: text("autoEditOutputUrl"),
+  transcription: json("transcription"),
+  transcriptionEdited: json("transcriptionEdited"),
+  subtitleStyle: varchar("subtitleStyle", { length: 32 }).default("tiktok_bold"),
+  subtitledVideoUrl: text("subtitledVideoUrl"),
+  thumbnailUrl: text("thumbnailUrl"),
+  /** Caption fields (shared across types) */
+  captionInstagram: text("captionInstagram"),
+  captionTiktok: text("captionTiktok"),
+  captionLinkedin: text("captionLinkedin"),
+  /** Visual content fields */
+  slideCount: int("slideCount"),
+  slidesJson: json("slidesJson"),
+  product: varchar("product", { length: 64 }),
+  /** Tracking */
+  errorMessage: text("errorMessage"),
+  clickupTaskId: varchar("clickupTaskId", { length: 256 }),
+  clickupTaskUrl: text("clickupTaskUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type OrganicRun = typeof organicRuns.$inferSelect;
+export type InsertOrganicRun = typeof organicRuns.$inferInsert;
+
+/**
+ * Caption examples — few-shot training data for the Caption Generator.
+ * Stores Ryan's manually written captions as examples for the AI to reference.
+ */
+export const captionExamples = mysqlTable("caption_examples", {
+  id: int("id").autoincrement().primaryKey(),
+  pillar: varchar("pillar", { length: 64 }).notNull(),
+  purpose: varchar("purpose", { length: 64 }).notNull(),
+  topic: varchar("topic", { length: 256 }).notNull(),
+  platform: varchar("platform", { length: 32 }).notNull(), // instagram, tiktok, linkedin
+  captionText: text("captionText").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CaptionExample = typeof captionExamples.$inferSelect;
+export type InsertCaptionExample = typeof captionExamples.$inferInsert;

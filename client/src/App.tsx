@@ -20,6 +20,10 @@ import UgcUpload from "./pages/UgcUpload";
 import UgcDashboard from "./pages/UgcDashboard";
 import HeadlineBank from "./pages/HeadlineBank";
 import ParentSelection from "./pages/ParentSelection";
+import OrganicVideo from "./pages/OrganicVideo";
+import CaptionGenerator from "./pages/CaptionGenerator";
+import ContentLibrary from "./pages/ContentLibrary";
+import VisualContent from "./pages/VisualContent";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -39,6 +43,10 @@ function AuthenticatedRoutes() {
         <Route path="/ugc-clone" component={UgcUpload} />
         <Route path="/ugc/:id" component={UgcDashboard} />
         <Route path="/headlines" component={HeadlineBank} />
+        <Route path="/organic/video" component={OrganicVideo} />
+        <Route path="/organic/captions" component={CaptionGenerator} />
+        <Route path="/organic/visual" component={VisualContent} />
+        <Route path="/organic/library" component={ContentLibrary} />
         <Route path="/product-info" component={ProductInfoHub} />
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />

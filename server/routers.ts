@@ -19,6 +19,7 @@ import { SignJWT } from "jose";
 import { storagePut } from "./storage";
 import { ACTIVE_PRODUCTS } from "../drizzle/schema";
 import { canvaRouter } from "./routers/canva";
+import { organicRouter } from "./routers/organic";
 import { runFaceSwapPipeline } from "./services/faceSwapPipeline";
 import { validatePortrait } from "./services/portraitValidator";
 import { withTimeout, STEP_TIMEOUT } from "./services/_shared";
@@ -232,6 +233,7 @@ export const appRouter = router({
   system: systemRouter,
   canva: canvaRouter,
   faceSwap: faceSwapRouter,
+  organic: organicRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
