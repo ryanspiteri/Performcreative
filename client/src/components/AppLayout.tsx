@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X, BookOpen } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -8,11 +8,16 @@ const navItems = [
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
   { icon: Video, label: "UGC Clone Engine", path: "/ugc" },
-  // ASSETS (3-5)
+  // ORGANIC (3-6)
+  { icon: Video, label: "Organic Video", path: "/organic/video" },
+  { icon: ImagePlus, label: "Visual Content", path: "/organic/visual" },
+  { icon: FileText, label: "Caption Generator", path: "/organic/captions" },
+  { icon: BookOpen, label: "Content Library", path: "/organic/library" },
+  // ASSETS (7-9)
   { icon: BookText, label: "Headline Bank", path: "/headlines" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
-  // SYSTEM (6-7)
+  // SYSTEM (10-12)
   { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -89,12 +94,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
+        {/* Section: Organic */}
+        <div className="px-3 pt-5 pb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Organic</p>
+        </div>
+        <nav className="px-3 space-y-0.5">
+          {navItems.slice(3, 7).map((item) => {
+            const isActive = location === item.path;
+            return (
+              <button
+                key={item.path}
+                onClick={() => handleNavClick(item.path)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? "bg-white/10 text-white"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <item.icon className="w-4 h-4" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
         {/* Section: Assets */}
         <div className="px-3 pt-5 pb-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Assets</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(3, 6).map((item) => {
+          {navItems.slice(7, 10).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -118,7 +147,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.slice(6).map((item) => {
+          {navItems.slice(10).map((item) => {
             const isActive = location === item.path;
             return (
               <button

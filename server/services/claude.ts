@@ -1,33 +1,5 @@
 import axios from "axios";
-import { ENV } from "../_core/env";
-
-const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
-
-const claudeClient = axios.create({
-  baseURL: ANTHROPIC_BASE,
-  headers: {
-    "x-api-key": ENV.anthropicApiKey,
-    "anthropic-version": "2023-06-01",
-    "Content-Type": "application/json",
-  },
-  timeout: 600000, // 10 minutes — script generation + review can take a while
-});
-
-async function callClaude(messages: any[], system?: string, maxTokens = 4096): Promise<string> {
-  const body: any = {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: maxTokens,
-    messages,
-  };
-  if (system) body.system = system;
-
-  const res = await claudeClient.post("/messages", body);
-  const content = res.data?.content;
-  if (Array.isArray(content)) {
-    return content.map((c: any) => c.text || "").join("\n");
-  }
-  return content?.text || JSON.stringify(content);
-}
+import { callClaude } from "./_shared";
 
 // Visual analysis of video frames
 export async function analyzeVideoFrames(videoUrl: string, transcript: string, brandName: string): Promise<string> {

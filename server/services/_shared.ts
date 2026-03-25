@@ -122,6 +122,124 @@ export async function runWithConcurrency<T>(
   return results;
 }
 
+// ─── URL & Path validation (SSRF + traversal protection) ────────────────
+
+const ALLOWED_URL_DOMAINS = [
+  "s3.amazonaws.com",
+  "s3.us-east-1.amazonaws.com",
+  "s3.ap-southeast-2.amazonaws.com",
+  "foreplay-ads.s3.amazonaws.com",
+  "cdn.foreplay.co",
+];
+
+const ALLOWED_VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv", ".webm"];
+
+/**
+ * Validate a URL against the domain allowlist. Rejects private IPs and non-allowed domains.
+ * Throws on invalid/disallowed URLs.
+ */
+export function validateUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`Disallowed protocol: ${parsed.protocol}`);
+  }
+  const hostname = parsed.hostname;
+  // Block private/internal IPs
+  if (/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|localhost|::1)/.test(hostname)) {
+    throw new Error(`Disallowed internal address: ${hostname}`);
+  }
+  const allowed = ALLOWED_URL_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
+  if (!allowed) {
+    throw new Error(`Domain not in allowlist: ${hostname}`);
+  }
+}
+
+/**
+ * Validate a local file path. Ensures it's under the allowed base directory,
+ * contains no traversal sequences, and has an allowed video extension.
+ * Throws on invalid paths.
+ */
+export function validateLocalPath(filePath: string, basePath: string): void {
+  if (!basePath) {
+    throw new Error("LOCAL_MEDIA_BASE_PATH not configured — local file access disabled");
+  }
+  if (!filePath) {
+    throw new Error("File path is required");
+  }
+  if (filePath.includes("..")) {
+    throw new Error("Path traversal detected: '..' not allowed");
+  }
+  const resolved = filePath.startsWith("/") ? filePath : `${basePath}/${filePath}`;
+  if (!resolved.startsWith(basePath)) {
+    throw new Error(`Path must be under ${basePath}`);
+  }
+  const ext = resolved.substring(resolved.lastIndexOf(".")).toLowerCase();
+  if (!ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
+    throw new Error(`Unsupported file extension: ${ext}. Allowed: ${ALLOWED_VIDEO_EXTENSIONS.join(", ")}`);
+  }
+}
+
+/**
+ * Determine if input is a URL or local file path.
+ * Validates accordingly and returns the normalized input.
+ */
+export function validateVideoInput(input: string, localBasePath: string): { type: "url" | "local"; path: string } {
+  if (input.startsWith("http://") || input.startsWith("https://")) {
+    validateUrl(input);
+    return { type: "url", path: input };
+  }
+  validateLocalPath(input, localBasePath);
+  return { type: "local", path: input };
+}
+
+// ─── Content strategy framework ─────────────────────────────────────────
+
+export const CONTENT_PILLARS = [
+  "PTC Value",
+  "Story",
+  "Edutaining",
+  "Trends",
+  "Sale",
+  "Motivation",
+  "Life Dump",
+  "Workout",
+] as const;
+export type ContentPillar = typeof CONTENT_PILLARS[number];
+
+export const CONTENT_PURPOSES = [
+  "Educate",
+  "Inspire",
+  "Entertain",
+  "Sell",
+  "Connect",
+] as const;
+export type ContentPurpose = typeof CONTENT_PURPOSES[number];
+
+export const CONTENT_FORMATS = [
+  "reel",
+  "short_video",
+  "post",
+  "carousel",
+  "story",
+] as const;
+export type ContentFormat = typeof CONTENT_FORMATS[number];
+
+export const SUBTITLE_STYLES = [
+  { id: "tiktok_bold", label: "TikTok Bold", description: "Word-by-word highlight, large centered text, shadow" },
+  { id: "minimal", label: "Minimal Lower Third", description: "Sentence blocks at bottom, smaller font, clean" },
+  { id: "karaoke", label: "Karaoke", description: "Words highlight as spoken, colored accent" },
+  { id: "none", label: "None", description: "No subtitles" },
+] as const;
+export type SubtitleStyle = typeof SUBTITLE_STYLES[number]["id"];
+
+export const PLATFORMS = ["instagram", "tiktok", "linkedin"] as const;
+export type Platform = typeof PLATFORMS[number];
+
 // ─── Shared types ───────────────────────────────────────────────────────────
 
 /** Selection data passed from the UI selection gate to image generation. */

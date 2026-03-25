@@ -3,7 +3,14 @@
 ## Active
 
 - [ ] [P1] Structured logging for competitor ad pipeline — entry/exit logs in analyseCompetitorAd and generateCompetitorIterationBrief, plus WARNING when brief JSON parse falls back
-- [ ] [P2] SSRF mitigation — analyseCompetitorAd fetches imageUrl via axios with no domain allowlist; add check for Foreplay CDN / S3 domains only
+- [ ] [P2] SSRF mitigation — analyseCompetitorAd fetches imageUrl via axios with no domain allowlist; add check for Foreplay CDN / S3 domains only (bundle with Phase 1 organic pipeline work)
+
+## Organic Content Pipeline — Pre-Implementation
+
+- [ ] [P0] Author content strategy framework — define 8 pillar definitions, 5 purpose rules, caption style guide, and 3+ example captions per pillar. This is the training data for the Caption Generator. Requires Ryan's time. Must be completed BEFORE Caption Generator code is written. See design doc "Assignment" section: film 3 reels, manually write captions, note style rules.
+- [ ] [P1] Evaluate pipeline_runs schema strategy — current table has 40+ columns with 60% NULL per row. Adding organic columns makes it worse. Evaluate: (a) extend existing table, (b) separate organic_runs table, (c) shared runs table + pipeline-specific detail tables. Decide before Phase 1 implementation begins. Context: outside voice flagged this as a junk drawer pattern that doesn't scale past 7+ pipeline types.
+- [ ] [P1] Auth enforcement on routes — all routes use publicProcedure with zero auth checks. Organic pipeline adds content generation for a 2M-follower account on open endpoints. Wire up existing JWT cookie auth as protectedProcedure on all mutation routes before organic pipeline ships.
+- [ ] [P1] Frontend pages for organic pipelines — scope and build: Organic Video page (file picker + pipeline status), Caption Generator page (pillar/purpose selector + output), Visual Content page (slide builder + AI generation). Follow existing page patterns (BrowseCreatives, IterateWinners). Include in Phase 1 scope.
 
 ## Completed (current session)
 
