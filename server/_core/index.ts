@@ -44,6 +44,41 @@ async function startServer() {
     storage: multer.memoryStorage(),
     limits: { fileSize: 500 * 1024 * 1024 } // 500MB
   });
+  // Diagnostic health endpoint — tests DB connectivity + table existence (no auth)
+  app.get("/api/health/db", async (_req, res) => {
+    const requiredTables = [
+      "users", "pipeline_runs", "product_renders", "product_info",
+      "foreplay_creatives", "backgrounds", "ugc_uploads", "ugc_variants",
+      "headline_bank", "face_swap_jobs", "organic_runs", "caption_examples",
+    ];
+    try {
+      const dbConn = await db.getDb();
+      if (!dbConn) {
+        return res.status(503).json({ ok: false, error: "Database not available", tables: {} });
+      }
+      // Query information_schema to check which tables exist
+      const rows: any[] = await dbConn.execute(
+        "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()"
+      );
+      const existingTables = new Set(
+        (Array.isArray(rows[0]) ? rows[0] : rows).map((r: any) => r.TABLE_NAME)
+      );
+      const tables: Record<string, boolean> = {};
+      const missing: string[] = [];
+      for (const t of requiredTables) {
+        const exists = existingTables.has(t);
+        tables[t] = exists;
+        if (!exists) missing.push(t);
+      }
+      if (missing.length > 0) {
+        return res.status(503).json({ ok: false, error: `Missing tables: ${missing.join(", ")}`, tables });
+      }
+      return res.json({ ok: true, tables });
+    } catch (err: any) {
+      return res.status(503).json({ ok: false, error: err.message || "DB health check failed", tables: {} });
+    }
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   
@@ -129,6 +164,34 @@ async function startServer() {
       res.status(500).json({ error: error.message || "Upload failed" });
     }
   });
+  // Organic video upload endpoint (multipart, bypasses tRPC)
+  app.post("/api/organic/upload-video", upload.single("video"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const ext = req.file.originalname.split(".").pop()?.toLowerCase() || "mp4";
+      const allowedExts = ["mp4", "mov", "avi", "mkv", "webm"];
+      if (!allowedExts.includes(ext)) {
+        return res.status(400).json({ error: `Unsupported format: .${ext}. Allowed: ${allowedExts.join(", ")}` });
+      }
+
+      console.log(`[Organic Upload] Received: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)}MB`);
+
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const fileKey = `organic-videos/${Date.now()}-${suffix}.${ext}`;
+
+      const { url } = await storagePut(fileKey, req.file.buffer, req.file.mimetype);
+      console.log(`[Organic Upload] S3 upload complete: ${url}`);
+
+      res.json({ url, fileKey });
+    } catch (error: any) {
+      console.error(`[Organic Upload] Error:`, error);
+      res.status(500).json({ error: error.message || "Upload failed" });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

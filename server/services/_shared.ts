@@ -130,6 +130,8 @@ const ALLOWED_URL_DOMAINS = [
   "s3.ap-southeast-2.amazonaws.com",
   "foreplay-ads.s3.amazonaws.com",
   "cdn.foreplay.co",
+  "manuscdn.com",
+  "files.manuscdn.com",
 ];
 
 const ALLOWED_VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv", ".webm"];

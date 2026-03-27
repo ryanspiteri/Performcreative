@@ -72,48 +72,56 @@ export async function runOrganicVideoStages1to3(
     // ── Stage 1: uploading ──────────────────────────────────────────────
     await transitionStage(runId, "uploading");
 
-    const validated = validateVideoInput(input.videoInputPath, ENV.localMediaBasePath);
+    // Determine if input is a URL (uploaded/S3) or local path
+    const isUrl = input.videoInputPath.startsWith("http://") || input.videoInputPath.startsWith("https://");
+    let videoUrl: string;
 
-    const healthy = await checkHealth();
-    if (!healthy) {
-      await db.updateOrganicRun(runId, {
-        status: "failed",
-        errorMessage: "AutoEdit service is not available — health check failed",
-      });
-      console.error(`[OrganicVideo] Run #${runId} — AutoEdit health check failed, aborting`);
-      return;
+    if (isUrl) {
+      // Uploaded file — URL is already valid, skip local path validation
+      videoUrl = input.videoInputPath;
+    } else {
+      const validated = validateVideoInput(input.videoInputPath, ENV.localMediaBasePath);
+      videoUrl = validated.path;
     }
 
-    // ── Stage 2: editing ────────────────────────────────────────────────
-    await transitionStage(runId, "editing");
+    // ── Stage 2: editing (skip if AutoEdit unavailable) ─────────────────
+    const healthy = await checkHealth();
+    let editedVideoUrl = videoUrl;
 
-    const editResult = await withTimeout(
-      processVideo({
-        inputPath: validated.path,
-        inputType: validated.type,
-      }),
-      STEP_TIMEOUT,
-      "AutoEdit process-video",
-    );
+    if (healthy) {
+      await transitionStage(runId, "editing");
 
-    await db.updateOrganicRun(runId, {
-      autoEditOutputUrl: editResult.outputUrl,
-    });
+      const editResult = await withTimeout(
+        processVideo({
+          inputPath: videoUrl,
+          inputType: isUrl ? "url" : "local",
+        }),
+        STEP_TIMEOUT,
+        "AutoEdit process-video",
+      );
+
+      editedVideoUrl = editResult.outputUrl;
+      await db.updateOrganicRun(runId, {
+        autoEditOutputUrl: editResult.outputUrl,
+      });
+    } else {
+      console.log(`[OrganicVideo] Run #${runId} — AutoEdit unavailable, skipping editing stage`);
+    }
 
     // ── Stage 3: transcribing ───────────────────────────────────────────
     await transitionStage(runId, "transcribing");
 
     const transcription = await withTimeout(
-      transcribeVideo(editResult.outputUrl),
+      transcribeVideo(editedVideoUrl),
       STEP_TIMEOUT,
       "Whisper transcription",
     );
 
-    // Store transcription text and word-level segments from AutoEdit
+    // Store transcription text
     await db.updateOrganicRun(runId, {
       transcription: JSON.stringify({
         text: transcription,
-        segments: editResult.segments,
+        segments: [],
       }),
     });
 

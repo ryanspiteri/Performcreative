@@ -55,9 +55,16 @@ const PIPELINE_STAGES = [
 
 type PlatformTab = "instagram" | "tiktok" | "linkedin";
 
+type InputMode = "upload" | "path";
+
 export default function OrganicVideo() {
   // Form state
+  const [inputMode, setInputMode] = useState<InputMode>("upload");
   const [sourcePath, setSourcePath] = useState("");
+  const [uploadedUrl, setUploadedUrl] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [subtitleStyle, setSubtitleStyle] = useState("hormozi");
   const [pillar, setPillar] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -73,6 +80,55 @@ export default function OrganicVideo() {
     retry: false,
     refetchOnWindowFocus: false,
   });
+
+  // File upload handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const maxSize = 500 * 1024 * 1024; // 500MB
+    if (file.size > maxSize) {
+      toast.error("File too large. Maximum 500MB.");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadedFileName(file.name);
+
+    try {
+      const formData = new FormData();
+      formData.append("video", file);
+
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener("progress", (evt) => {
+        if (evt.lengthComputable) {
+          setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+        }
+      });
+
+      const result = await new Promise<{ url: string }>((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(JSON.parse(xhr.responseText)?.error || "Upload failed"));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.open("POST", "/api/organic/upload-video");
+        xhr.send(formData);
+      });
+
+      setUploadedUrl(result.url);
+      toast.success("Video uploaded");
+    } catch (err: any) {
+      toast.error(`Upload failed: ${err.message}`);
+      setUploadedFileName("");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   // Trigger mutation
   const triggerVideo = trpc.organic.triggerVideo.useMutation({
@@ -121,8 +177,9 @@ export default function OrganicVideo() {
   }
 
   const handleStart = () => {
-    if (!sourcePath.trim()) {
-      toast.error("Please enter a source video path");
+    const videoPath = inputMode === "upload" ? uploadedUrl : sourcePath.trim();
+    if (!videoPath) {
+      toast.error(inputMode === "upload" ? "Please upload a video first" : "Please enter a source video path");
       return;
     }
     if (!pillar) {
@@ -135,7 +192,7 @@ export default function OrganicVideo() {
     }
 
     triggerVideo.mutate({
-      videoInputPath: sourcePath.trim(),
+      videoInputPath: videoPath,
       subtitleStyle,
       contentPillar: pillar,
       contentPurpose: purpose,
@@ -181,18 +238,80 @@ export default function OrganicVideo() {
         <div className="flex gap-6">
           {/* LEFT PANEL - Controls */}
           <div className="w-[400px] shrink-0 space-y-5">
-            {/* Source Video Path */}
+            {/* Source Video */}
             <div className="bg-[#0D0F12] rounded-xl border border-white/5 p-5 space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 block">
-                  Source Video Path
+                  Source Video
                 </label>
-                <Input
-                  value={sourcePath}
-                  onChange={(e) => setSourcePath(e.target.value)}
-                  placeholder="/path/to/source-video.mp4"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-600"
-                />
+                {/* Mode toggle */}
+                <div className="flex gap-1 mb-3 bg-white/5 rounded-lg p-1">
+                  <button
+                    onClick={() => setInputMode("upload")}
+                    className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+                      inputMode === "upload" ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    onClick={() => setInputMode("path")}
+                    className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+                      inputMode === "path" ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    Local Path
+                  </button>
+                </div>
+
+                {inputMode === "upload" ? (
+                  <div>
+                    {uploadedUrl ? (
+                      <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2.5">
+                        <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
+                        <span className="text-green-300 text-sm truncate">{uploadedFileName}</span>
+                        <button
+                          onClick={() => { setUploadedUrl(""); setUploadedFileName(""); }}
+                          className="text-gray-400 hover:text-white ml-auto shrink-0"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : isUploading ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-gray-300">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Uploading {uploadedFileName}... {uploadProgress}%</span>
+                        </div>
+                        <div className="w-full bg-white/5 rounded-full h-1.5">
+                          <div
+                            className="bg-red-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center gap-2 border-2 border-dashed border-white/10 rounded-lg p-6 cursor-pointer hover:border-white/20 transition-colors">
+                        <Upload className="w-6 h-6 text-gray-500" />
+                        <span className="text-sm text-gray-400">Click to upload video</span>
+                        <span className="text-xs text-gray-600">MP4, MOV, AVI, MKV, WebM (max 500MB)</span>
+                        <input
+                          type="file"
+                          accept="video/mp4,video/quicktime,video/avi,video/x-matroska,video/webm"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                ) : (
+                  <Input
+                    value={sourcePath}
+                    onChange={(e) => setSourcePath(e.target.value)}
+                    placeholder="/path/to/source-video.mp4"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600"
+                  />
+                )}
               </div>
 
               {/* Subtitle Style */}
