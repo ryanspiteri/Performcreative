@@ -148,6 +148,13 @@
       "when": 1774410742453,
       "tag": "0020_moaning_risque",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1774912434262,
+      "tag": "0021_lethal_celestials",
+      "breakpoints": true
     }
   ]
 }

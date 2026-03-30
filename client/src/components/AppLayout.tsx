@@ -1,14 +1,15 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X, BookOpen } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X, BookOpen, PenTool } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
-  // PIPELINE (0-2)
+  // PIPELINE (0-3)
   { icon: Image, label: "Browse Creatives", path: "/" },
   { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
   { icon: Video, label: "UGC Clone Engine", path: "/ugc" },
-  // ORGANIC (3-6)
+  { icon: PenTool, label: "Script Generator", path: "/scripts" },
+  // ORGANIC (4-7)
   { icon: Video, label: "Organic Video", path: "/organic/video" },
   { icon: ImagePlus, label: "Visual Content", path: "/organic/visual" },
   { icon: FileText, label: "Caption Generator", path: "/organic/captions" },
@@ -75,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Pipeline</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(0, 3).map((item) => {
+          {navItems.slice(0, 4).map((item) => {
             const isActive = location === item.path || (item.path === "/" && location === "/browse");
             return (
               <button
@@ -99,7 +100,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Organic</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(3, 7).map((item) => {
+          {navItems.slice(4, 8).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -123,7 +124,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Assets</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(7, 10).map((item) => {
+          {navItems.slice(8, 11).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -147,7 +148,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.slice(10).map((item) => {
+          {navItems.slice(11).map((item) => {
             const isActive = location === item.path;
             return (
               <button

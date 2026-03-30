@@ -27,7 +27,7 @@ export type ActiveProduct = typeof ACTIVE_PRODUCTS[number];
 
 export const pipelineRuns = mysqlTable("pipeline_runs", {
   id: int("id").autoincrement().primaryKey(),
-  pipelineType: mysqlEnum("pipelineType", ["video", "static", "iteration"]).notNull(),
+  pipelineType: mysqlEnum("pipelineType", ["video", "static", "iteration", "script"]).notNull(),
   status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending").notNull(),
   product: varchar("product", { length: 64 }).notNull(),
   priority: mysqlEnum("priority", ["Low", "Medium", "High", "Urgent"]).default("Medium").notNull(),
@@ -80,6 +80,14 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoFunnelStage: mysqlEnum("videoFunnelStage", ["cold", "warm", "retargeting", "retention"]).default("cold"),
   videoArchetypes: json("videoArchetypes"),
   imageModel: mysqlEnum("imageModel", ["nano_banana_pro", "nano_banana_2"]).default("nano_banana_pro"),
+  /** Script Generator pipeline columns */
+  scriptStyle: varchar("scriptStyle", { length: 16 }),
+  scriptSubStructure: varchar("scriptSubStructure", { length: 16 }),
+  scriptFunnelStage: mysqlEnum("scriptFunnelStage", ["cold", "warm", "retargeting", "retention"]),
+  scriptArchetype: varchar("scriptArchetype", { length: 32 }),
+  scriptConcept: text("scriptConcept"),
+  scriptCount: int("scriptCount"),
+  scriptStage: varchar("scriptStage", { length: 64 }),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

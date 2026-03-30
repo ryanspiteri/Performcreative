@@ -10,7 +10,7 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
     "db:migrate": "tsx scripts/run-custom-migrations.ts",
     "db:migrate:node": "node --experimental-strip-types scripts/run-custom-migrations.ts"
   },

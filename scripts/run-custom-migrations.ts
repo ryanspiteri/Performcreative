@@ -23,6 +23,7 @@ async function run() {
   const migrations = [
     "0020_add_is_default_product_renders.sql",
     "0021_add_iteration_source_type_adaptation.sql",
+    "0022_add_script_pipeline_columns.sql",
   ];
 
   for (const name of migrations) {

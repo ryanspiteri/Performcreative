@@ -421,7 +421,7 @@ export const EMOTION_STRUCTURE_MAP: Record<string, string[]> = {
 // MODULAR HOOK/BODY/CTA BANK — v3.0 Logic 2
 // ============================================================
 
-const HOOK_BANK = `
+export const HOOK_BANK = `
 HOOK BANK — five archetypes (classify the competitor's hook, then use the same archetype):
 | Archetype | Example |
 |---|---|
@@ -432,7 +432,7 @@ HOOK BANK — five archetypes (classify the competitor's hook, then use the same
 | Bold claim + number | "250mg of two forms of caffeine. Here's what that actually does to your metabolism." |
 `;
 
-const CTA_BANK = `
+export const CTA_BANK = `
 CTA BANK — matched to funnel stage:
 | Stage | CTA approach |
 |---|---|
@@ -445,7 +445,7 @@ CTA BANK — matched to funnel stage:
 // TRANSITION LOGIC — v3.0 Logic 3
 // ============================================================
 
-const TRANSITION_LOGIC = `
+export const TRANSITION_LOGIC = `
 TRANSITION LOGIC — The viewer should never feel the structure change. Each transition should feel like the most natural next sentence, not the next section of a brief.
 
 The four critical transitions:
@@ -461,7 +461,7 @@ The four critical transitions:
 // SCRIPT AUDIT CHECKLIST — v3.0 Logic 4
 // ============================================================
 
-const SCRIPT_AUDIT_CHECKLIST = `
+export const SCRIPT_AUDIT_CHECKLIST = `
 SCRIPT AUDIT CHECKLIST — run every completed script through these 10 checks:
 1. Awareness match — Does the script assume the right level of audience knowledge for the funnel stage?
 2. Hook independence — Does the hook work as a complete idea in under 3 seconds with no context?
@@ -479,7 +479,7 @@ SCRIPT AUDIT CHECKLIST — run every completed script through these 10 checks:
 // COMPLIANCE GUARDRAILS
 // ============================================================
 
-const COMPLIANCE_RULES = `
+export const COMPLIANCE_RULES = `
 COMPLIANCE GUARDRAILS (MANDATORY — violations override all scores):
 CAN SAY: "supports," "helps," "promotes," "contributes to," "designed to," "formulated with"
 CANNOT SAY: "cures," "treats," "prevents," "guarantees," "clinically proven to [specific outcome]," "doctor recommended"
@@ -1051,7 +1051,7 @@ Return your response in this EXACT JSON format:
 // STYLE-SPECIFIC SCRIPT GENERATION — v3.0 (Stage 2)
 // ============================================================
 
-function getSubStructurePromptBlock(subStructureId?: string): string {
+export function getSubStructurePromptBlock(subStructureId?: string): string {
   if (!subStructureId) return "";
   const sub = SCRIPT_SUB_STRUCTURES.find(s => s.id === subStructureId);
   if (!sub) return "";
@@ -1067,7 +1067,7 @@ Follow this sub-structure's stage progression exactly. Each stage maps to timest
 `;
 }
 
-function getArchetypePromptBlock(archetype?: ActorArchetype): string {
+export function getArchetypePromptBlock(archetype?: ActorArchetype): string {
   if (!archetype) return "";
   const profile = ARCHETYPE_PROFILES[archetype];
   if (!profile) return "";
@@ -1468,7 +1468,7 @@ export const NAMED_EXPERTS = [
   { name: "Don Norman", framework: "Design of Everyday Things", lens: "Is the message clear and intuitive? Can the viewer understand the value in 3 seconds?", instantKiller: "Message is confusing or requires too much interpretation" },
 ];
 
-async function reviewScriptWithPanel(
+export async function reviewScriptWithPanel(
   scriptJson: any,
   product: string,
   scriptStyle: string,

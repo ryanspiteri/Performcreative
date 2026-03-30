@@ -17,6 +17,7 @@ import Backgrounds from "./pages/Backgrounds";
 import IterateWinners from "./pages/IterateWinners";
 // Template Tester removed - not in use
 import UgcUpload from "./pages/UgcUpload";
+import ScriptGenerator from "./pages/ScriptGenerator";
 import UgcDashboard from "./pages/UgcDashboard";
 import HeadlineBank from "./pages/HeadlineBank";
 import ParentSelection from "./pages/ParentSelection";
@@ -39,6 +40,7 @@ function AuthenticatedRoutes() {
         <Route path="/iterate" component={IterateWinners} />
         <Route path="/iterate/generate-children" component={ParentSelection} />
 
+        <Route path="/scripts" component={ScriptGenerator} />
         <Route path="/ugc" component={UgcUpload} />
         <Route path="/ugc-clone" component={UgcUpload} />
         <Route path="/ugc/:id" component={UgcDashboard} />
