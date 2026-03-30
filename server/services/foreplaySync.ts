@@ -2,7 +2,7 @@ import { fetchVideoAds, fetchStaticAds, type ForeplayAd } from "./foreplay";
 import * as db from "../db";
 import type { InsertForeplayCreative } from "../../drizzle/schema";
 
-const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 let _syncTimer: ReturnType<typeof setInterval> | null = null;
 let _lastSyncAt: Date | null = null;
 let _isSyncing = false;
@@ -115,7 +115,7 @@ export function startAutoSync(): void {
     return;
   }
 
-  console.log("[ForeplaySync] Starting auto-sync (every 1 hour)");
+  console.log("[ForeplaySync] Starting auto-sync (every 24 hours)");
 
   // Run initial sync immediately
   (async () => {
@@ -126,7 +126,7 @@ export function startAutoSync(): void {
 
   // Set up hourly interval
   _syncTimer = setInterval(async () => {
-    console.log("[ForeplaySync] Running scheduled hourly sync...");
+    console.log("[ForeplaySync] Running scheduled daily sync...");
     const result = await syncFromForeplay();
     console.log(`[ForeplaySync] Hourly sync: ${result.newCount} new creatives`);
   }, SYNC_INTERVAL_MS);
