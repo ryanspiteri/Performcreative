@@ -914,7 +914,7 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
                       <tr key={`row-${i}`} className="border-b border-white/5">
                         <td className="py-3 pr-4 text-orange-400 font-medium align-top whitespace-nowrap">{row.timestamp}</td>
                         <td className="py-3 pr-4 text-gray-300 align-top">{row.visual}</td>
-                        <td className="py-3 text-gray-300 align-top">{row.dialogue}</td>
+                        <td className="py-3 text-gray-300 align-top">{row.dialogue}{row.transitionLine ? ` ${row.transitionLine}` : ""}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1206,7 +1206,7 @@ function formatScriptText(script: any): string {
   let text = `${script.title}\n\nHOOK: ${script.hook}\n\nFULL SCRIPT:\n`;
   if (script.script && Array.isArray(script.script)) {
     for (const row of script.script) {
-      text += `\n[${row.timestamp}]\nVISUAL: ${row.visual}\nDIALOGUE: ${row.dialogue}\n`;
+      text += `\n[${row.timestamp}]\nVISUAL: ${row.visual}\nDIALOGUE: ${row.dialogue}${row.transitionLine ? ` ${row.transitionLine}` : ""}\n`;
     }
   }
   text += `\nVISUAL DIRECTION:\n${script.visualDirection}\n\nSTRATEGIC THESIS:\n${script.strategicThesis}`;

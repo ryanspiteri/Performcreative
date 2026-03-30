@@ -456,10 +456,7 @@ export default function ScriptGenerator() {
                                         <td className="py-2 px-2 text-gray-500 font-mono align-top">{seg.timestamp}</td>
                                         <td className="py-2 px-2 text-gray-400 align-top">{seg.visual}</td>
                                         <td className="py-2 px-2 text-white align-top">
-                                          {seg.dialogue}
-                                          {seg.transitionLine && (
-                                            <p className="text-gray-500 italic mt-1 text-[11px]">{seg.transitionLine}</p>
-                                          )}
+                                          {seg.dialogue}{seg.transitionLine ? ` ${seg.transitionLine}` : ""}
                                         </td>
                                       </tr>
                                     ))}
