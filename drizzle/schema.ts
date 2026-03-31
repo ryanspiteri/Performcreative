@@ -16,6 +16,7 @@ export const users = mysqlTable("users", {
   canvaAccessToken: text("canvaAccessToken"),
   canvaRefreshToken: text("canvaRefreshToken"),
   canvaTokenExpiresAt: timestamp("canvaTokenExpiresAt"),
+  passwordHash: varchar("passwordHash", { length: 256 }),
 });
 
 export type User = typeof users.$inferSelect;

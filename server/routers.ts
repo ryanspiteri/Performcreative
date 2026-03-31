@@ -1,7 +1,7 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
@@ -24,9 +24,8 @@ import { scriptGeneratorRouter } from "./routers/scriptGenerator";
 import { runFaceSwapPipeline } from "./services/faceSwapPipeline";
 import { validatePortrait } from "./services/portraitValidator";
 import { withTimeout, STEP_TIMEOUT } from "./services/_shared";
-
-const VALID_USERNAME = "ryan@onesthealth.com";
-const VALID_PASSWORD = "TeamOnest";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 // ============================================================
 // FACE SWAP ROUTER — declared before appRouter to avoid hoisting issues
@@ -243,25 +242,23 @@ export const appRouter = router({
     login: publicProcedure
       .input(z.object({ username: z.string(), password: z.string() }))
       .mutation(async ({ input, ctx }) => {
-        if (input.username !== VALID_USERNAME || input.password !== VALID_PASSWORD) {
+        const user = await db.getUserByEmail(input.username);
+        if (!user || !user.passwordHash) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
         }
-        const openId = "onest-admin-user";
-        await db.upsertUser({
-          openId,
-          name: "ONEST Admin",
-          email: "admin@onest.com.au",
-          role: "admin",
-          lastSignedIn: new Date(),
-        });
+        const valid = await bcrypt.compare(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
+        }
+        await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
         const secretKey = new TextEncoder().encode(ENV.cookieSecret);
-        const token = await new SignJWT({ openId, appId: ENV.appId, name: "ONEST Admin" })
+        const token = await new SignJWT({ openId: user.openId, appId: ENV.appId, name: user.name || "" })
           .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-          .setExpirationTime(Math.floor((Date.now() + 365 * 24 * 60 * 60 * 1000) / 1000))
+          .setExpirationTime(Math.floor((Date.now() + ONE_YEAR_MS) / 1000))
           .sign(secretKey);
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
-        return { success: true, user: { name: "ONEST Admin" } };
+        ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        return { success: true, user: { name: user.name || user.email || "" } };
       }),
 
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -269,6 +266,58 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+
+  team: router({
+    list: adminProcedure.query(async () => db.listUsers()),
+
+    invite: adminProcedure
+      .input(z.object({
+        name: z.string().min(1).max(100),
+        email: z.string().email().max(320),
+        password: z.string().min(8).max(128),
+        role: z.enum(["user", "admin"]).default("user"),
+      }))
+      .mutation(async ({ input }) => {
+        const existing = await db.getUserByEmail(input.email);
+        if (existing) throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        const openId = `local-${crypto.randomUUID()}`;
+        await db.upsertUser({
+          openId,
+          name: input.name,
+          email: input.email,
+          role: input.role,
+          passwordHash,
+        });
+        return { success: true };
+      }),
+
+    updateRole: adminProcedure
+      .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
+      .mutation(async ({ input }) => {
+        await db.updateUserRole(input.userId, input.role);
+        return { success: true };
+      }),
+
+    remove: adminProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ input }) => {
+        const user = await db.getUserById(input.userId);
+        if (user?.openId === "onest-admin-user") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Cannot remove the owner account" });
+        }
+        await db.deleteUser(input.userId);
+        return { success: true };
+      }),
+
+    resetPassword: adminProcedure
+      .input(z.object({ userId: z.number(), newPassword: z.string().min(8).max(128) }))
+      .mutation(async ({ input }) => {
+        const passwordHash = await bcrypt.hash(input.newPassword, 10);
+        await db.updateUserPasswordHash(input.userId, passwordHash);
+        return { success: true };
+      }),
   }),
 
   pipeline: router({

@@ -12,6 +12,7 @@ import { handleCanvaCallback } from "../routers/canva";
 import multer from "multer";
 import * as db from "../db";
 import { storagePut } from "../storage";
+import bcrypt from "bcryptjs";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -30,6 +31,24 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+async function seedAdminUser() {
+  try {
+    const existing = await db.getUserByEmail("ryan@onesthealth.com");
+    if (existing?.passwordHash) return;
+    const passwordHash = await bcrypt.hash("TeamOnest", 10);
+    await db.upsertUser({
+      openId: "onest-admin-user",
+      name: "Ryan Spiteri",
+      email: "ryan@onesthealth.com",
+      role: "admin",
+      passwordHash,
+    });
+    console.log("[Seed] Admin user created/updated with hashed password");
+  } catch (error) {
+    console.error("[Seed] Failed to seed admin user:", error);
+  }
 }
 
 async function startServer() {
@@ -188,7 +207,12 @@ async function startServer() {
       res.json({ url, fileKey });
     } catch (error: any) {
       console.error(`[Organic Upload] Error:`, error);
-      res.status(500).json({ error: error.message || "Upload failed" });
+      const isConfigError = error.message?.includes("Storage proxy credentials missing");
+      res.status(isConfigError ? 503 : 500).json({
+        error: isConfigError
+          ? "Video storage is temporarily unavailable. Please contact support."
+          : "Upload failed. Please try again.",
+      });
     }
   });
 
@@ -222,6 +246,8 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     console.log(`Server timeout: ${server.timeout}ms`);
+    // Seed admin user with hashed password
+    seedAdminUser();
     // Start auto-sync from Foreplay
     startAutoSync();
   });
