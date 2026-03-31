@@ -623,26 +623,24 @@ export default function VisualContent() {
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Captions
                   </p>
-                  {!captions && (
-                    <Button
-                      onClick={handleGenerateCaptions}
-                      disabled={generateCaption.isPending}
-                      size="sm"
-                      className="bg-[#FF3838] hover:bg-[#FF3838]/90 text-white text-xs"
-                    >
-                      {generateCaption.isPending ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          Generate Captions
-                        </>
-                      )}
-                    </Button>
-                  )}
+                  <Button
+                    onClick={handleGenerateCaptions}
+                    disabled={generateCaption.isPending}
+                    size="sm"
+                    className="bg-[#FF3838] hover:bg-[#FF3838]/90 text-white text-xs"
+                  >
+                    {generateCaption.isPending ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {captions ? "Regenerate Captions" : "Generate Captions"}
+                      </>
+                    )}
+                  </Button>
                 </div>
 
                 {captions ? (
