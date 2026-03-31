@@ -7,6 +7,12 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  /** DigitalOcean Spaces (S3-compatible file storage) */
+  doSpacesKey: process.env.DO_SPACES_KEY ?? "",
+  doSpacesSecret: process.env.DO_SPACES_SECRET ?? "",
+  doSpacesBucket: process.env.DO_SPACES_BUCKET ?? "",
+  doSpacesRegion: process.env.DO_SPACES_REGION ?? "",
+  doSpacesEndpoint: process.env.DO_SPACES_ENDPOINT ?? "",
   foreplayApiKey: process.env.FOREPLAY_API_KEY ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
