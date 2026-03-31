@@ -1,4 +1,4 @@
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
 import { generatePKCE, getCanvaAuthUrl, exchangeCodeForToken, refreshAccessToken, uploadAssetToCanva, pollAssetUploadJob, createDesignFromAsset, getBrandTemplateDataset, createAutofillJob, pollAutofillJob } from "../services/canva";
@@ -46,7 +46,7 @@ export const canvaRouter = router({
   }),
 
   // Upload image to Canva and create design
-  uploadAndCreateDesign: publicProcedure
+  uploadAndCreateDesign: protectedProcedure
     .input(z.object({
       imageUrl: z.string(),
       title: z.string(),
@@ -116,7 +116,7 @@ export const canvaRouter = router({
     }),
 
   // Create editable design using Autofill API
-  createEditableDesign: publicProcedure
+  createEditableDesign: protectedProcedure
     .input(z.object({
       templateId: z.string(),
       headline: z.string(),
@@ -213,7 +213,7 @@ export const canvaRouter = router({
     }),
 
   // Disconnect Canva
-  disconnect: publicProcedure.mutation(async ({ ctx }) => {
+  disconnect: protectedProcedure.mutation(async ({ ctx }) => {
     if (!ctx.user) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Must be logged in" });
     }

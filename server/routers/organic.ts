@@ -1,4 +1,4 @@
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import * as db from "../db";
 import { TRPCError } from "@trpc/server";
@@ -11,7 +11,7 @@ export const organicRouter = router({
   // Video Pipeline
   // ──────────────────────────────────────────────────────────────────────────
 
-  triggerVideo: publicProcedure
+  triggerVideo: protectedProcedure
     .input(
       z.object({
         videoInputPath: z.string(),
@@ -47,7 +47,7 @@ export const organicRouter = router({
       return { runId };
     }),
 
-  approveTranscript: publicProcedure
+  approveTranscript: protectedProcedure
     .input(
       z.object({
         runId: z.number(),
@@ -82,7 +82,7 @@ export const organicRouter = router({
   // Caption Generator
   // ──────────────────────────────────────────────────────────────────────────
 
-  generateCaption: publicProcedure
+  generateCaption: protectedProcedure
     .input(
       z.object({
         pillar: z.string(),
@@ -96,7 +96,7 @@ export const organicRouter = router({
       return result;
     }),
 
-  generateBatchCaptions: publicProcedure
+  generateBatchCaptions: protectedProcedure
     .input(
       z.object({
         items: z
@@ -120,7 +120,7 @@ export const organicRouter = router({
   // Caption Examples
   // ──────────────────────────────────────────────────────────────────────────
 
-  addCaptionExample: publicProcedure
+  addCaptionExample: protectedProcedure
     .input(
       z.object({
         pillar: z.string(),
@@ -148,7 +148,7 @@ export const organicRouter = router({
       return examples;
     }),
 
-  deleteCaptionExample: publicProcedure
+  deleteCaptionExample: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await db.deleteCaptionExample(input.id);

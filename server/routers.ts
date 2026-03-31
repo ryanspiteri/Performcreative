@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
@@ -32,7 +32,7 @@ const VALID_PASSWORD = "TeamOnest";
 // FACE SWAP ROUTER — declared before appRouter to avoid hoisting issues
 // ============================================================
 const faceSwapRouter = router({
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       sourceVideoUrl: z.string().optional(), // optional when ugcVariantId is provided
       portraitBase64: z.string(),
@@ -98,14 +98,14 @@ const faceSwapRouter = router({
       return (jobs as any[]).find((j: any) => j.ugcVariantId === input.variantId) || null;
     }),
 
-  validatePortrait: publicProcedure
+  validatePortrait: protectedProcedure
     .input(z.object({
       portraitBase64: z.string(),
       mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
     }))
     .mutation(async ({ input }) => validatePortrait(input.portraitBase64, input.mimeType)),
 
-  uploadPortrait: publicProcedure
+  uploadPortrait: protectedProcedure
     .input(z.object({
       base64: z.string(),
       mimeType: z.string().default("image/jpeg"),
@@ -142,7 +142,7 @@ const faceSwapRouter = router({
       return voices.filter(v => v.accent === input.accent);
     }),
 
-  pushToClickUp: publicProcedure
+  pushToClickUp: protectedProcedure
     .input(z.object({
       jobId: z.number(),
       product: z.string(),
@@ -165,7 +165,7 @@ const faceSwapRouter = router({
       return { taskId: task.id, taskUrl: task.url };
     }),
 
-  generateScript: publicProcedure
+  generateScript: protectedProcedure
     .input(z.object({
       uploadId: z.number(),
       actorArchetype: z.string(),
@@ -283,7 +283,7 @@ export const appRouter = router({
       }),
 
     // Video pipeline trigger — v3.0 with funnel stage + archetype
-    triggerVideo: publicProcedure
+    triggerVideo: protectedProcedure
       .input(z.object({
         product: z.string(),
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
@@ -388,7 +388,7 @@ export const appRouter = router({
       }));
     }),
 
-    syncForeplayNow: publicProcedure.mutation(async () => {
+    syncForeplayNow: protectedProcedure.mutation(async () => {
       const result = await syncFromForeplay();
       if (result.error) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
@@ -405,7 +405,7 @@ export const appRouter = router({
     listBoards: publicProcedure.query(async () => listBoards()),
 
     // Static pipeline trigger (Stages 1-3 + pause at 3b for selection)
-    triggerStatic: publicProcedure
+    triggerStatic: protectedProcedure
       .input(z.object({
         product: z.string(),
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
@@ -438,7 +438,7 @@ export const appRouter = router({
       }),
 
     // Submit user selections at Stage 3b and resume pipeline
-    submitSelections: publicProcedure
+    submitSelections: protectedProcedure
       .input(z.object({
         runId: z.number(),
         selections: z.object({
@@ -492,7 +492,7 @@ export const appRouter = router({
       }),
 
     // Generate headline-matched background concepts
-    generateBackgrounds: publicProcedure
+    generateBackgrounds: protectedProcedure
       .input(z.object({
         runId: z.number(),
         headlines: z.array(z.string()).length(3),
@@ -622,7 +622,7 @@ Return JSON in this exact format:
     }),
 
     // Team approval endpoint for Stage 6
-    teamApprove: publicProcedure
+    teamApprove: protectedProcedure
       .input(z.object({
         runId: z.number(),
         approved: z.boolean(),
@@ -661,7 +661,7 @@ Return JSON in this exact format:
       }),
 
     // Upload video for winning ad mode
-    uploadWinningAdVideo: publicProcedure
+    uploadWinningAdVideo: protectedProcedure
       .input(z.object({
         fileName: z.string(),
         fileBase64: z.string(),
@@ -680,7 +680,7 @@ Return JSON in this exact format:
       }),
 
     // Video brief approval — user approves the brief before scripts are generated
-    approveVideoBrief: publicProcedure
+    approveVideoBrief: protectedProcedure
       .input(z.object({
         runId: z.number(),
         approved: z.boolean(),
@@ -715,7 +715,7 @@ Return JSON in this exact format:
       }),
 
     // Video script approval — user approves scripts before ClickUp push
-    approveVideoScripts: publicProcedure
+    approveVideoScripts: protectedProcedure
       .input(z.object({
         runId: z.number(),
         approved: z.boolean(),
@@ -745,7 +745,7 @@ Return JSON in this exact format:
     // ============================================================
     // ITERATION PIPELINE — Iterate on your own winning ads
     // ============================================================
-    triggerIteration: publicProcedure
+    triggerIteration: protectedProcedure
       .input(z.object({
         product: z.string(),
         priority: z.enum(["Low", "Medium", "High", "Urgent"]),
@@ -793,7 +793,7 @@ Return JSON in this exact format:
         return { runId, status: "running" };
       }),
 
-    approveIterationBrief: publicProcedure
+    approveIterationBrief: protectedProcedure
       .input(z.object({
         runId: z.number(),
         approved: z.boolean(),
@@ -826,7 +826,7 @@ Return JSON in this exact format:
       }),
 
     // Approve iteration variations and push to ClickUp
-    approveIterationVariations: publicProcedure
+    approveIterationVariations: protectedProcedure
       .input(z.object({
         runId: z.number(),
         approved: z.boolean(),
@@ -858,10 +858,10 @@ Return JSON in this exact format:
       }),
 
     // Regenerate a single iteration variation
-    regenerateVariation: publicProcedure
+    regenerateVariation: protectedProcedure
       .input(z.object({
         runId: z.number(),
-        variationIndex: z.number().min(0).max(2),
+        variationIndex: z.number().min(0).max(49),
         headline: z.string().optional(),
         subheadline: z.string().optional(),
         backgroundPrompt: z.string().optional(),
@@ -890,7 +890,7 @@ Return JSON in this exact format:
       }),
 
     // Push completed iteration variations to ClickUp
-    pushIterationToClickUp: publicProcedure
+    pushIterationToClickUp: protectedProcedure
       .input(z.object({
         runId: z.number(),
       }))
@@ -922,7 +922,7 @@ Return JSON in this exact format:
       }),
 
     // Generate child variations from selected parent runs
-    generateChildren: publicProcedure
+    generateChildren: protectedProcedure
       .input(z.object({
         parentRunIds: z.array(z.number()).min(1).max(10),
         childCount: z.number().min(1).max(10).default(5),
@@ -976,7 +976,7 @@ Return JSON in this exact format:
         return db.listProductRenders(input?.product);
       }),
 
-    upload: publicProcedure
+    upload: protectedProcedure
       .input(z.object({
         product: z.string(),
         fileName: z.string(),
@@ -1000,14 +1000,14 @@ Return JSON in this exact format:
         return { id, url, fileKey };
       }),
 
-    delete: publicProcedure
+    delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.deleteProductRender(input.id);
         return { success: true };
       }),
 
-    setDefault: publicProcedure
+    setDefault: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.setDefaultProductRender(input.id);
@@ -1029,7 +1029,7 @@ Return JSON in this exact format:
         return db.getProductInfo(input.product);
       }),
 
-    upsert: publicProcedure
+    upsert: protectedProcedure
       .input(z.object({
         product: z.string(),
         ingredients: z.string().optional(),
@@ -1057,7 +1057,7 @@ Return JSON in this exact format:
         return db.listBackgrounds(input?.category);
       }),
 
-    upload: publicProcedure
+    upload: protectedProcedure
       .input(z.object({
         name: z.string(),
         category: z.string(),
@@ -1081,7 +1081,7 @@ Return JSON in this exact format:
         return { id, url, fileKey };
       }),
 
-    delete: publicProcedure
+    delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.deleteBackground(input.id);
@@ -1104,7 +1104,7 @@ Return JSON in this exact format:
       }),
 
     // Upload video and create UGC record
-    upload: publicProcedure
+    upload: protectedProcedure
       .input(z.object({
         fileName: z.string(),
         base64Data: z.string(),
@@ -1190,7 +1190,7 @@ Return JSON in this exact format:
       }),
 
     // Start transcription + structure extraction
-    startExtraction: publicProcedure
+    startExtraction: protectedProcedure
       .input(z.object({ uploadId: z.number() }))
       .mutation(async ({ input }) => {
         const upload = await db.getUgcUpload(input.uploadId);
@@ -1247,7 +1247,7 @@ Return JSON in this exact format:
       }),
 
     // Approve structure blueprint
-    approveBlueprint: publicProcedure
+    approveBlueprint: protectedProcedure
       .input(z.object({ uploadId: z.number() }))
       .mutation(async ({ input }) => {
         await db.updateUgcUpload(input.uploadId, {
@@ -1258,7 +1258,7 @@ Return JSON in this exact format:
       }),
 
     // Generate variants
-    generateVariants: publicProcedure
+    generateVariants: protectedProcedure
       .input(z.object({ uploadId: z.number() }))
       .mutation(async ({ input }) => {
         const upload = await db.getUgcUpload(input.uploadId);
@@ -1315,7 +1315,7 @@ Return JSON in this exact format:
       .query(async ({ input }) => db.listUgcVariants(input.uploadId)),
 
     // Approve selected variants
-    approveVariants: publicProcedure
+    approveVariants: protectedProcedure
       .input(z.object({ variantIds: z.array(z.number()) }))
       .mutation(async ({ input }) => {
         for (const id of input.variantIds) {
@@ -1328,7 +1328,7 @@ Return JSON in this exact format:
       }),
 
     // Reject selected variants
-    rejectVariants: publicProcedure
+    rejectVariants: protectedProcedure
       .input(z.object({ variantIds: z.array(z.number()) }))
       .mutation(async ({ input }) => {
         for (const id of input.variantIds) {
@@ -1341,7 +1341,7 @@ Return JSON in this exact format:
       }),
 
     // Push approved variants to ClickUp
-    pushToClickup: publicProcedure
+    pushToClickup: protectedProcedure
       .input(z.object({ variantIds: z.array(z.number()) }))
       .mutation(async ({ input }) => {
         const { pushUgcVariantsToClickup } = await import("./services/clickup");
@@ -1377,7 +1377,7 @@ Return JSON in this exact format:
       }),
 
     // Retry transcription for a failed upload
-    retryTranscription: publicProcedure
+    retryTranscription: protectedProcedure
       .input(z.object({ uploadId: z.number() }))
       .mutation(async ({ input }) => {
         const upload = await db.getUgcUpload(input.uploadId);
@@ -1433,7 +1433,7 @@ Return JSON in this exact format:
       }),
 
     // Create headline
-    create: publicProcedure
+    create: protectedProcedure
       .input(z.object({
         headline: z.string(),
         subheadline: z.string().optional(),
@@ -1451,7 +1451,7 @@ Return JSON in this exact format:
       }),
 
     // Update headline
-    update: publicProcedure
+    update: protectedProcedure
       .input(z.object({
         id: z.number(),
         headline: z.string(),
@@ -1470,7 +1470,7 @@ Return JSON in this exact format:
       }),
 
     // Delete headline
-    delete: publicProcedure
+    delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.deleteHeadline(input.id);

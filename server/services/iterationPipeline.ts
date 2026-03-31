@@ -243,53 +243,60 @@ export async function runIterationStage3(runId: number, run: any) {
 
       geminiResults.push(...await runWithConcurrency(tasks, 2));
     } else {
-      // Fallback: 3 generic variations with enhanced prompts
-      const fallbackHeadlines = [
-        `${product.toUpperCase()} - Unleash Your Power`,
-        `${product.toUpperCase()} - Transform Your Energy`,
-        `${product.toUpperCase()} - Premium Performance`,
+      // Fallback: generate variations with rotating headlines and backgrounds
+      const fallbackHeadlineTemplates = [
+        `${product.toUpperCase()} - MAXIMUM DOSE`,
+        `${product.toUpperCase()} - FULLY DOSED`,
+        `${product.toUpperCase()} - NO FILLERS`,
+        `${product.toUpperCase()} - REAL RESULTS`,
+        `${product.toUpperCase()} - CLINICALLY DOSED`,
       ];
-      
+
       const fallbackBackgrounds = [
         "Dramatic warm crimson red accent lighting with energetic mood, subtle smoke particles",
         "Cool electric blue accent lighting with mysterious mood, geometric light rays",
         "Warm amber spotlight with premium luxury aesthetic, minimalist dark background",
+        "Deep emerald green accent lighting with natural vitality feel, soft particle effects",
+        "Bold magenta and orange gradient lighting with high-energy sport aesthetic",
       ];
 
-      for (let i = 0; i < 3; i++) {
-        console.log(`[Iteration] Generating fallback variation ${i + 1}/3 with Nano Banana Pro`);
-        
+      const tasks = Array.from({ length: variationCount }, (_, i) => async () => {
+        console.log(`[Iteration] Generating fallback variation ${i + 1}/${variationCount}`);
+
+        const headline = fallbackHeadlineTemplates[i % fallbackHeadlineTemplates.length];
+        const bg = fallbackBackgrounds[i % fallbackBackgrounds.length];
+
         const fallbackPrompt = buildReferenceBasedPrompt({
-          headline: fallbackHeadlines[i],
+          headline,
           productName: `ONEST Health ${product}`,
-          backgroundStyleDescription: fallbackBackgrounds[i],
+          backgroundStyleDescription: bg,
           aspectRatio: aspectRatio as any,
         });
-        
+
         const result = await generateVariationWithFallback({
           prompt: fallbackPrompt,
-          controlImageUrl: sourceUrl, // Pass control image as visual reference
+          controlImageUrl: sourceUrl,
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           model: imageModel,
-          useCompositing: false, // Single-pass: Gemini generates full scene including product
+          useCompositing: false,
           productPosition: "center",
           productScale: 0.45,
         }, i);
-        
-        const geminiImages = [{ url: result.imageUrl, s3Key: result.imageUrl.split('/').pop() || '' }];
 
-        geminiResults.push({
-          url: geminiImages[0].url,
-          s3Key: geminiImages[0].s3Key,
-          headline: `${product.toUpperCase()} VARIATION ${i + 1}`,
+        return {
+          url: result.imageUrl,
+          s3Key: result.imageUrl.split('/').pop() || '',
+          headline,
           subheadline: null,
           angle: null,
-          backgroundNote: null,
+          backgroundNote: bg,
           productImageUrl: productRender.url,
           controlImageUrl: sourceUrl,
-        });
-      }
+        };
+      });
+
+      geminiResults.push(...await runWithConcurrency(tasks, 2));
     }
 
     const results = geminiResults;
@@ -483,9 +490,15 @@ export async function regenerateIterationVariation(
     finalUrl = result.imageUrl;
   }
 
-  // Update the specific variation in the array
+  // Update the specific variation in the array, preserving existing metadata
   const variationLabel = variationIndex === 0 ? "Control" : `Variation ${variationIndex + 1}`;
-  variations[variationIndex] = { url: finalUrl, variation: variationLabel };
+  variations[variationIndex] = {
+    ...variations[variationIndex],
+    url: finalUrl,
+    variation: variationLabel,
+    ...(overrides?.headline && { headline: overrides.headline }),
+    ...(overrides?.subheadline && { subheadline: overrides.subheadline }),
+  };
 
   await db.updatePipelineRun(runId, {
     iterationVariations: variations,

@@ -170,7 +170,7 @@ export function IterationResults({ run }: { run: any }) {
       )}
       {/* Stage Progress Bar */}
       <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
-        <h2 className="text-white font-semibold mb-4">Iteration Pipeline Progress</h2>
+        <h2 className="text-white font-semibold mb-4">Static Iteration Progress</h2>
         <div className="flex items-center gap-1 overflow-x-auto pb-2">
           {stages.map((stage, i, arr) => {
             const Icon = stage.icon;
@@ -367,7 +367,7 @@ export function IterationResults({ run }: { run: any }) {
             <Sparkles className="w-4 h-4 text-[#FF3838]" /> Stage 3: Generated Variations ({variations.length})
           </h2>
           <p className="text-gray-400 text-xs mb-4">
-            Generated with Flux Pro backgrounds + Bannerbear compositing
+            Generated with {run.imageModel === 'nano_banana_2' ? 'Nano Banana 2' : 'Nano Banana Pro'} image generation
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {variations.map((v: any, i: number) => {
@@ -401,7 +401,7 @@ export function IterationResults({ run }: { run: any }) {
                   {isRegenerating ? (
                     <div className="w-full aspect-square bg-[#191B1F] flex flex-col items-center justify-center gap-3">
                       <Loader2 className="w-8 h-8 text-[#FF3838] animate-spin" />
-                      <span className="text-gray-400 text-xs">Regenerating with Flux Pro...</span>
+                      <span className="text-gray-400 text-xs">Regenerating variation...</span>
                       <span className="text-gray-600 text-[10px]">This may take 1-2 minutes</span>
                     </div>
                   ) : v.url && !v.url.includes("placeholder") ? (
@@ -709,7 +709,7 @@ export function IterationResults({ run }: { run: any }) {
                 Iteration pipeline completed
               </div>
               <p className="text-emerald-300/60 text-xs mt-1">
-                {variations.length} variations generated with Flux Pro + Bannerbear
+                {variations.length} variations generated with {run.imageModel === 'nano_banana_2' ? 'Nano Banana 2' : 'Nano Banana Pro'}
                 {clickupTasks.filter(t => t.taskId).length > 0 && ` · ${clickupTasks.filter(t => t.taskId).length} ClickUp tasks created`}
                 {clickupTasks.length === 0 && " · Completed without ClickUp push"}
               </p>

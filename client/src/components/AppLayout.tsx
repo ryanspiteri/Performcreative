@@ -4,21 +4,21 @@ import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette,
 import { useState } from "react";
 
 const navItems = [
-  // PIPELINE (0-3)
-  { icon: Image, label: "Browse Creatives", path: "/" },
-  { icon: RefreshCw, label: "Iterate Winners", path: "/iterate" },
-  { icon: Video, label: "UGC Clone Engine", path: "/ugc" },
-  { icon: PenTool, label: "Script Generator", path: "/scripts" },
+  // PAID ADS (0-3)
+  { icon: Image, label: "Ad Library", path: "/" },
+  { icon: RefreshCw, label: "Static Iteration", path: "/iterate" },
+  { icon: Video, label: "UGC Studio", path: "/ugc" },
+  { icon: PenTool, label: "Script Studio", path: "/scripts" },
   // ORGANIC (4-7)
   { icon: Video, label: "Organic Video", path: "/organic/video" },
-  { icon: ImagePlus, label: "Visual Content", path: "/organic/visual" },
-  { icon: FileText, label: "Caption Generator", path: "/organic/captions" },
+  { icon: ImagePlus, label: "Social Graphics", path: "/organic/visual" },
+  { icon: FileText, label: "Captions", path: "/organic/captions" },
   { icon: BookOpen, label: "Content Library", path: "/organic/library" },
-  // ASSETS (7-9)
+  // ASSETS (8-10)
   { icon: BookText, label: "Headline Bank", path: "/headlines" },
   { icon: ImagePlus, label: "Product Renders", path: "/renders" },
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
-  // SYSTEM (10-12)
+  // SYSTEM (11-13)
   { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -73,7 +73,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Section: Pipeline */}
         <div className="px-3 pt-4 pb-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Pipeline</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Paid Ads</p>
         </div>
         <nav className="px-3 space-y-0.5">
           {navItems.slice(0, 4).map((item) => {

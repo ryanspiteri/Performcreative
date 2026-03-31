@@ -3,15 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-
-const PRODUCTS = [
-  "Hyperburn",
-  "HyperLoad",
-  "HyperSleep",
-  "HyperGrowth",
-  "SuperGreens",
-  "CollagenPlus",
-];
+import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 
 type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
@@ -31,7 +23,7 @@ type CompetitorCreative = {
 export default function IterateWinners() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<"upload" | "running" | "results">("upload");
-  const [product, setProduct] = useState(PRODUCTS[0]);
+  const [product, setProduct] = useState<string>(ACTIVE_PRODUCTS[0]);
   const [sourceType, setSourceType] = useState<SourceType>("own_ad");
   const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>("concept");
   const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorCreative | null>(null);
@@ -133,7 +125,7 @@ export default function IterateWinners() {
   const perImageCostPro = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.12 : 0.24;
   const perImageCostNB2 = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.04 : 0.08;
   const perImageCost = imageModel === 'nano_banana_2' ? perImageCostNB2 : perImageCostPro;
-  const estimatedCost = variationCount * perImageCost * 2; // 2x for two-pass compositing
+  const estimatedCost = variationCount * perImageCost; // Single-pass generation (useCompositing: false)
 
   const sourceImageUrl = sourceType === "competitor_ad" ? (selectedCompetitor?.imageUrl || null) : uploadedImageUrl;
   const hasSource = !!sourceImageUrl;
@@ -190,8 +182,8 @@ export default function IterateWinners() {
               <RefreshCw className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Iterate on Winners</h1>
-              <p className="text-gray-400 text-sm">Upload a winning ad and generate new variations with different copy angles</p>
+              <h1 className="text-2xl font-bold text-white">Static Iteration</h1>
+              <p className="text-gray-400 text-sm">Upload a winning static ad and generate new variations with different copy angles</p>
             </div>
           </div>
           <button
@@ -243,7 +235,7 @@ export default function IterateWinners() {
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Select Product</label>
             <div className="grid grid-cols-3 gap-2">
-              {PRODUCTS.map((p) => (
+              {ACTIVE_PRODUCTS.map((p) => (
                 <button
                   key={p}
                   onClick={() => setProduct(p)}

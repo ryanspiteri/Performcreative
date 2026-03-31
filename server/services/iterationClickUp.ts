@@ -3,7 +3,9 @@
  * Pushes completed ad variations to Graphic Ad Board for review
  */
 
-const CLICKUP_API_KEY = process.env.CLICKUP_API_KEY!;
+import { ENV } from "../_core/env";
+
+const CLICKUP_API_KEY = ENV.clickupApiKey;
 const GRAPHIC_AD_BOARD_LIST_ID = "900302632860";
 const LAUREN_ROW_USER_ID = "2772206";
 const REVIEW_STATUS = "review";
