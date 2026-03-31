@@ -14,7 +14,7 @@ export const organicRouter = router({
   triggerVideo: protectedProcedure
     .input(
       z.object({
-        videoInputPath: z.string(),
+        videoInputPaths: z.array(z.string()).min(1).max(10),
         subtitleStyle: z.string().default("tiktok_bold"),
         contentPillar: z.string().optional(),
         contentPurpose: z.string().optional(),
@@ -26,7 +26,7 @@ export const organicRouter = router({
         type: "organic_video",
         status: "running",
         stage: "uploading",
-        videoInputPath: input.videoInputPath,
+        videoInputPath: JSON.stringify(input.videoInputPaths),
         subtitleStyle: input.subtitleStyle,
         contentPillar: input.contentPillar,
         contentPurpose: input.contentPurpose,
@@ -35,7 +35,7 @@ export const organicRouter = router({
 
       // Fire-and-forget: run stages 1-3 in the background
       runOrganicVideoStages1to3(runId, {
-        videoInputPath: input.videoInputPath,
+        videoInputPaths: input.videoInputPaths,
         subtitleStyle: input.subtitleStyle as any,
         contentPillar: input.contentPillar,
         contentPurpose: input.contentPurpose,
@@ -93,7 +93,7 @@ export const organicRouter = router({
     )
     .mutation(async ({ input }) => {
       const result = await generateCaption(input);
-      return result;
+      return { captions: result };
     }),
 
   generateBatchCaptions: protectedProcedure
