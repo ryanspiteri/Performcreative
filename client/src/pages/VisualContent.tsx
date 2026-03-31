@@ -703,19 +703,6 @@ export default function VisualContent() {
               </Button>
             )}
 
-            {/* Empty state when no slides exist yet */}
-            {slides.length > 0 && slides[0].status === "draft" && !isGenerating && (
-              <div className="bg-[#0D0F12] rounded-xl border border-white/5 flex items-center justify-center py-16">
-                <div className="text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
-                    <ImagePlus className="w-6 h-6 text-gray-600" />
-                  </div>
-                  <p className="text-gray-500 text-sm">
-                    Configure your content and hit Generate All
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
