@@ -194,8 +194,15 @@ export async function runIterationStage3(runId: number, run: any) {
     // Get creativity level and aspect ratio from run config
     const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
     const aspectRatio = run.aspectRatio || "1:1";
-    const variationCount = run.variationCount || briefData?.variations?.length || 3;
-    
+    const requestedCount = run.variationCount || briefData?.variations?.length || 3;
+    const variationCount = (briefData?.variations && Array.isArray(briefData.variations))
+      ? Math.min(requestedCount, briefData.variations.length)
+      : requestedCount;
+
+    if (requestedCount > variationCount) {
+      console.warn(`[Iteration] Brief only contains ${variationCount} variations but ${requestedCount} were requested. Generating ${variationCount}.`);
+    }
+
     console.log(`[Iteration] Using creativity level: ${creativityLevel}`);
     console.log(`[Iteration] Aspect ratio: ${aspectRatio}`);
     console.log(`[Iteration] Generating ${variationCount} variations`);

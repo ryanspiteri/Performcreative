@@ -165,10 +165,13 @@ export async function runStaticStage4(runId: number, run: any, selections: Image
   let generatedImages: any[];
   try {
     const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
+    if (!ad.imageUrl) {
+      throw new Error("Original reference ad image not found in run data. The pipeline cannot generate variations without a reference image.");
+    }
     const variations = await withTimeout(
       generateStaticAdVariationsWithGemini(
         run.staticBrief || "",
-        ad.imageUrl || "",
+        ad.imageUrl,
         run.product,
         selections
       ),
@@ -262,9 +265,15 @@ export async function runStaticRevision(runId: number, run: any, teamNotes: stri
 
   try {
     const ad = ((run.staticAdImages as any[]) || []).find((img: any) => !img.variation) || { imageUrl: "" };
+    if (!ad.imageUrl) {
+      throw new Error("Original reference ad image not found in run data. Cannot revise without a reference image.");
+    }
+
+    // Preserve user's original headline/subheadline selections during revision
+    const selections = run.userSelections as ImageSelections | undefined;
 
     const variations = await withTimeout(
-      generateStaticAdVariationsWithGemini(run.staticBrief || "", ad.imageUrl || "", run.product, undefined, teamNotes),
+      generateStaticAdVariationsWithGemini(run.staticBrief || "", ad.imageUrl, run.product, selections, teamNotes),
       STAGE_TIMEOUT * 2,
       "Revision: Image Generation"
     );
@@ -282,8 +291,6 @@ export async function runStaticRevision(runId: number, run: any, teamNotes: stri
     await db.updatePipelineRun(runId, {
       status: "failed",
       errorMessage: `Revision failed: ${err.message}`,
-      staticStage: "stage_6_team_approval",
-      teamApprovalStatus: "pending",
     });
   }
 }
@@ -363,7 +370,7 @@ Each background prompt MUST be 150+ words and describe ONLY the background scene
 - 3-8 words each
 - Action-oriented, benefit-driven, scroll-stopping
 - Specific to ${product}
-- Examples of great supplement headlines: "BURN FAT WHILE YOU SLEEP", "UNLOCK YOUR FULL POTENTIAL", "THE EDGE YOU'VE BEEN MISSING"
+- Examples of great supplement headlines: "BURN FAT WHILE YOU SLEEP", "FULLY DOSED. ZERO FILLERS.", "THE EDGE YOU'VE BEEN MISSING"
 
 **SUBHEADLINE OPTIONS** (6 options):
 - 5-12 words each
@@ -407,10 +414,10 @@ Each background prompt MUST be 150+ words and describe ONLY the background scene
   if (!options.headlines || !Array.isArray(options.headlines) || options.headlines.length < 6) {
     options.headlines = [
       `FUEL YOUR ${product.toUpperCase()}`,
-      `UNLOCK ${product.toUpperCase()} POWER`,
+      `${product.toUpperCase()} — FULL DOSE`,
       `${product.toUpperCase()} REDEFINED`,
       `THE ${product.toUpperCase()} EDGE`,
-      `ELEVATE YOUR GAME`,
+      `ZERO FILLERS. REAL ${product.toUpperCase()}.`,
       `NO COMPROMISES`,
     ];
   }

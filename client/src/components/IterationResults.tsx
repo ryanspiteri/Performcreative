@@ -1,6 +1,7 @@
 import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ChildGenerationControls } from "./ChildGenerationControls";
@@ -8,6 +9,7 @@ import { ChildGenerationControls } from "./ChildGenerationControls";
 export function IterationResults({ run }: { run: any }) {
   const isRunning = run.status === "running" || run.status === "pending";
   const iterationStage = run.iterationStage || "stage_1_analysis";
+  const [, setLocation] = useLocation();
   const [approvalNotes, setApprovalNotes] = useState("");
   const [variationApprovalNotes, setVariationApprovalNotes] = useState("");
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
@@ -16,6 +18,15 @@ export function IterationResults({ run }: { run: any }) {
   const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
   const [canvaDesignUrls, setCanvaDesignUrls] = useState<Record<number, string>>({});
   const [pushingToClickUp, setPushingToClickUp] = useState(false);
+
+  // Clear regen overrides when switching between variation forms
+  useEffect(() => {
+    setRegenOverrides({});
+  }, [showRegenForm]);
+
+  const utils = trpc.useUtils();
+  const { data: canvaStatus } = trpc.canva.isConnected.useQuery();
+  const uploadToCanva = trpc.canva.uploadAndCreateDesign.useMutation();
 
   const pushToClickUp = trpc.pipeline.pushIterationToClickUp.useMutation({
     onSuccess: (result) => {
@@ -30,11 +41,6 @@ export function IterationResults({ run }: { run: any }) {
     },
   });
 
-
-  const utils = trpc.useUtils();
-  const { data: canvaStatus } = trpc.canva.isConnected.useQuery();
-  const uploadToCanva = trpc.canva.uploadAndCreateDesign.useMutation();
-  
   const handleUploadToCanva = async (index: number, imageUrl: string, title: string, width: number, height: number) => {
     setUploadingToCanva(index);
     try {
@@ -50,11 +56,6 @@ export function IterationResults({ run }: { run: any }) {
 
   const approveBrief = trpc.pipeline.approveIterationBrief.useMutation({
     onSuccess: () => { toast.success("Brief approved! Generating variations..."); utils.pipeline.get.invalidate(); utils.pipeline.list.invalidate(); },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const rejectBrief = trpc.pipeline.approveIterationBrief.useMutation({
-    onSuccess: () => { toast.success("Brief rejected."); utils.pipeline.get.invalidate(); utils.pipeline.list.invalidate(); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -95,6 +96,12 @@ export function IterationResults({ run }: { run: any }) {
 
   // Parse variations
   const variations: Array<{ url: string; variation: string }> = Array.isArray(run.iterationVariations) ? run.iterationVariations : [];
+
+  // Parse variation types safely
+  let parsedVariationTypes: string[] = [];
+  try {
+    parsedVariationTypes = typeof run.variationTypes === 'string' ? JSON.parse(run.variationTypes) : (run.variationTypes || []);
+  } catch { /* malformed JSON — fallback to empty */ }
 
   // Parse ClickUp tasks
   const clickupTasks: Array<{ name: string; taskId?: string; url?: string; error?: string }> = Array.isArray(run.clickupTasksJson) ? run.clickupTasksJson : [];
@@ -150,7 +157,7 @@ export function IterationResults({ run }: { run: any }) {
               )}
               <div className="flex gap-3">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={() => setLocation("/iterate")}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-all text-sm font-medium"
                 >
                   <RefreshCw className="w-4 h-4" />
@@ -272,7 +279,7 @@ export function IterationResults({ run }: { run: any }) {
                     <div>
                       <span className="text-xs text-gray-400">Variation Types</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {(typeof run.variationTypes === 'string' ? JSON.parse(run.variationTypes) : run.variationTypes).map((type: string, i: number) => (
+                        {parsedVariationTypes.map((type: string, i: number) => (
                           <span key={i} className="text-xs bg-[#0347ED]/10 text-[#0347ED] px-2 py-1 rounded border border-[#0347ED]/20">
                             {type.replace(/_/g, ' ')}
                           </span>
@@ -347,11 +354,11 @@ export function IterationResults({ run }: { run: any }) {
                   Approve & Generate
                 </button>
                 <button
-                  onClick={() => rejectBrief.mutate({ runId: run.id, approved: false, notes: approvalNotes || "Changes requested" })}
-                  disabled={rejectBrief.isPending}
+                  onClick={() => approveBrief.mutate({ runId: run.id, approved: false, notes: approvalNotes || "Changes requested" })}
+                  disabled={approveBrief.isPending}
                   className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 >
-                  {rejectBrief.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsDown className="w-4 h-4" />}
+                  {approveBrief.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsDown className="w-4 h-4" />}
                   Reject
                 </button>
               </div>
