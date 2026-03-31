@@ -583,6 +583,24 @@ export async function listAllContent(limit = 50) {
   return { adRuns, organicRuns: organicRunsList };
 }
 
+/**
+ * Parse videoInputPath from DB — handles both old single-URL strings
+ * and new JSON-serialized arrays for backward compatibility.
+ */
+export function normalizeVideoInputPaths(videoInputPath: any): string[] {
+  if (!videoInputPath) return [];
+  if (Array.isArray(videoInputPath)) return videoInputPath;
+  if (typeof videoInputPath === "string") {
+    try {
+      const parsed = JSON.parse(videoInputPath);
+      return Array.isArray(parsed) ? parsed : [videoInputPath];
+    } catch {
+      return [videoInputPath];
+    }
+  }
+  return [];
+}
+
 // ============================================================
 // Caption Examples (few-shot training data)
 // ============================================================

@@ -20,11 +20,12 @@ import { checkHealth, processVideo } from "./autoEditClient";
 import { generateAssFile, renderSubtitles } from "./subtitleService";
 import { generateCaption } from "./captionGenerator";
 import { transcribeVideo } from "./whisper";
+import { concatVideos } from "./videoConcatService";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface OrganicVideoInput {
-  videoInputPath: string;   // local path or S3 URL
+  videoInputPaths: string[];   // S3 URLs (or single local path wrapped in array)
   subtitleStyle: SubtitleStyle;
   contentPillar?: string;
   contentPurpose?: string;
@@ -72,16 +73,26 @@ export async function runOrganicVideoStages1to3(
     // ── Stage 1: uploading ──────────────────────────────────────────────
     await transitionStage(runId, "uploading");
 
-    // Determine if input is a URL (uploaded/S3) or local path
-    const isUrl = input.videoInputPath.startsWith("http://") || input.videoInputPath.startsWith("https://");
-    let videoUrl: string;
+    // Validate all input paths
+    const videoUrls: string[] = [];
+    for (const inputPath of input.videoInputPaths) {
+      const isUrl = inputPath.startsWith("http://") || inputPath.startsWith("https://");
+      if (isUrl) {
+        videoUrls.push(inputPath);
+      } else {
+        const validated = validateVideoInput(inputPath, ENV.localMediaBasePath);
+        videoUrls.push(validated.path);
+      }
+    }
 
-    if (isUrl) {
-      // Uploaded file — URL is already valid, skip local path validation
-      videoUrl = input.videoInputPath;
+    // ── Stage 1.5: concatenating (skip if single video) ─────────────────
+    let videoUrl: string;
+    if (videoUrls.length > 1) {
+      await transitionStage(runId, "concatenating");
+      console.log(`[OrganicVideo] Run #${runId} — Concatenating ${videoUrls.length} clips`);
+      videoUrl = await concatVideos(videoUrls, runId);
     } else {
-      const validated = validateVideoInput(input.videoInputPath, ENV.localMediaBasePath);
-      videoUrl = validated.path;
+      videoUrl = videoUrls[0];
     }
 
     // ── Stage 2: editing (skip if AutoEdit unavailable) ─────────────────
@@ -91,10 +102,11 @@ export async function runOrganicVideoStages1to3(
     if (healthy) {
       await transitionStage(runId, "editing");
 
+      const videoIsUrl = videoUrl.startsWith("http://") || videoUrl.startsWith("https://");
       const editResult = await withTimeout(
         processVideo({
           inputPath: videoUrl,
-          inputType: isUrl ? "url" : "local",
+          inputType: videoIsUrl ? "url" : "local",
         }),
         STEP_TIMEOUT,
         "AutoEdit process-video",
