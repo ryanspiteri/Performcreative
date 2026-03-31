@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,9 +101,77 @@ export default function VisualContent() {
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [runId, setRunId] = useState<number | null>(null);
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Visual content trigger mutation
+  const triggerVisualContent = trpc.organic.triggerVisualContent.useMutation({
+    onSuccess: (data: { runId: number }) => {
+      setRunId(data.runId);
+      toast.success("Generation started");
+    },
+    onError: (err: any) => {
+      setIsGenerating(false);
+      toast.error(`Generation failed: ${err.message}`);
+    },
+  });
+
+  // Upload slide image mutation (for upload-source slides)
+  const uploadSlideImage = trpc.organic.uploadSlideImage.useMutation();
+
+  // Poll run status
+  const runQuery = trpc.organic.getRun.useQuery(
+    { id: runId! },
+    {
+      enabled: !!runId,
+      refetchInterval: (query: any) => {
+        const status = query.state.data?.status;
+        return status === "running" || status === "pending" ? 2000 : false;
+      },
+    },
+  );
+
+  // Sync polled slidesJson back into local slide state
+  useEffect(() => {
+    if (!runQuery.data?.slidesJson) return;
+    try {
+      const serverSlides = typeof runQuery.data.slidesJson === "string"
+        ? JSON.parse(runQuery.data.slidesJson)
+        : runQuery.data.slidesJson;
+      if (!Array.isArray(serverSlides)) return;
+
+      setSlides((prev) =>
+        prev.map((s, i) => {
+          const server = serverSlides[i];
+          if (!server) return s;
+          return {
+            ...s,
+            imagePreview: server.imageUrl || s.imagePreview,
+            status:
+              server.status === "generated" ? "generated" :
+              server.status === "uploaded" ? "generated" :
+              server.status === "failed" ? "rejected" :
+              s.status,
+            headline: server.headline || s.headline,
+            body: server.body || s.body,
+          };
+        }),
+      );
+
+      if (runQuery.data.status === "completed" || runQuery.data.status === "failed") {
+        setIsGenerating(false);
+        if (runQuery.data.status === "completed") {
+          toast.success("Images generated");
+        } else if (runQuery.data.status === "failed") {
+          toast.error(runQuery.data.errorMessage || "Generation failed");
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, [runQuery.data]);
 
   // Caption mutation (uses existing organic.generateCaption endpoint)
   const generateCaption = trpc.organic.generateCaption.useMutation({
@@ -178,7 +246,7 @@ export default function VisualContent() {
     e.target.value = "";
   };
 
-  const handleGenerateAll = () => {
+  const handleGenerateAll = async () => {
     if (!pillar) {
       toast.error("Please select a content pillar");
       return;
@@ -194,28 +262,64 @@ export default function VisualContent() {
 
     setIsGenerating(true);
 
-    // Simulate AI image generation with a delay (backend not wired yet)
-    const updatedSlides = slides.map((s) => ({
-      ...s,
-      status: "generating" as const,
-    }));
-    setSlides(updatedSlides);
+    // Mark all slides as generating
+    setSlides((prev) => prev.map((s) => ({ ...s, status: "generating" as const })));
 
-    // After a brief delay, mark slides as generated with placeholder
-    setTimeout(() => {
-      setSlides((prev) =>
-        prev.map((s) => ({
-          ...s,
-          status: s.source === "upload" && s.imagePreview ? "generated" as const : "generated" as const,
-          imagePreview: s.source === "upload" && s.imagePreview
-            ? s.imagePreview
-            : s.imagePreview || null,
-        }))
+    try {
+      // Upload any upload-source slides to S3 first
+      const slidesForServer = await Promise.all(
+        slides.map(async (s) => {
+          if (s.source === "upload" && s.uploadedFile) {
+            const base64 = await fileToBase64(s.uploadedFile);
+            const result = await uploadSlideImage.mutateAsync({
+              base64Data: base64,
+              mimeType: s.uploadedFile.type as "image/png" | "image/jpeg" | "image/webp",
+              fileName: s.uploadedFile.name,
+            });
+            return {
+              source: "upload" as const,
+              headline: s.headline,
+              body: s.body,
+              uploadedImageUrl: result.imageUrl,
+            };
+          }
+          return {
+            source: s.source,
+            headline: s.headline,
+            body: s.body,
+          };
+        }),
       );
+
+      // Trigger the pipeline
+      triggerVisualContent.mutate({
+        pillar,
+        purpose,
+        topic: topic.trim(),
+        format,
+        slideCount: slides.length,
+        slides: slidesForServer,
+        product: product && product !== "none" ? product : undefined,
+        overlayProduct,
+        aspectRatio: "1:1",
+      });
+    } catch (err: any) {
       setIsGenerating(false);
-      toast.success("Slides generated (AI images coming soon)");
-    }, 1500);
+      toast.error(`Upload failed: ${err.message}`);
+    }
   };
+
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(",")[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
 
   const allSlidesApproved = slides.every((s) => s.status === "approved");
 

@@ -213,3 +213,119 @@ The new version should feel like a natural variation of the reference, not a com
  * - Reference image (competitor ad) as inline data
  * - Product render as inline data
  */
+
+// ─── Organic Photo Prompt Builder ────────────────────────────────────────
+
+export interface OrganicPhotoPromptOptions {
+  topic: string;
+  pillar: string;
+  purpose: string;
+  product?: string;
+  overlayProduct?: boolean;
+  slideIndex?: number;
+  totalSlides?: number;
+  slideBrief?: string;
+  headline?: string;
+  body?: string;
+  aspectRatio?: "1:1" | "4:5" | "9:16";
+}
+
+/** Map content pillars to visual language for lifestyle photos. */
+const PILLAR_VISUALS: Record<string, string> = {
+  "PTC Value": "Clean, educational layout. Think whiteboard-style clarity, product front and center, supporting data or ingredient highlights visible. Studio lighting, professional but approachable.",
+  "Story": "Behind-the-scenes, authentic moments. Natural lighting, candid angles, real environments (kitchen, gym, office). Feels like a snapshot from someone's actual day.",
+  "Edutaining": "Eye-catching, slightly playful composition. Bold colors, unexpected angles, visual hooks that make someone stop scrolling. Think infographic meets lifestyle photo.",
+  "Trends": "Trendy, current aesthetic. Whatever's visually popular right now on Instagram/TikTok. Clean backgrounds, aesthetic color grading, minimal but impactful.",
+  "Sale": "High-energy, promotional feel. Product prominent, bold visual treatment, urgency cues (stacking, multiples, lifestyle context showing value).",
+  "Motivation": "Dramatic lighting, powerful composition. Sunrise/sunset tones, silhouettes, wide shots, epic scale. Feels aspirational and cinematic.",
+  "Life Dump": "Casual, raw, unfiltered. Phone-camera aesthetic, messy-desk vibes, real life. Authenticity over production value. Warm, natural tones.",
+  "Workout": "Gym environment, sweat, movement, energy. Dynamic angles, close-ups of effort, equipment in frame. High contrast, gritty texture, powerful.",
+};
+
+const PURPOSE_DIRECTION: Record<string, string> = {
+  "Educate": "Composition should be clear and readable. Space for text overlays. The image teaches or informs.",
+  "Inspire": "Evocative, emotional. The image should make someone feel something before they read any text.",
+  "Entertain": "Fun, surprising, scroll-stopping. Unexpected composition or subject matter.",
+  "Sell": "Product-forward. The item should be the hero of the image, shown in its best light.",
+  "Connect": "Human, relatable, intimate. Close-ups, eye contact, shared moments. Feels personal.",
+};
+
+/**
+ * Build a Gemini prompt for organic lifestyle/editorial photos.
+ * Distinct from ad prompts: no competitor references, no heavy text overlays.
+ */
+export function buildOrganicPhotoPrompt(options: OrganicPhotoPromptOptions): string {
+  const {
+    topic,
+    pillar,
+    purpose,
+    product,
+    overlayProduct = false,
+    slideIndex,
+    totalSlides,
+    slideBrief,
+    headline,
+    body,
+    aspectRatio = "1:1",
+  } = options;
+
+  const pillarVisual = PILLAR_VISUALS[pillar] || PILLAR_VISUALS["Trends"];
+  const purposeDir = PURPOSE_DIRECTION[purpose] || PURPOSE_DIRECTION["Inspire"];
+
+  const isCarousel = totalSlides != null && totalSlides > 1;
+  const slideContext = isCarousel
+    ? `\nThis is slide ${(slideIndex ?? 0) + 1} of ${totalSlides} in a carousel post. Maintain visual consistency with other slides (same color palette, lighting style, aspect ratio) while varying the specific subject/angle for this slide.`
+    : "";
+
+  const briefSection = slideBrief
+    ? `\n=== SLIDE BRIEF ===\n${slideBrief}\nFollow this brief for the visual concept and mood of this specific image.\n`
+    : "";
+
+  const headlineSection = headline
+    ? `\nIf text overlay is appropriate, the headline is: "${headline}"${body ? `\nSupporting text: "${body}"` : ""}\nKeep text minimal and clean. This is organic content, not an ad.`
+    : "\nDo NOT add text overlays. This is a visual-only image.";
+
+  const productSection = overlayProduct && product
+    ? `\n=== PRODUCT INTEGRATION ===
+I am providing a product render image. Integrate the ${product} product naturally into the scene.
+Do NOT make it look like an advertisement. The product should feel like it belongs in the environment,
+like someone placed it on a counter, is holding it mid-workout, or it's sitting in a gym bag.
+Preserve the product label and branding. Make it visible but not the sole focus unless the content
+pillar calls for it (e.g., "Sale" or "PTC Value" pillars should feature product prominently).`
+    : overlayProduct
+    ? "\nNote: Product overlay requested but no product specified. Generate the scene without a product."
+    : "\nDo NOT include any product in this image. Pure lifestyle/editorial content.";
+
+  return `You are generating an organic social media photo for Instagram/TikTok.
+
+This is NOT an advertisement. It's authentic content for a personal brand in the health and fitness space.
+The image should look like high-quality content a fitness influencer would post, not a corporate ad.
+
+=== TOPIC ===
+${topic}
+
+=== VISUAL DIRECTION (Content Pillar: ${pillar}) ===
+${pillarVisual}
+
+=== CREATIVE DIRECTION (Purpose: ${purpose}) ===
+${purposeDir}
+${slideContext}${briefSection}${headlineSection}${productSection}
+
+=== COMPOSITION ===
+- Aspect ratio: ${aspectRatio}
+- High resolution, crisp detail
+- Professional but authentic (not stock-photo sterile)
+- Color grading should match the pillar's mood
+
+=== AVOID ===
+✗ Corporate/stock photo aesthetic
+✗ Heavy promotional text overlays
+✗ Fake or plastic-looking scenes
+✗ Generic fitness imagery (e.g., random dumbbells on white background)
+✗ Anything that looks AI-generated or uncanny
+✗ Cluttered composition — keep it clean and intentional
+
+=== GOAL ===
+Someone scrolling Instagram should think: "That's a great photo" — not "That's an ad."
+The image should feel intentional, editorial, and on-brand for a fitness entrepreneur.`;
+}

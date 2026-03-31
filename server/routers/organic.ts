@@ -5,6 +5,8 @@ import { TRPCError } from "@trpc/server";
 import { runOrganicVideoStages1to3, approveTranscript } from "../services/organicVideoPipeline";
 import { generateCaption, generateBatchCaptions } from "../services/captionGenerator";
 import { checkHealth } from "../services/autoEditClient";
+import { runVisualContentPipeline } from "../services/visualContentPipeline";
+import { storagePut } from "../storage";
 
 export const organicRouter = router({
   // ──────────────────────────────────────────────────────────────────────────
@@ -183,4 +185,66 @@ export const organicRouter = router({
     const available = await checkHealth();
     return { available };
   }),
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Visual Content Pipeline
+  // ──────────────────────────────────────────────────────────────────────────
+
+  triggerVisualContent: publicProcedure
+    .input(
+      z.object({
+        pillar: z.string(),
+        purpose: z.string(),
+        topic: z.string(),
+        format: z.enum(["single", "carousel"]),
+        slideCount: z.number().min(1).max(8),
+        slides: z.array(
+          z.object({
+            source: z.enum(["ai", "upload"]),
+            headline: z.string().default(""),
+            body: z.string().default(""),
+            uploadedImageUrl: z.string().optional(),
+          }),
+        ),
+        product: z.string().optional(),
+        overlayProduct: z.boolean().default(false),
+        aspectRatio: z.enum(["1:1", "4:5", "9:16"]).default("1:1"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const runId = await db.createOrganicRun({
+        type: "visual_content",
+        status: "running",
+        stage: "planning",
+        contentPillar: input.pillar,
+        contentPurpose: input.purpose,
+        topic: input.topic,
+        contentFormat: input.format,
+        slideCount: input.slideCount,
+        product: input.product || null,
+        slidesJson: JSON.stringify(input.slides),
+      });
+
+      runVisualContentPipeline(runId, input).catch((err) => {
+        console.error(`[VisualContent] Background pipeline failed for run #${runId}:`, err.message);
+      });
+
+      return { runId };
+    }),
+
+  uploadSlideImage: publicProcedure
+    .input(
+      z.object({
+        base64Data: z.string(),
+        mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+        fileName: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.base64Data, "base64");
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const s3Key = `visual-content/uploads/${Date.now()}-${suffix}-${input.fileName}`;
+      const { url } = await storagePut(s3Key, buffer, input.mimeType);
+      return { imageUrl: url, s3Key };
+    }),
 });
