@@ -359,13 +359,58 @@ export const SCRIPT_SUB_STRUCTURES: ScriptSubStructure[] = [
     whyItConverts: "In a category defined by noise, clarity is a differentiator.",
     psychologicalLever: "Self-selection. Attracts the right customers and pre-selects out the wrong ones.",
   },
+
+  // === RETENTION (3) ===
+  {
+    id: "RT-1", name: "Stack Sell — Complete Your Routine", category: "DR",
+    funnelStages: ["retention"], awarenessLevel: "Most Aware",
+    platform: "Meta retargeting, email, SMS", length: "20–45 seconds",
+    stages: [
+      { stage: "Hook", function: "Reference the product they already use — 'You're already taking HyperBurn every morning'" },
+      { stage: "The gap", function: "Name the one thing their current routine is missing — sleep, recovery, protein" },
+      { stage: "The complement", function: "Introduce the stack partner as the missing piece — not a new sale, a completion" },
+      { stage: "The result", function: "What the combined stack delivers that neither product does alone — 24hr support, full coverage" },
+      { stage: "CTA", function: "Stack-specific: 'Add ThermoSleep to your routine — save on the bundle'" },
+    ],
+    whyItConverts: "Existing customers trust ONEST. The sale is not 'buy something new' but 'complete what you started.' Reduces purchase friction to near zero.",
+    psychologicalLever: "Commitment consistency. They already invested in the routine. Completing it feels logical, not optional.",
+  },
+  {
+    id: "RT-2", name: "Loyalty UGC — Long-Term Results", category: "UGC",
+    funnelStages: ["retention"], awarenessLevel: "Most Aware",
+    platform: "Meta retargeting, Instagram Reels, TikTok, email", length: "30–60 seconds",
+    stages: [
+      { stage: "Hook", function: "Time-based result — 'I've been using ONEST for 6 months now and here's what changed'" },
+      { stage: "The journey", function: "Brief recap: what they were before, what they tried, why they stuck with ONEST" },
+      { stage: "The compound result", function: "Results that only come with consistency — not week 1 results, month 6 results" },
+      { stage: "The routine", function: "Show the daily ritual — this is just what they do now, not a decision anymore" },
+      { stage: "The community", function: "Reference other ONEST users, the brand community, or being part of something" },
+      { stage: "CTA", function: "Relationship-oriented: 'Still the best decision I made for my health this year'" },
+    ],
+    whyItConverts: "Long-term customers telling their story creates the strongest social proof. New viewers see real commitment, existing customers feel validated in staying.",
+    psychologicalLever: "Sunk cost + social identity. The viewer has already invested. This reinforces that the investment is paying off.",
+  },
+  {
+    id: "RT-3", name: "Founder New Product Announcement", category: "FOUNDER",
+    funnelStages: ["retention"], awarenessLevel: "Most Aware",
+    platform: "Meta retargeting, email, SMS, organic social", length: "45–75 seconds",
+    stages: [
+      { stage: "Hook", function: "Founder addresses existing customers directly — 'If you've been using ONEST, I've got something new'" },
+      { stage: "The why", function: "Why the founder built this new product — what gap they saw in the lineup" },
+      { stage: "The standard", function: "Same transparency and clinical dosing standards — reassure existing customers" },
+      { stage: "Who it's for", function: "Specifically for people already in the ONEST ecosystem — designed to complement" },
+      { stage: "The invitation", function: "Early access, loyalty pricing, or just a personal ask to try it — community-first" },
+    ],
+    whyItConverts: "Existing customers trust the founder. A personal announcement makes them feel like insiders, not targets.",
+    psychologicalLever: "Reciprocity + exclusivity. The founder is giving them early access. They feel obligated and special.",
+  },
 ];
 
 // ============================================================
 // UGC ARCHETYPE VOICE PROFILES — v3.0
 // ============================================================
 
-export type ActorArchetype = "FitnessEnthusiast" | "BusyMum" | "Athlete" | "Biohacker" | "WellnessAdvocate";
+export type ActorArchetype = "FitnessEnthusiast" | "BusyMum" | "Athlete" | "Biohacker" | "WellnessAdvocate" | "HealthyAger" | "WeightLossBeginner" | "WellnessSwitcher";
 
 export const ARCHETYPE_PROFILES: Record<ActorArchetype, {
   label: string;
@@ -403,6 +448,24 @@ export const ARCHETYPE_PROFILES: Record<ActorArchetype, {
     languageRegister: "Warm, considered, slightly cautious. References how things make her feel rather than performance metrics. 'I felt better in the mornings', 'my skin actually changed', 'I stopped feeling so flat by 2pm.' Responds to 'no artificial colours, no fillers' as a strong positive signal.",
     preProductObjection: "\"I don't want to take something full of stimulants or artificial ingredients I don't recognise.\" The turning point was the no artificial colours / no fillers / no proprietary blends positioning — plus Australian-made GMP certification as a quality guarantee.",
   },
+  HealthyAger: {
+    label: "Healthy Ager (50+)",
+    lifeContext: "Over 50, noticing energy decline, joint stiffness, slower recovery. Not trying to get jacked — wants to maintain quality of life, stay active with grandkids, keep playing golf or tennis. May have been told by a doctor to 'look after your joints' or 'keep your protein up.' First time considering supplements seriously.",
+    languageRegister: "Measured and practical. No gym slang. References real life moments: 'I used to be able to play 18 holes no problem', 'my knees started telling me to slow down', 'I want to keep up with my grandkids.' Values quality, safety, and Australian-made as trust signals. Skeptical of anything that sounds too young or too intense.",
+    preProductObjection: "\"I'm not a gym person. Is this actually for someone my age?\" The turning point was understanding that creatine supports brain function and healthy aging, not just muscle. Or that marine collagen supports joints, not just 'beauty.' The science matters more than the branding.",
+  },
+  WeightLossBeginner: {
+    label: "Weight Loss Beginner (Male)",
+    lifeContext: "35-50 year old male. Has put on 10-15kg over the last few years. Not a gym person — maybe walks, maybe plays weekend sport. Knows he needs to do something but hasn't committed to a routine. Wife or partner may have prompted the change. Overwhelmed by the supplement industry.",
+    languageRegister: "Straightforward and slightly self-deprecating. 'Look, I'm not going to pretend I'm a fitness guy.' 'I just want to shift this gut.' 'My missus bought me this and honestly I wasn't expecting much.' No fitness jargon. References real triggers: pants don't fit, energy crashed after lunch, couldn't keep up at the park with the kids.",
+    preProductObjection: "\"I've tried diets before and they didn't stick. Why would a supplement be different?\" The turning point was something concrete and undeniable — sustained energy without jitters, actually losing a belt notch in 3 weeks, feeling less foggy at 3pm. Not a transformation story, a 'huh, this actually works' moment.",
+  },
+  WellnessSwitcher: {
+    label: "Wellness Switcher",
+    lifeContext: "Currently uses AG1, Bloom, or another popular wellness brand. Health-conscious, spends $50-100/month on supplements. Active on wellness TikTok/Instagram. Values clean ingredients and aesthetic branding. Starting to question whether their current products are actually well-dosed or just well-marketed.",
+    languageRegister: "Informed and comparative. 'I was paying $99/month for AG1 and then I looked at the actual doses.' 'I compared the labels side by side.' References specific brands by name or by implication. Comfortable with supplement language but uses it conversationally, not clinically. Australian identity is a plus — 'I'd rather support an Aussie brand.'",
+    preProductObjection: "\"My current brand has great marketing but I'm not sure the product is actually better. Is ONEST genuinely different or just another pretty label?\" The turning point was the transparent label comparison — seeing that ONEST lists every dose while competitors hide behind 'proprietary blends.' The switch felt like upgrading, not gambling.",
+  },
 };
 
 // ============================================================
@@ -439,6 +502,7 @@ CTA BANK — matched to funnel stage:
 | Cold | "See the full ingredient breakdown — link below" |
 | Warm | "Try it and judge for yourself — link below" |
 | Retargeting | "30-day guarantee — order now at onest.com.au" |
+| Retention | "Complete your stack — bundle and save at onest.com.au" |
 `;
 
 // ============================================================
@@ -762,6 +826,28 @@ export const PRODUCT_INTELLIGENCE: Record<string, {
     keyIngredients: ["100% Whey Protein Isolate", "Digestive Enzymes"],
     primaryBenefit: "Pure, fast-absorbing protein with no fillers or amino spiking",
     differentiator: "100% isolate with full transparency — no concentrate blends hiding behind 'protein blend' labels",
+  },
+  "HyperBurn Caffeine Free": {
+    fullName: "ONEST HyperBurn Caffeine Free",
+    category: "Stimulant-Free Thermogenic Fat Burner",
+    copyLevers: [
+      "Same fat-burning mechanism as HyperBurn — without any stimulants or caffeine",
+      "Capsimax (patented capsaicin for thermogenesis) — works without needing caffeine",
+      "GBBGO (converts to L-Carnitine, amplifies fat transport) — stimulant-free fat metabolism",
+      "Perfect for caffeine-sensitive individuals, shift workers, or afternoon/evening use",
+      "Vegan and keto-friendly — broadest possible dietary compatibility",
+    ],
+    copyTraps: [
+      "Never position as 'weaker' than regular HyperBurn — it's a different approach, not a lesser one",
+      "Don't say 'decaf fat burner' — position as 'stimulant-free thermogenic'",
+      "Avoid implying that caffeine-free means less effective — explain the non-stimulant fat-burning mechanisms",
+    ],
+    stackPartners: ["Thermosleep", "Protein + Collagen"],
+    targetPersona: "Lara (caffeine-sensitive), shift workers, anyone who trains in the afternoon/evening, people who already get caffeine from coffee and don't want more",
+    awarenessAngle: "Solution-aware (wants fat loss support but can't tolerate stimulants) → Product-aware (show non-stimulant mechanisms work)",
+    keyIngredients: ["L-Carnitine", "Acetyl-L-Carnitine", "Capsimax", "GBBGO", "Huperzia Serrata"],
+    primaryBenefit: "Fat metabolism support and mental focus without any caffeine or stimulants",
+    differentiator: "Only stimulant-free thermogenic with Capsimax + GBBGO for dual-pathway fat metabolism — not just 'HyperBurn minus caffeine'",
   },
 };
 
@@ -1476,6 +1562,39 @@ export async function reviewScriptWithPanel(
   productInfoContext: string,
   funnelStage: FunnelStage
 ): Promise<{ rounds: any[]; finalScore: number; approved: boolean; summary: string }> {
+  // ── Programmatic pre-checks (catch obvious failures before burning API calls) ──
+  const scriptText = JSON.stringify(scriptJson).toLowerCase();
+  const productLower = product.toLowerCase();
+  const preCheckFailures: string[] = [];
+
+  // Check: product name mentioned in script
+  if (!scriptText.includes(productLower) && !scriptText.includes("onest")) {
+    preCheckFailures.push(`Product name "${product}" not found in script text`);
+  }
+
+  // Check: banned phrases
+  const BANNED_PHRASES = ["unlock your potential", "fuel your journey", "transform your body", "achieve your goals"];
+  for (const phrase of BANNED_PHRASES) {
+    if (scriptText.includes(phrase)) {
+      preCheckFailures.push(`Banned phrase detected: "${phrase}"`);
+    }
+  }
+
+  // Check: CTA present (last segment should have dialogue mentioning link, site, try, or order)
+  const segments = scriptJson.script || scriptJson.segments || [];
+  if (segments.length > 0) {
+    const lastSegDialogue = (segments[segments.length - 1]?.dialogue || "").toLowerCase();
+    if (!lastSegDialogue.match(/(link|site|try|order|check|visit|onest)/)) {
+      preCheckFailures.push("No clear CTA detected in final segment");
+    }
+  }
+
+  if (preCheckFailures.length > 0) {
+    console.warn(`[ReviewPanel] Pre-check failures for ${product}:`, preCheckFailures);
+  }
+  // Pre-check failures are logged and fed into the review context but don't hard-reject,
+  // since the LLM review may still produce a useful revision.
+
   const rounds: any[] = [];
   let currentScript = scriptJson;
   let approved = false;

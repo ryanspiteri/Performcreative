@@ -344,7 +344,7 @@ export const appRouter = router({
         sourceType: z.enum(["competitor", "winning_ad"]).optional(),
         duration: z.number().optional(),
         funnelStage: z.enum(["cold", "warm", "retargeting", "retention"]).optional(),
-        actorArchetype: z.enum(["FitnessEnthusiast", "BusyMum", "Athlete", "Biohacker", "WellnessAdvocate"]).optional(),
+        actorArchetype: z.enum(["FitnessEnthusiast", "BusyMum", "Athlete", "Biohacker", "WellnessAdvocate", "HealthyAger", "WeightLossBeginner", "WellnessSwitcher"]).optional(),
         styleConfig: z.array(z.object({
           styleId: z.enum(["DR", "UGC", "FOUNDER", "EDUCATION", "LIFESTYLE", "DEMO"]),
           quantity: z.number(),
@@ -383,12 +383,14 @@ export const appRouter = router({
         return { runId, status: "running" };
       }),
 
-    fetchForeplayVideos: publicProcedure.query(async () => {
-      const creatives = await db.listForeplayCreatives("VIDEO", 50);
-      // Fallback to live Foreplay API if cache is empty
-      if (creatives.length === 0) {
+    fetchForeplayVideos: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(50), offset: z.number().min(0).default(0) }).default({ limit: 50, offset: 0 }))
+      .query(async ({ input }) => {
+      const creatives = await db.listForeplayCreatives("VIDEO", input.limit, input.offset);
+      // Fallback to live Foreplay API if cache is empty and no offset (first page only)
+      if (creatives.length === 0 && input.offset === 0) {
         console.log("[Pipeline] Local cache empty, fetching from Foreplay API");
-        const liveAds = await fetchVideoAds(10);
+        const liveAds = await fetchVideoAds(20);
         return liveAds.map(ad => ({
           id: ad.id,
           type: "VIDEO" as const,
@@ -410,12 +412,14 @@ export const appRouter = router({
       }));
     }),
 
-    fetchForeplayStatics: publicProcedure.query(async () => {
-      const creatives = await db.listForeplayCreatives("STATIC", 50);
-      // Fallback to live Foreplay API if cache is empty
-      if (creatives.length === 0) {
+    fetchForeplayStatics: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(50), offset: z.number().min(0).default(0) }).default({ limit: 50, offset: 0 }))
+      .query(async ({ input }) => {
+      const creatives = await db.listForeplayCreatives("STATIC", input.limit, input.offset);
+      // Fallback to live Foreplay API if cache is empty and no offset (first page only)
+      if (creatives.length === 0 && input.offset === 0) {
         console.log("[Pipeline] Local cache empty, fetching from Foreplay API");
-        const liveAds = await fetchStaticAds(30);
+        const liveAds = await fetchStaticAds(20);
         return liveAds.map(ad => ({
           id: ad.id,
           type: "STATIC" as const,
@@ -449,9 +453,13 @@ export const appRouter = router({
       };
     }),
 
-    getSyncStatus: publicProcedure.query(async () => getSyncStatus()),
+    getSyncStatus: protectedProcedure.query(async () => getSyncStatus()),
 
-    listBoards: publicProcedure.query(async () => listBoards()),
+    listBoards: protectedProcedure.query(async () => listBoards()),
+
+    statusByAdIds: protectedProcedure
+      .input(z.object({ adIds: z.array(z.string()).max(200) }))
+      .query(async ({ input }) => db.getPipelineStatusByAdIds(input.adIds)),
 
     // Static pipeline trigger (Stages 1-3 + pause at 3b for selection)
     triggerStatic: protectedProcedure
