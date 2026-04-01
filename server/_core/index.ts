@@ -66,7 +66,7 @@ async function startServer() {
   // Diagnostic health endpoint — tests DB connectivity + table existence (no auth)
   app.get("/api/health/db", async (_req, res) => {
     const requiredTables = [
-      "users", "pipeline_runs", "product_renders", "product_info",
+      "users", "pipeline_runs", "product_renders", "product_info", "people",
       "foreplay_creatives", "backgrounds", "ugc_uploads", "ugc_variants",
       "headline_bank", "face_swap_jobs", "organic_runs", "caption_examples",
     ];
@@ -95,6 +95,63 @@ async function startServer() {
       return res.json({ ok: true, tables });
     } catch (err: any) {
       return res.status(503).json({ ok: false, error: err.message || "DB health check failed", tables: {} });
+    }
+  });
+
+  // Image download proxy — avoids CORS issues when downloading from S3/CDN
+  app.get("/api/download-image", async (req, res) => {
+    try {
+      const urlParam = req.query.url as string;
+      const filename = (req.query.filename as string) || "download.png";
+
+      if (!urlParam) {
+        return res.status(400).json({ error: "url parameter required" });
+      }
+
+      // Auth check: reuse SDK session verification
+      try {
+        const { sdk } = await import("./sdk");
+        await sdk.authenticateRequest(req);
+      } catch {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      // Security: validate URL against allowed CDN domains
+      let parsed: URL;
+      try {
+        parsed = new URL(urlParam);
+      } catch {
+        return res.status(400).json({ error: "Invalid URL" });
+      }
+
+      if (parsed.protocol !== "https:") {
+        return res.status(400).json({ error: "Only HTTPS URLs allowed" });
+      }
+      if (parsed.username || parsed.password) {
+        return res.status(400).json({ error: "URLs with credentials not allowed" });
+      }
+
+      const { ENV } = await import("./env");
+      const allowedHost = `${ENV.doSpacesBucket}.${ENV.doSpacesRegion}.cdn.digitaloceanspaces.com`;
+      if (parsed.hostname !== allowedHost) {
+        return res.status(403).json({ error: "URL not from allowed CDN domain" });
+      }
+
+      // Fetch the image server-side with timeout and size limit
+      const axios = (await import("axios")).default;
+      const response = await axios.get(urlParam, {
+        responseType: "arraybuffer",
+        timeout: 30000,
+        maxContentLength: 50 * 1024 * 1024, // 50MB
+      });
+
+      const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      res.set("Content-Type", response.headers["content-type"] || "image/png");
+      res.set("Content-Disposition", `attachment; filename="${sanitizedFilename}"`);
+      res.send(response.data);
+    } catch (err: any) {
+      console.error("[Download] Proxy error:", err.message);
+      return res.status(500).json({ error: "Download failed" });
     }
   });
 

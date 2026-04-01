@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle } from "lucide-react";
+import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info } from "lucide-react";
 import { toast } from "sonner";
 import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
+
+const AUDIENCE_PRESETS = ["Gym-goers", "Busy professionals", "Athletes", "Health-conscious parents", "Biohackers", "Weight loss seekers"];
+const ANGLE_OPTIONS = ["front", "side", "45-degree", "top-down", "back"];
 
 type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
@@ -39,10 +42,22 @@ export default function IterateWinners() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [imageModel, setImageModel] = useState<ImageModel>("nano_banana_pro");
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [selectedFlavour, setSelectedFlavour] = useState<string | null>(null);
+  const [selectedRenderId, setSelectedRenderId] = useState<number | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  const [selectedAudience, setSelectedAudience] = useState<string>("");
+  const [customAudience, setCustomAudience] = useState(false);
 
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
   const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery(undefined, { enabled: sourceType === "competitor_ad" });
+  const productInfoQuery = trpc.productInfo.get.useQuery({ product }, { enabled: !!product });
+  const rendersForFlavour = trpc.renders.listByFlavour.useQuery(
+    { product, flavour: selectedFlavour || "" },
+    { enabled: !!product && !!selectedFlavour }
+  );
+  const peopleQuery = trpc.people.list.useQuery();
+  const flavourOptions = (productInfoQuery.data?.flavourVariants || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const competitorStatics: CompetitorCreative[] = (staticsQuery.data || []).map((c) => ({
     id: c.id,
     title: c.title ?? "Untitled",
@@ -164,6 +179,10 @@ export default function IterateWinners() {
         variationCount,
         aspectRatio,
         imageModel,
+        selectedRenderId: selectedRenderId || undefined,
+        selectedFlavour: selectedFlavour || undefined,
+        selectedPersonId: selectedPersonId || undefined,
+        selectedAudience: selectedAudience || undefined,
       });
       setRunId(result.runId);
       setLocation(`/results/${result.runId}`);
@@ -186,13 +205,6 @@ export default function IterateWinners() {
               <p className="text-gray-400 text-sm">Upload a winning static ad and generate new variations with different copy angles</p>
             </div>
           </div>
-          <button
-            onClick={() => setLocation("/iterate/generate-children")}
-            className="flex items-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-5 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#01040A]"
-          >
-            <Sparkles className="w-4 h-4" />
-            Generate Children
-          </button>
         </div>
       </div>
 
@@ -250,6 +262,65 @@ export default function IterateWinners() {
               ))}
             </div>
           </div>
+
+          {/* Flavour / Render Picker */}
+          {flavourOptions.length > 0 && (
+            <div className="mb-8">
+              <label className="block text-sm font-medium text-gray-300 mb-3">Product Flavour</label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  onClick={() => { setSelectedFlavour(null); setSelectedRenderId(null); }}
+                  className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                    !selectedFlavour ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  }`}
+                >
+                  Auto (Default)
+                </button>
+                {flavourOptions.map((f: string) => (
+                  <button
+                    key={f}
+                    onClick={() => { setSelectedFlavour(f); setSelectedRenderId(null); }}
+                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                      selectedFlavour === f ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              {/* Render thumbnails for selected flavour */}
+              {selectedFlavour && (
+                <div>
+                  {rendersForFlavour.isLoading ? (
+                    <div className="flex items-center gap-2 text-gray-500 text-xs py-2">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Loading renders...
+                    </div>
+                  ) : rendersForFlavour.data && rendersForFlavour.data.length > 0 ? (
+                    <div className="flex gap-2 flex-wrap">
+                      {rendersForFlavour.data.map((r: any) => (
+                        <button
+                          key={r.id}
+                          onClick={() => setSelectedRenderId(r.id)}
+                          className={`w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                            selectedRenderId === r.id ? "border-[#FF3838] shadow-lg shadow-red-500/20" : "border-white/10 hover:border-white/20"
+                          }`}
+                        >
+                          <img src={r.url} alt={r.angle || r.flavour || "render"} className="w-full h-full object-cover" />
+                          {r.angle && (
+                            <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[9px] text-center text-gray-300 py-0.5">{r.angle}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-xs">
+                      No renders tagged for "{selectedFlavour}". <a href="/product-info" className="text-[#FF3838] hover:underline">Upload renders in Product Info</a>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Source: Our ad vs Competitor ad */}
           <div className="mb-8">
@@ -717,28 +788,86 @@ export default function IterateWinners() {
           </div>
           )}
 
-          {/* How it works */}
-          <div className="mb-8 p-5 rounded-xl bg-white/[0.02] border border-white/5">
-            <h3 className="text-white font-medium text-sm mb-3 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              How Iteration Works
-            </h3>
-            <div className="grid grid-cols-4 gap-4">
-              {[
-                { step: "1", title: sourceType === "competitor_ad" ? "Select" : "Upload", desc: sourceType === "competitor_ad" ? "Pick competitor ad" : "Your winning ad" },
-                { step: "2", title: "Analyse", desc: "AI extracts visual DNA" },
-                { step: "3", title: "Brief", desc: "New copy angles" },
-                { step: "4", title: "Generate", desc: "Variation images" },
-              ].map((s) => (
-                <div key={s.step} className="text-center">
-                  <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-400 text-sm font-bold flex items-center justify-center mx-auto mb-2">
-                    {s.step}
-                  </div>
-                  <p className="text-white text-xs font-medium">{s.title}</p>
-                  <p className="text-gray-500 text-[10px]">{s.desc}</p>
-                </div>
+          {/* People Selector */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Include a Person (Optional)
+            </label>
+            {peopleQuery.data && peopleQuery.data.length > 0 ? (
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                <button
+                  onClick={() => setSelectedPersonId(null)}
+                  className={`flex-shrink-0 w-16 h-16 rounded-full border-2 flex items-center justify-center transition-all ${
+                    !selectedPersonId ? "border-[#FF3838] bg-[#FF3838]/10" : "border-white/10 bg-white/5 hover:border-white/20"
+                  }`}
+                >
+                  <span className="text-[10px] text-gray-400">None</span>
+                </button>
+                {peopleQuery.data.map((person: any) => (
+                  <button
+                    key={person.id}
+                    onClick={() => setSelectedPersonId(selectedPersonId === person.id ? null : person.id)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${
+                      selectedPersonId === person.id ? "border-[#FF3838] shadow-lg shadow-red-500/20" : "border-white/10 hover:border-white/20"
+                    }`}
+                    title={person.name}
+                  >
+                    <img src={person.url} alt={person.name} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-xs">
+                No people uploaded yet. <a href="/people" className="text-[#FF3838] hover:underline">Add reference photos in People Library</a>
+              </p>
+            )}
+          </div>
+
+          {/* Audience Type */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Target Audience (Optional)
+            </label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button
+                onClick={() => { setSelectedAudience(""); setCustomAudience(false); }}
+                className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                  !selectedAudience && !customAudience ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                }`}
+              >
+                Auto
+              </button>
+              {AUDIENCE_PRESETS.map((a) => (
+                <button
+                  key={a}
+                  onClick={() => { setSelectedAudience(a); setCustomAudience(false); }}
+                  className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                    selectedAudience === a && !customAudience ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  }`}
+                >
+                  {a}
+                </button>
               ))}
+              <button
+                onClick={() => { setCustomAudience(true); setSelectedAudience(""); }}
+                className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                  customAudience ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                }`}
+              >
+                Custom
+              </button>
             </div>
+            {customAudience && (
+              <input
+                type="text"
+                value={selectedAudience}
+                onChange={(e) => setSelectedAudience(e.target.value)}
+                placeholder="Describe your target audience..."
+                className="w-full bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600"
+              />
+            )}
           </div>
 
           {/* Start Button */}
@@ -841,7 +970,7 @@ export default function IterateWinners() {
 
 // Recent Iterations Component
 function RecentIterations() {
-  const { data: runs, isLoading } = trpc.pipeline.list.useQuery();
+  const { data: runs, isLoading } = trpc.pipeline.list.useQuery({ pipelineType: "iteration" });
   const [, setLocation] = useLocation();
 
   if (isLoading) {
@@ -870,8 +999,8 @@ function RecentIterations() {
             className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all text-left focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#0D0F12]"
           >
             <div className="w-16 h-16 rounded-lg overflow-hidden bg-black/50 shrink-0">
-              {run.sourceImageUrl ? (
-                <img src={run.sourceImageUrl} alt="" className="w-full h-full object-cover" />
+              {run.iterationSourceUrl ? (
+                <img src={run.iterationSourceUrl} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Upload className="w-6 h-6 text-gray-600" />
@@ -880,7 +1009,7 @@ function RecentIterations() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-white font-medium text-sm truncate mb-1">
-                {run.iterationBrief?.originalHeadline || run.sourceImageName || `Run #${run.id}`}
+                {run.iterationBrief?.originalHeadline || run.product || `Run #${run.id}`}
               </p>
               <p className="text-gray-500 text-xs">
                 {run.product} · {new Date(run.createdAt).toLocaleDateString()}

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, index } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -81,6 +81,14 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoFunnelStage: mysqlEnum("videoFunnelStage", ["cold", "warm", "retargeting", "retention"]).default("cold"),
   videoArchetypes: json("videoArchetypes"),
   imageModel: mysqlEnum("imageModel", ["nano_banana_pro", "nano_banana_2"]).default("nano_banana_pro"),
+  /** Iteration pipeline: selected product render ID for this run */
+  selectedRenderId: int("selectedRenderId"),
+  /** Iteration pipeline: selected flavour for this run */
+  selectedFlavour: varchar("selectedFlavour", { length: 64 }),
+  /** Iteration pipeline: selected person type reference ID */
+  selectedPersonId: int("selectedPersonId"),
+  /** Iteration pipeline: target audience (predefined or custom) */
+  selectedAudience: varchar("selectedAudience", { length: 256 }),
   /** Script Generator pipeline columns */
   scriptStyle: varchar("scriptStyle", { length: 16 }),
   scriptSubStructure: varchar("scriptSubStructure", { length: 16 }),
@@ -112,6 +120,10 @@ export const productRenders = mysqlTable("product_renders", {
   fileSize: int("fileSize"),
   /** When true, this render is used as the default for the product in pipelines. One per product. */
   isDefault: int("isDefault").default(0).notNull(), // 1 = default, 0 = not (MySQL has no boolean)
+  /** Product flavour/variant (e.g., "Grape", "Mango"). Sourced from productInfo.flavourVariants. */
+  flavour: varchar("flavour", { length: 64 }),
+  /** Render angle (e.g., "front", "side", "45-degree", "top-down", "back"). */
+  angle: varchar("angle", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -141,8 +153,29 @@ export type ProductInfo = typeof productInfo.$inferSelect;
 export type InsertProductInfo = typeof productInfo.$inferInsert;
 
 /**
+ * People type reference library.
+ * Stores reference photos of people types (not identity preservation).
+ * Gemini generates its own realistic people matching the type/aesthetic.
+ */
+export const people = mysqlTable("people", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  description: text("description"),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  url: text("url").notNull(),
+  mimeType: varchar("mimeType", { length: 64 }).default("image/png").notNull(),
+  fileSize: int("fileSize"),
+  tags: varchar("tags", { length: 256 }),
+  deletedAt: timestamp("deletedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Person = typeof people.$inferSelect;
+export type InsertPerson = typeof people.$inferInsert;
+
+/**
  * Locally cached Foreplay creatives.
- * Auto-synced hourly and on manual trigger.
+ * Auto-synced every 24 hours and on manual trigger.
  * foreplayAdId is unique to prevent duplicates.
  */
 export const foreplayCreatives = mysqlTable("foreplay_creatives", {
@@ -163,9 +196,19 @@ export const foreplayCreatives = mysqlTable("foreplay_creatives", {
   transcription: text("transcription"),
   foreplayCreatedAt: varchar("foreplayCreatedAt", { length: 128 }),
   isNew: int("isNew").default(1).notNull(), // 1 = new, 0 = seen
+  /** AI analysis fields — populated lazily on first view */
+  summary: text("summary"),
+  qualityScore: int("qualityScore"),
+  suggestedConfig: json("suggestedConfig"),
+  /** Data source: foreplay (synced from Foreplay API) or meta_library (imported from Meta Ad Library) */
+  source: mysqlEnum("source", ["foreplay", "meta_library"]).default("foreplay").notNull(),
   syncedAt: timestamp("syncedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => ([
+  index("idx_type_created").on(table.type, table.createdAt),
+  index("idx_is_new").on(table.isNew),
+  index("idx_quality_score").on(table.qualityScore),
+]));
 
 export type ForeplayCreative = typeof foreplayCreatives.$inferSelect;
 export type InsertForeplayCreative = typeof foreplayCreatives.$inferInsert;

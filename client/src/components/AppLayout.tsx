@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X, BookOpen, PenTool } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Image, ImagePlus, FileText, Palette, RefreshCw, Video, BookText, Menu, X, BookOpen, PenTool, Users } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -19,6 +19,7 @@ const navItems = [
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
   // SYSTEM (10-12)
   { icon: FileText, label: "Product Info", path: "/product-info" },
+  { icon: Users, label: "People Library", path: "/people" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];

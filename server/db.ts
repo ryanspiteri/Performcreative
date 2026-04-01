@@ -1,6 +1,7 @@
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns, captionExamples } from "../drizzle/schema";
+import { isNull } from "drizzle-orm";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns, captionExamples, people, InsertPerson } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -160,10 +161,43 @@ export async function getPipelineRun(id: number) {
   return result.length > 0 ? result[0] : null;
 }
 
-export async function listPipelineRuns(limit = 50) {
+export async function listPipelineRuns(limit = 50, pipelineType?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  if (pipelineType) {
+    return db.select().from(pipelineRuns)
+      .where(eq(pipelineRuns.pipelineType, pipelineType as any))
+      .orderBy(desc(pipelineRuns.createdAt)).limit(limit);
+  }
   return db.select().from(pipelineRuns).orderBy(desc(pipelineRuns.createdAt)).limit(limit);
+}
+
+/**
+ * Get pipeline status summary grouped by foreplayAdId.
+ * Returns latest status and run count for each ad.
+ */
+export async function getPipelineStatusByAdIds(adIds: string[]): Promise<Record<string, { status: string; count: number }>> {
+  if (adIds.length === 0) return {};
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({
+    foreplayAdId: pipelineRuns.foreplayAdId,
+    status: pipelineRuns.status,
+    createdAt: pipelineRuns.createdAt,
+  }).from(pipelineRuns)
+    .where(inArray(pipelineRuns.foreplayAdId, adIds))
+    .orderBy(desc(pipelineRuns.createdAt));
+
+  const result: Record<string, { status: string; count: number }> = {};
+  for (const row of rows) {
+    if (!row.foreplayAdId) continue;
+    if (!result[row.foreplayAdId]) {
+      result[row.foreplayAdId] = { status: row.status, count: 1 };
+    } else {
+      result[row.foreplayAdId].count++;
+    }
+  }
+  return result;
 }
 
 // ============================================================
@@ -226,10 +260,54 @@ export async function getChildRunsByParentId(parentRunId: number) {
     .orderBy(desc(pipelineRuns.createdAt));
 }
 
+export async function getProductRenderById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const row = await db.select().from(productRenders).where(eq(productRenders.id, id)).limit(1);
+  return row[0] ?? null;
+}
+
+export async function listProductRendersByFlavour(product: string, flavour: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(productRenders)
+    .where(and(eq(productRenders.product, product), eq(productRenders.flavour, flavour)))
+    .orderBy(desc(productRenders.isDefault), desc(productRenders.createdAt));
+}
+
 export async function deleteProductRender(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(productRenders).where(eq(productRenders.id, id));
+}
+
+// ============================================================
+// People Type Reference helpers
+// ============================================================
+export async function createPerson(data: InsertPerson) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(people).values(data);
+  return (result as any)[0]?.insertId;
+}
+
+export async function listPeople() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(people).where(isNull(people.deletedAt)).orderBy(desc(people.createdAt));
+}
+
+export async function getPerson(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const row = await db.select().from(people).where(and(eq(people.id, id), isNull(people.deletedAt))).limit(1);
+  return row[0] ?? null;
+}
+
+export async function deletePerson(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(people).set({ deletedAt: new Date() }).where(eq(people.id, id));
 }
 
 // ============================================================
@@ -281,10 +359,12 @@ export async function upsertForeplayCreative(data: InsertForeplayCreative): Prom
   };
 
   try {
-    await db.insert(foreplayCreatives).values(sanitised).onDuplicateKeyUpdate({
+    const result = await db.insert(foreplayCreatives).values(sanitised).onDuplicateKeyUpdate({
       set: { syncedAt: new Date() },
     });
-    return true;
+    // MySQL: affectedRows=1 for new insert, affectedRows=2 for on-duplicate-key update
+    const affectedRows = (result as any)[0]?.affectedRows ?? 1;
+    return affectedRows === 1;
   } catch (err: any) {
     if (err.code === "ER_DUP_ENTRY") return false;
     // Log the full error for debugging
@@ -303,18 +383,20 @@ export async function upsertForeplayCreative(data: InsertForeplayCreative): Prom
  * List locally cached Foreplay creatives, optionally filtered by type.
  * Newest first.
  */
-export async function listForeplayCreatives(type?: "VIDEO" | "STATIC", limit = 100) {
+export async function listForeplayCreatives(type?: "VIDEO" | "STATIC", limit = 100, offset = 0) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (type) {
     return db.select().from(foreplayCreatives)
       .where(eq(foreplayCreatives.type, type))
       .orderBy(desc(foreplayCreatives.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
   }
   return db.select().from(foreplayCreatives)
     .orderBy(desc(foreplayCreatives.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 }
 
 /**
@@ -344,6 +426,33 @@ export async function countNewCreatives(): Promise<number> {
   if (!db) throw new Error("Database not available");
   const rows = await db.select({ count: sql<number>`count(*)` }).from(foreplayCreatives).where(eq(foreplayCreatives.isNew, 1));
   return rows[0]?.count || 0;
+}
+
+/**
+ * Get a single foreplay creative by its internal DB id.
+ */
+export async function getForeplayCreativeById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(foreplayCreatives).where(eq(foreplayCreatives.id, id)).limit(1);
+  return rows[0] || null;
+}
+
+/**
+ * Update AI analysis fields on a foreplay creative.
+ */
+export async function updateForeplayCreativeAnalysis(id: number, data: {
+  summary: string;
+  qualityScore: number;
+  suggestedConfig: any;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(foreplayCreatives).set({
+    summary: data.summary,
+    qualityScore: data.qualityScore,
+    suggestedConfig: data.suggestedConfig,
+  }).where(eq(foreplayCreatives.id, id));
 }
 
 // ============================================================

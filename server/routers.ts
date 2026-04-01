@@ -6,6 +6,7 @@ import { z } from "zod";
 import * as db from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
 import { syncFromForeplay, startAutoSync, getSyncStatus } from "./services/foreplaySync";
+import { analyzeAndPersist } from "./services/creativeAnalysis";
 import { analyzeVideoFrames, generateScripts, reviewScript } from "./services/claude";
 import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
@@ -321,7 +322,9 @@ export const appRouter = router({
   }),
 
   pipeline: router({
-    list: publicProcedure.query(async () => db.listPipelineRuns(50)),
+    list: publicProcedure
+      .input(z.object({ pipelineType: z.string().optional() }).optional())
+      .query(async ({ input }) => db.listPipelineRuns(50, input?.pipelineType)),
 
     get: publicProcedure
       .input(z.object({ id: z.number() }))
@@ -403,12 +406,16 @@ export const appRouter = router({
       }
       return creatives.map(c => ({
         id: c.foreplayAdId,
+        dbId: c.id,
         type: "VIDEO",
         title: c.title,
         brandName: c.brandName,
         thumbnailUrl: c.thumbnailUrl,
         mediaUrl: c.mediaUrl,
         isNew: c.isNew === 1,
+        summary: c.summary,
+        qualityScore: c.qualityScore,
+        suggestedConfig: c.suggestedConfig,
       }));
     }),
 
@@ -432,12 +439,16 @@ export const appRouter = router({
       }
       return creatives.map(c => ({
         id: c.foreplayAdId,
+        dbId: c.id,
         type: "STATIC",
         title: c.title,
         brandName: c.brandName,
         imageUrl: c.imageUrl,
         thumbnailUrl: c.thumbnailUrl,
         isNew: c.isNew === 1,
+        summary: c.summary,
+        qualityScore: c.qualityScore,
+        suggestedConfig: c.suggestedConfig,
       }));
     }),
 
@@ -460,6 +471,14 @@ export const appRouter = router({
     statusByAdIds: protectedProcedure
       .input(z.object({ adIds: z.array(z.string()).max(200) }))
       .query(async ({ input }) => db.getPipelineStatusByAdIds(input.adIds)),
+
+    analyzeCreative: protectedProcedure
+      .input(z.object({ dbId: z.number() }))
+      .mutation(async ({ input }) => {
+        const result = await analyzeAndPersist(input.dbId);
+        if (!result) return { success: false as const };
+        return { success: true as const, ...result };
+      }),
 
     // Static pipeline trigger (Stages 1-3 + pause at 3b for selection)
     triggerStatic: protectedProcedure
@@ -818,11 +837,22 @@ Return JSON in this exact format:
         variationCount: z.number().min(1).max(50).optional(),
         aspectRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]).optional(),
         imageModel: z.enum(["nano_banana_pro", "nano_banana_2"]).optional(),
+        selectedRenderId: z.number().optional(),
+        selectedFlavour: z.string().optional(),
+        selectedPersonId: z.number().optional(),
+        selectedAudience: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const sourceType = input.sourceType ?? "own_ad";
         if (sourceType === "competitor_ad" && !input.adaptationMode) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "adaptationMode (concept or style) is required when sourceType is competitor_ad" });
+        }
+        // Validate selected render belongs to this product
+        if (input.selectedRenderId) {
+          const render = await db.getProductRenderById(input.selectedRenderId);
+          if (!render || render.product !== input.product) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Selected render does not exist or does not belong to this product" });
+          }
         }
         const runId = await db.createPipelineRun({
           pipelineType: "iteration",
@@ -842,6 +872,10 @@ Return JSON in this exact format:
           variationTypes: input.variationTypes ? JSON.stringify(input.variationTypes) : null,
           variationCount: input.variationCount || 3,
           imageModel: input.imageModel || "nano_banana_pro",
+          selectedRenderId: input.selectedRenderId ?? null,
+          selectedFlavour: input.selectedFlavour ?? null,
+          selectedPersonId: input.selectedPersonId ?? null,
+          selectedAudience: input.selectedAudience ?? null,
         });
         runIterationStages1to2(runId, input).catch(err => {
           console.error("[Pipeline] Iteration pipeline stages 1-2 failed:", err);
@@ -922,6 +956,7 @@ Return JSON in this exact format:
         headline: z.string().optional(),
         subheadline: z.string().optional(),
         backgroundPrompt: z.string().optional(),
+        referenceImageUrl: z.string().url().optional(),
       }))
       .mutation(async ({ input }) => {
         const run = await db.getPipelineRun(input.runId);
@@ -938,6 +973,7 @@ Return JSON in this exact format:
               headline: input.headline || undefined,
               subheadline: input.subheadline || undefined,
               backgroundPrompt: input.backgroundPrompt || undefined,
+              referenceImageUrl: input.referenceImageUrl || undefined,
             }
           );
           return { success: true, url: result.url, variation: result.variation };
@@ -1039,6 +1075,8 @@ Return JSON in this exact format:
         fileName: z.string(),
         mimeType: z.string(),
         base64Data: z.string(),
+        flavour: z.string().optional(),
+        angle: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const buffer = Buffer.from(input.base64Data, "base64");
@@ -1053,8 +1091,16 @@ Return JSON in this exact format:
           url,
           mimeType: input.mimeType,
           fileSize,
+          flavour: input.flavour || null,
+          angle: input.angle || null,
         });
         return { id, url, fileKey };
+      }),
+
+    listByFlavour: publicProcedure
+      .input(z.object({ product: z.string(), flavour: z.string() }))
+      .query(async ({ input }) => {
+        return db.listProductRendersByFlavour(input.product, input.flavour);
       }),
 
     delete: protectedProcedure
@@ -1068,6 +1114,47 @@ Return JSON in this exact format:
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.setDefaultProductRender(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================================
+  // PEOPLE TYPE REFERENCE LIBRARY
+  // ============================================================
+  people: router({
+    list: publicProcedure.query(async () => db.listPeople()),
+
+    upload: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(128),
+        description: z.string().optional(),
+        tags: z.string().optional(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const fileSize = buffer.length;
+        const suffix = Math.random().toString(36).slice(2, 10);
+        const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
+        const fileKey = `people/${input.name.toLowerCase().replace(/\s+/g, "-")}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const id = await db.createPerson({
+          name: input.name,
+          description: input.description || null,
+          tags: input.tags || null,
+          fileKey,
+          url,
+          mimeType: input.mimeType,
+          fileSize,
+        });
+        return { id, url, fileKey };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deletePerson(input.id);
         return { success: true };
       }),
   }),

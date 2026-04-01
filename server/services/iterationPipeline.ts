@@ -180,10 +180,31 @@ export async function runIterationStage3(runId: number, run: any) {
     const { MODEL_LABELS } = await import("./nanoBananaPro");
     console.log(`[Iteration] Using image model: ${MODEL_LABELS[imageModel]}`);
 
-    // Get default product render from database
-    const productRender = await db.getDefaultProductRender(product);
+    // Get product render: use selectedRenderId if set, otherwise fallback to default
+    let productRender;
+    if (run.selectedRenderId) {
+      productRender = await db.getProductRenderById(run.selectedRenderId);
+      if (!productRender) {
+        console.warn(`[Iteration] Selected render #${run.selectedRenderId} not found, falling back to default`);
+        productRender = await db.getDefaultProductRender(product);
+      }
+    } else {
+      productRender = await db.getDefaultProductRender(product);
+    }
     if (!productRender) {
       throw new Error(`No product render found for ${product}`);
+    }
+
+    // Get person type reference if selected
+    let personImageUrl: string | undefined;
+    if (run.selectedPersonId) {
+      const person = await db.getPerson(run.selectedPersonId);
+      if (person) {
+        personImageUrl = person.url;
+        console.log(`[Iteration] Using person type reference: ${person.name}`);
+      } else {
+        console.warn(`[Iteration] Selected person #${run.selectedPersonId} not found or deleted, proceeding without`);
+      }
     }
 
     console.log(`[Iteration] Using product render: ${productRender.url}`);
@@ -218,7 +239,8 @@ export async function runIterationStage3(runId: number, run: any) {
           productName: `ONEST Health ${product}`,
           backgroundStyleDescription: v.backgroundNote || "Dramatic lighting with premium aesthetic",
           aspectRatio: aspectRatio as any,
-          targetAudience: briefData.targetAudience || undefined,
+          targetAudience: run.selectedAudience || briefData.targetAudience || undefined,
+          hasPersonReference: !!personImageUrl,
         });
 
         const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
@@ -234,6 +256,7 @@ export async function runIterationStage3(runId: number, run: any) {
           useCompositing: false,
           productPosition: "center",
           productScale: 0.45,
+          personImageUrl,
         }, i);
 
         return {
@@ -399,7 +422,7 @@ export async function runIterationStage4(runId: number, run: any) {
 export async function regenerateIterationVariation(
   runId: number,
   variationIndex: number,
-  overrides?: { headline?: string; subheadline?: string; backgroundPrompt?: string }
+  overrides?: { headline?: string; subheadline?: string; backgroundPrompt?: string; referenceImageUrl?: string }
 ) {
   const run = await db.getPipelineRun(runId);
   if (!run) throw new Error("Run not found");
@@ -414,93 +437,78 @@ export async function regenerateIterationVariation(
 
   const v = briefData?.variations?.[variationIndex] || {};
   const product = run.product;
-  const analysis = run.iterationAnalysis || "";
 
-  // Build selections for just this one variation
   const headline = overrides?.headline || v.headline || `VARIATION ${variationIndex + 1}`;
   const subheadline = overrides?.subheadline || v.subheadline || null;
-  
-  // Check if user is only changing text (no background prompt override)
-  const isTextOnlyChange = !overrides?.backgroundPrompt && (overrides?.headline || overrides?.subheadline);
-  
+
+  // Reference precedence: uploaded image > existing variation (text-only) > original source
+  const hasReferenceImage = !!overrides?.referenceImageUrl;
+  const isTextOnlyChange = !overrides?.backgroundPrompt && !hasReferenceImage && (overrides?.headline || overrides?.subheadline);
+
   const bgPrompt = overrides?.backgroundPrompt
     || (v.backgroundNote
       ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
       : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
 
-  // Get default product render
-  const productRender = await db.getDefaultProductRender(product);
+  // Get product render: use run's selected render or fall back to default
+  let productRender;
+  if (run.selectedRenderId) {
+    productRender = await db.getProductRenderById(run.selectedRenderId);
+  }
+  if (!productRender) {
+    productRender = await db.getDefaultProductRender(product);
+  }
   if (!productRender) {
     throw new Error(`No product render found for ${product}`);
   }
 
-  // Get aspect ratio, creativity level, and image model from run config
   const aspectRatio = run.aspectRatio || "1:1";
-  const creativityLevel: CreativityLevel = (run.creativityLevel as CreativityLevel) || "BOLD";
   const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
 
-  let finalUrl: string;
-  
-  // If only text is changing and we have the existing variation data, reuse the background
-  if (isTextOnlyChange && variations[variationIndex]?.url) {
-    console.log(`[Iteration] Text-only regeneration for variation ${variationIndex + 1} - reusing existing background`);
-    console.log(`[Iteration] New headline: "${headline}"`);
-    
-    const geminiPrompt = buildReferenceBasedPrompt({
-      headline,
-      subheadline: subheadline || undefined,
-      productName: `ONEST Health ${product}`,
-      backgroundStyleDescription: bgPrompt,
-      aspectRatio: aspectRatio as any,
-      targetAudience: briefData?.targetAudience || "fitness-conscious adults",
-    });
+  const geminiPrompt = buildReferenceBasedPrompt({
+    headline,
+    subheadline: subheadline || undefined,
+    productName: `ONEST Health ${product}`,
+    backgroundStyleDescription: bgPrompt,
+    aspectRatio: aspectRatio as any,
+    targetAudience: run.selectedAudience || briefData?.targetAudience || "fitness-conscious adults",
+  });
 
-    const sourceUrl = run.iterationSourceUrl || "";
-    const result = await generateProductAdWithNanoBananaPro({
-      prompt: geminiPrompt,
-      controlImageUrl: variations[variationIndex].url, // Use the EXISTING variation as control instead of source
-      productRenderUrl: productRender.url,
-      aspectRatio: aspectRatio as any,
-      model: imageModel,
-      useCompositing: false, // Single-pass: Gemini generates full scene including product
-      productPosition: "center",
-      productScale: 0.45,
-    });
-    
-    finalUrl = result.imageUrl;
+  let controlImageUrl: string;
+  if (hasReferenceImage) {
+    // User uploaded a reference image — use it as the style reference
+    controlImageUrl = overrides!.referenceImageUrl!;
+    console.log(`[Iteration] Regenerating variation ${variationIndex + 1} with uploaded reference image`);
+  } else if (isTextOnlyChange && variations[variationIndex]?.url) {
+    // Text-only change — reuse existing variation as control
+    controlImageUrl = variations[variationIndex].url;
+    console.log(`[Iteration] Text-only regeneration for variation ${variationIndex + 1}`);
   } else {
-    // Full regeneration with new background
-    console.log(`[Iteration] Full regeneration for variation ${variationIndex + 1} with new background`);
-    console.log(`[Iteration] Headline: "${headline}", BG prompt: "${bgPrompt.substring(0, 100)}..."`);
-    
-    const geminiPrompt = buildReferenceBasedPrompt({
-      headline,
-      subheadline: subheadline || undefined,
-      productName: `ONEST Health ${product}`,
-      backgroundStyleDescription: bgPrompt,
-      aspectRatio: aspectRatio as any,
-      targetAudience: briefData?.targetAudience || "fitness-conscious adults",
-    });
-
-    const sourceUrl = run.iterationSourceUrl || "";
-    const result = await generateProductAdWithNanoBananaPro({
-      prompt: geminiPrompt,
-      controlImageUrl: sourceUrl, // Use original source as control
-      productRenderUrl: productRender.url,
-      aspectRatio: aspectRatio as any,
-      model: imageModel,
-      useCompositing: false, // Single-pass: Gemini generates full scene including product
-      productPosition: "center",
-      productScale: 0.45,
-    });
-    
-    finalUrl = result.imageUrl;
+    // Full regeneration — use original source ad
+    controlImageUrl = run.iterationSourceUrl || "";
+    console.log(`[Iteration] Full regeneration for variation ${variationIndex + 1}`);
   }
 
-  // Update the specific variation in the array, preserving existing metadata
+  const result = await generateProductAdWithNanoBananaPro({
+    prompt: geminiPrompt,
+    controlImageUrl,
+    productRenderUrl: productRender.url,
+    aspectRatio: aspectRatio as any,
+    model: imageModel,
+    useCompositing: false,
+    productPosition: "center",
+    productScale: 0.45,
+  });
+
+  const finalUrl = result.imageUrl;
+
+  // Race condition fix: re-read variations before merging to avoid clobbering concurrent changes
+  const freshRun = await db.getPipelineRun(runId);
+  const freshVariations: any[] = Array.isArray(freshRun?.iterationVariations) ? freshRun!.iterationVariations as any[] : variations;
+
   const variationLabel = variationIndex === 0 ? "Control" : `Variation ${variationIndex + 1}`;
-  variations[variationIndex] = {
-    ...variations[variationIndex],
+  freshVariations[variationIndex] = {
+    ...freshVariations[variationIndex],
     url: finalUrl,
     variation: variationLabel,
     ...(overrides?.headline && { headline: overrides.headline }),
@@ -508,7 +516,7 @@ export async function regenerateIterationVariation(
   };
 
   await db.updatePipelineRun(runId, {
-    iterationVariations: variations,
+    iterationVariations: freshVariations,
     iterationStage: "stage_3b_variation_approval",
   });
 

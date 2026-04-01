@@ -21,6 +21,7 @@ export interface PromptBuildOptions {
   backgroundStyleDescription: string; // From user's selected background concept
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
   targetAudience?: string;
+  hasPersonReference?: boolean;
 }
 
 /**
@@ -94,6 +95,7 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
     backgroundStyleDescription,
     aspectRatio = "1:1",
     targetAudience,
+    hasPersonReference = false,
   } = options;
   
   // Analyse headline to extract creative strategy
@@ -102,9 +104,9 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
   // Build prompt
   const prompt = `You are creating a premium supplement advertisement image for paid social media advertising (Meta/TikTok).
 
-I am providing you with TWO images:
+I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
 - Image 1: A REFERENCE AD (competitor ad) — use this for STYLE REFERENCE ONLY
-- Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output
+- Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}
 
 STUDY Image 1 carefully and replicate its:
 - Overall layout and composition

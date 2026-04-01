@@ -13,7 +13,8 @@ export function IterationResults({ run }: { run: any }) {
   const [approvalNotes, setApprovalNotes] = useState("");
   const [variationApprovalNotes, setVariationApprovalNotes] = useState("");
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
-  const [regenOverrides, setRegenOverrides] = useState<{ headline?: string; subheadline?: string; backgroundPrompt?: string }>({});
+  const [regenOverrides, setRegenOverrides] = useState<{ headline?: string; subheadline?: string; backgroundPrompt?: string; referenceImageUrl?: string }>({});
+  const [regenUploading, setRegenUploading] = useState(false);
   const [showRegenForm, setShowRegenForm] = useState<number | null>(null);
   const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
   const [canvaDesignUrls, setCanvaDesignUrls] = useState<Record<number, string>>({});
@@ -126,7 +127,35 @@ export function IterationResults({ run }: { run: any }) {
       headline: regenOverrides.headline || undefined,
       subheadline: regenOverrides.subheadline || undefined,
       backgroundPrompt: regenOverrides.backgroundPrompt || undefined,
+      referenceImageUrl: regenOverrides.referenceImageUrl || undefined,
     });
+  };
+
+  const regenUploadMutation = trpc.renders.upload.useMutation();
+
+  const handleRegenFileUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Only image files"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Max 10MB"); return; }
+    setRegenUploading(true);
+    try {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.readAsDataURL(file);
+      });
+      const result = await regenUploadMutation.mutateAsync({
+        product: "regen-reference",
+        fileName: file.name.replace(/\.[^.]+$/, ""),
+        mimeType: file.type,
+        base64Data: base64,
+      });
+      setRegenOverrides(prev => ({ ...prev, referenceImageUrl: result.url }));
+      toast.success("Image uploaded");
+    } catch (err: any) {
+      toast.error(`Upload failed: ${err.message}`);
+    } finally {
+      setRegenUploading(false);
+    }
   };
 
   return (
@@ -454,20 +483,15 @@ export function IterationResults({ run }: { run: any }) {
                             {/* Download Buttons */}
                             <div className="flex gap-2">
                               <button
-                                onClick={async () => {
+                                onClick={() => {
                                   try {
-                                    // Fetch image as blob to avoid CORS issues
-                                    const response = await fetch(v.url);
-                                    const blob = await response.blob();
-                                    const url = window.URL.createObjectURL(blob);
                                     const a = document.createElement('a');
-                                    a.href = url;
+                                    a.href = `/api/download-image?url=${encodeURIComponent(v.url)}&filename=variation-${i + 1}.png`;
                                     a.download = `variation-${i + 1}.png`;
                                     document.body.appendChild(a);
                                     a.click();
                                     document.body.removeChild(a);
-                                    window.URL.revokeObjectURL(url);
-                                    toast.success("PNG downloaded!");
+                                    toast.success("PNG downloading...");
                                   } catch (err: any) {
                                     toast.error(`Download failed: ${err.message}`);
                                   }
@@ -551,6 +575,34 @@ export function IterationResults({ run }: { run: any }) {
                               className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600 resize-none"
                               rows={2}
                             />
+                            {/* Reference image upload */}
+                            {regenOverrides.referenceImageUrl ? (
+                              <div className="flex items-center gap-2 bg-[#191B1F] border border-white/10 rounded px-2 py-1.5">
+                                <img src={regenOverrides.referenceImageUrl} alt="ref" className="w-8 h-8 rounded object-cover" />
+                                <span className="text-gray-400 text-xs flex-1">Reference image uploaded</span>
+                                <button onClick={() => setRegenOverrides(prev => ({ ...prev, referenceImageUrl: undefined }))} className="text-gray-500 hover:text-white">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <label className="flex items-center gap-2 bg-[#191B1F] border border-dashed border-white/10 rounded px-2 py-2 cursor-pointer hover:border-white/20 transition-colors">
+                                {regenUploading ? (
+                                  <Loader2 className="w-3.5 h-3.5 text-gray-500 animate-spin" />
+                                ) : (
+                                  <Upload className="w-3.5 h-3.5 text-gray-500" />
+                                )}
+                                <span className="text-gray-500 text-xs">{regenUploading ? "Uploading..." : "Upload reference image (optional)"}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleRegenFileUpload(file);
+                                  }}
+                                />
+                              </label>
+                            )}
                             <button
                               onClick={() => handleRegenerate(i)}
                               disabled={regenerateVariation.isPending}
@@ -612,35 +664,38 @@ export function IterationResults({ run }: { run: any }) {
           {/* Variation Approval Gate */}
           {iterationStage === "stage_3b_variation_approval" && (
             <div className="mt-6 border-t border-white/10 pt-4">
-              <h3 className="text-white font-medium mb-2">Happy with these variations?</h3>
-              <p className="text-gray-400 text-xs mb-3">
-                Approve to create ClickUp tasks, or regenerate individual variations above. You can also complete without pushing to ClickUp.
+              <h3 className="text-white font-medium mb-2">What would you like to do with these variations?</h3>
+              <p className="text-gray-400 text-xs mb-4">
+                You can regenerate individual variations above if any need changes.
               </p>
               <textarea
                 value={variationApprovalNotes}
                 onChange={(e) => setVariationApprovalNotes(e.target.value)}
                 placeholder="Optional notes..."
-                className="w-full bg-[#01040A] border border-white/10 rounded-lg p-3 text-sm text-gray-300 placeholder-gray-600 mb-3 resize-none"
+                className="w-full bg-[#01040A] border border-white/10 rounded-lg p-3 text-sm text-gray-300 placeholder-gray-600 mb-4 resize-none"
                 rows={2}
               />
               <div className="flex gap-3 flex-wrap">
                 <button
-                  onClick={() => approveVariations.mutate({ runId: run.id, approved: true, notes: variationApprovalNotes || undefined })}
-                  disabled={approveVariations.isPending || regenerateVariation.isPending}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                >
-                  {approveVariations.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  Approve & Push to ClickUp
-                </button>
-                <button
                   onClick={() => skipClickUp.mutate({ runId: run.id, approved: false, notes: variationApprovalNotes || "Completed without ClickUp" })}
                   disabled={skipClickUp.isPending || regenerateVariation.isPending}
-                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                  className="flex items-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-5 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
                 >
                   {skipClickUp.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                  Complete Without ClickUp
+                  Complete
+                </button>
+                <button
+                  onClick={() => approveVariations.mutate({ runId: run.id, approved: true, notes: variationApprovalNotes || undefined })}
+                  disabled={approveVariations.isPending || regenerateVariation.isPending}
+                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-gray-300 px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 border border-white/10"
+                >
+                  {approveVariations.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Push to ClickUp
                 </button>
               </div>
+              <p className="text-gray-600 text-[10px] mt-2">
+                Complete saves your variations. Push to ClickUp also creates tasks for your design team.
+              </p>
             </div>
           )}
         </div>

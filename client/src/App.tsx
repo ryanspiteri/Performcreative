@@ -24,6 +24,7 @@ import OrganicVideo from "./pages/OrganicVideo";
 import CaptionGenerator from "./pages/CaptionGenerator";
 import ContentLibrary from "./pages/ContentLibrary";
 import VisualContent from "./pages/VisualContent";
+import PeopleLibrary from "./pages/PeopleLibrary";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -48,6 +49,7 @@ function AuthenticatedRoutes() {
         <Route path="/organic/visual" component={VisualContent} />
         <Route path="/organic/library" component={ContentLibrary} />
         <Route path="/product-info" component={ProductInfoHub} />
+        <Route path="/people" component={PeopleLibrary} />
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />
         <Route path="/results/:id" component={Results} />

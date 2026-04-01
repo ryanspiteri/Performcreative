@@ -50,6 +50,8 @@ export interface NanoBananaProOptions {
   productPosition?: "center" | "left" | "right" | "bottom-center" | "bottom-left" | "bottom-right";
   /** Product scale as fraction of canvas width (default: 0.45) */
   productScale?: number;
+  /** Person type reference image URL. Gemini generates a person matching this type/aesthetic. */
+  personImageUrl?: string;
 }
 
 export interface NanoBananaProResult {
@@ -90,6 +92,7 @@ export async function generateProductAdWithNanoBananaPro(
     resolution,
     modelId,
     modelLabel,
+    personImageUrl: options.personImageUrl,
   });
 }
 
@@ -105,12 +108,13 @@ interface InternalOptions {
   resolution: string;
   modelId: string;
   modelLabel: string;
+  personImageUrl?: string;
 }
 
 async function generateProductAdWithNanaBananaPro_internal(
   opts: InternalOptions
 ): Promise<NanoBananaProResult> {
-  const { prompt, controlImageUrl, productRenderUrl, aspectRatio, resolution, modelId, modelLabel } = opts;
+  const { prompt, controlImageUrl, productRenderUrl, aspectRatio, resolution, modelId, modelLabel, personImageUrl } = opts;
 
   console.log(`[NanaBanana] Generating image with ${modelLabel} (${modelId})`);
   console.log(`[NanaBanana] Aspect ratio: ${aspectRatio}, Resolution: ${resolution}`);
@@ -142,6 +146,21 @@ async function generateProductAdWithNanaBananaPro_internal(
             inline_data: {
               mime_type: "image/png",
               data: productImageData,
+            },
+          },
+        ],
+      });
+    }
+
+    if (personImageUrl) {
+      console.log(`[NanaBanana] Using person type reference: ${personImageUrl}`);
+      const personImageData = await fetchImageAsBase64(personImageUrl);
+      contents.push({
+        parts: [
+          {
+            inline_data: {
+              mime_type: "image/jpeg",
+              data: personImageData,
             },
           },
         ],
