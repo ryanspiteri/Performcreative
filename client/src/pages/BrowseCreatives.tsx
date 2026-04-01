@@ -1,70 +1,25 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Play, Image as ImageIcon, Filter, Loader2, ChevronRight, CheckCircle, Clock,
-  Upload, Minus, Plus, DollarSign, Zap, Trophy, Info, Target, User
+  Upload, Minus, Plus, DollarSign, Zap, Trophy, Info, Target, User, Search
 } from "lucide-react";
-
-type Creative = {
-  id: string;
-  type: "VIDEO" | "STATIC";
-  title: string;
-  brandName: string;
-  thumbnailUrl?: string;
-  imageUrl?: string;
-  mediaUrl?: string;
-  isNew?: boolean;
-};
-
-const PRODUCTS = [
-  "Hyperburn", "Thermosleep", "Protein + Collagen", "Hyperload", "Creatine",
-  "Thermoburn", "Carb Control", "HyperPump", "AminoLoad", "Marine Collagen",
-  "SuperGreens", "Whey ISO Pro",
-];
-
-const PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
-
-const SCRIPT_STYLES = [
-  { id: "DR", label: "Direct Response", shortLabel: "DR", description: "Hard-sell with clear offer, urgency, and direct CTA", color: "bg-red-500/20 text-red-300 border-red-500/30" },
-  { id: "UGC", label: "UGC / Testimonial", shortLabel: "UGC", description: "Authentic personal experience, soft-sell recommendation", color: "bg-green-500/20 text-green-300 border-green-500/30" },
-  { id: "FOUNDER", label: "Founder-Led", shortLabel: "Founder", description: "Brand founder speaking with authority and passion", color: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
-  { id: "EDUCATION", label: "Education / Myth-Busting", shortLabel: "Education", description: "Teach something surprising, position product as answer", color: "bg-purple-500/20 text-purple-300 border-purple-500/30" },
-  { id: "LIFESTYLE", label: "Lifestyle / Aspiration", shortLabel: "Lifestyle", description: "Aspirational day-in-the-life with product woven in", color: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
-  { id: "DEMO", label: "Problem / Solution Demo", shortLabel: "Demo", description: "Show the problem, demonstrate the product solving it", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30" },
-] as const;
-
-const DURATIONS = [
-  { value: 45, label: "45s" },
-  { value: 60, label: "60s" },
-  { value: 90, label: "90s" },
-] as const;
-
-const FUNNEL_STAGES = [
-  { id: "cold" as const, label: "Cold", description: "New audiences, problem-aware", color: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
-  { id: "warm" as const, label: "Warm", description: "Engaged, solution-aware", color: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
-  { id: "retargeting" as const, label: "Retargeting", description: "Visited site, product-aware", color: "bg-orange-500/20 text-orange-300 border-orange-500/30" },
-  { id: "retention" as const, label: "Retention", description: "Existing customers", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
-] as const;
-
-const ACTOR_ARCHETYPES = [
-  { id: "FitnessEnthusiast" as const, label: "Fitness Enthusiast", description: "Gym-goer, tracks macros, performance-driven" },
-  { id: "BusyMum" as const, label: "Busy Mum", description: "Time-poor, health-conscious, family-focused" },
-  { id: "Athlete" as const, label: "Athlete", description: "Competitive, recovery-focused, data-driven" },
-  { id: "Biohacker" as const, label: "Biohacker", description: "Ingredient-obsessed, optimisation-focused" },
-  { id: "WellnessAdvocate" as const, label: "Wellness Advocate", description: "Holistic health, clean ingredients, mindful" },
-] as const;
-
-type FunnelStage = typeof FUNNEL_STAGES[number]["id"];
-type ActorArchetype = typeof ACTOR_ARCHETYPES[number]["id"];
-
-type StyleConfig = { styleId: "DR" | "UGC" | "FOUNDER" | "EDUCATION" | "LIFESTYLE" | "DEMO"; quantity: number };
+import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
+import {
+  PRIORITIES, SCRIPT_STYLES, DURATIONS, FUNNEL_STAGES, ACTOR_ARCHETYPES,
+  COST_BASE, COST_PER_SCRIPT,
+  type Creative, type FunnelStage, type ActorArchetype, type StyleConfig,
+} from "../../../shared/pipeline";
+import { CreativeDetailModal } from "@/components/browse/CreativeDetailModal";
 
 export default function BrowseCreatives() {
   const [filterType, setFilterType] = useState<"All" | "VIDEO" | "STATIC">("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
+  const [detailCreative, setDetailCreative] = useState<Creative | null>(null);
   const [product, setProduct] = useState("Hyperburn");
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>("Medium");
   const [, setLocation] = useLocation();
@@ -84,15 +39,81 @@ export default function BrowseCreatives() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Pagination state
+  const [videoOffset, setVideoOffset] = useState(0);
+  const [staticOffset, setStaticOffset] = useState(0);
+  const [allVideos, setAllVideos] = useState<Creative[]>([]);
+  const [allStatics, setAllStatics] = useState<Creative[]>([]);
+  const PAGE_SIZE = 50;
+
   // Config panel ref for auto-scroll
   const configPanelRef = useRef<HTMLDivElement>(null);
 
-  // Fetch both video and static ads
-  const videosQuery = trpc.pipeline.fetchForeplayVideos.useQuery();
-  const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery();
+  // Fetch both video and static ads with pagination
+  const videosQuery = trpc.pipeline.fetchForeplayVideos.useQuery({ limit: PAGE_SIZE, offset: videoOffset });
+  const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery({ limit: PAGE_SIZE, offset: staticOffset });
+
+  // Accumulate paginated results
+  // Sort state
+  const [sortBy, setSortBy] = useState<"newest" | "quality">("newest");
+
+  // Analyze mutation for lazy on-view analysis
+  const analyzeMutation = trpc.pipeline.analyzeCreative.useMutation();
+  const analyzingIds = useRef(new Set<number>());
+
+  const videosData = useMemo(() => {
+    const current = (videosQuery.data || []).map((ad: any) => ({
+      id: ad.id,
+      dbId: ad.dbId as number | undefined,
+      type: "VIDEO" as const,
+      title: ad.title || "Untitled Video",
+      brandName: ad.brandName || "Unknown",
+      thumbnailUrl: ad.thumbnailUrl,
+      mediaUrl: ad.mediaUrl,
+      isNew: ad.isNew,
+      summary: ad.summary,
+      qualityScore: ad.qualityScore,
+      suggestedConfig: ad.suggestedConfig,
+    }));
+    if (videoOffset === 0) return current;
+    const existing = new Set(allVideos.map(v => v.id));
+    return [...allVideos, ...current.filter((c: Creative) => !existing.has(c.id))];
+  }, [videosQuery.data, videoOffset, allVideos]);
+
+  const staticsData = useMemo(() => {
+    const current = (staticsQuery.data || []).map((ad: any) => ({
+      id: ad.id,
+      dbId: ad.dbId as number | undefined,
+      type: "STATIC" as const,
+      title: ad.title || "Untitled Static",
+      brandName: ad.brandName || "Unknown",
+      imageUrl: ad.imageUrl,
+      thumbnailUrl: ad.thumbnailUrl,
+      mediaUrl: ad.mediaUrl,
+      isNew: ad.isNew,
+      summary: ad.summary,
+      qualityScore: ad.qualityScore,
+      suggestedConfig: ad.suggestedConfig,
+    }));
+    if (staticOffset === 0) return current;
+    const existing = new Set(allStatics.map(s => s.id));
+    return [...allStatics, ...current.filter((c: Creative) => !existing.has(c.id))];
+  }, [staticsQuery.data, staticOffset, allStatics]);
+
+  // Track accumulated data for next page append
+  useEffect(() => { if (videosData.length > 0) setAllVideos(videosData); }, [videosData]);
+  useEffect(() => { if (staticsData.length > 0) setAllStatics(staticsData); }, [staticsData]);
+
+  const hasMoreVideos = (videosQuery.data || []).length === PAGE_SIZE;
+  const hasMoreStatics = (staticsQuery.data || []).length === PAGE_SIZE;
+
   const syncMutation = trpc.pipeline.syncForeplayNow.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
+      setVideoOffset(0);
+      setStaticOffset(0);
+      setAllVideos([]);
+      setAllStatics([]);
       videosQuery.refetch();
       staticsQuery.refetch();
     },
@@ -101,52 +122,78 @@ export default function BrowseCreatives() {
     },
   });
 
-  const pipelineHistory = trpc.pipeline.list.useQuery();
+  // Collect all creative IDs for targeted status lookup
+  const allCreativeIds = useMemo(() => {
+    const videoIds = videosData.map(v => v.id).filter(Boolean);
+    const staticIds = staticsData.map(s => s.id).filter(Boolean);
+    return [...videoIds, ...staticIds];
+  }, [videosData, staticsData]);
+
+  const pipelineStatusQuery = trpc.pipeline.statusByAdIds.useQuery(
+    { adIds: allCreativeIds },
+    { enabled: allCreativeIds.length > 0 }
+  );
 
   const processedAdIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (pipelineHistory.data) {
-      for (const run of pipelineHistory.data) {
-        if (run.foreplayAdId) ids.add(run.foreplayAdId);
-      }
-    }
-    return ids;
-  }, [pipelineHistory.data]);
+    return new Set(Object.keys(pipelineStatusQuery.data || {}));
+  }, [pipelineStatusQuery.data]);
 
   const getAdPipelineStatus = (adId: string): { status: string; count: number } | null => {
-    if (!pipelineHistory.data) return null;
-    const runs = pipelineHistory.data.filter(r => r.foreplayAdId === adId);
-    if (runs.length === 0) return null;
-    const latestRun = runs[0];
-    return { status: latestRun.status, count: runs.length };
+    return pipelineStatusQuery.data?.[adId] || null;
   };
 
   const creatives = useMemo(() => {
-    const videos: Creative[] = (videosQuery.data || []).map((ad: any) => ({
-      id: ad.id,
-      type: "VIDEO" as const,
-      title: ad.title || "Untitled Video",
-      brandName: ad.brandName || "Unknown",
-      thumbnailUrl: ad.thumbnailUrl,
-      mediaUrl: ad.mediaUrl,
-      isNew: ad.isNew,
-    }));
+    let all = [...videosData, ...staticsData];
+    if (filterType !== "All") all = all.filter(c => c.type === filterType);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      all = all.filter(c => c.title.toLowerCase().includes(q) || c.brandName.toLowerCase().includes(q));
+    }
+    if (sortBy === "quality") {
+      all = [...all].sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
+    }
+    return all;
+  }, [videosData, staticsData, filterType, searchQuery, sortBy]);
 
-    const statics: Creative[] = (staticsQuery.data || []).map((ad: any) => ({
-      id: ad.id,
-      type: "STATIC" as const,
-      title: ad.title || "Untitled Static",
-      brandName: ad.brandName || "Unknown",
-      imageUrl: ad.imageUrl,
-      thumbnailUrl: ad.thumbnailUrl,
-      mediaUrl: ad.mediaUrl,
-      isNew: ad.isNew,
-    }));
+  // Lazy on-view analysis: intersection observer triggers analysis for visible cards
+  const analysisQueue = useRef<number[]>([]);
+  const processingCount = useRef(0);
+  const MAX_CONCURRENT = 3;
 
-    const all = [...videos, ...statics];
-    if (filterType === "All") return all;
-    return all.filter(c => c.type === filterType);
-  }, [videosQuery.data, staticsQuery.data, filterType]);
+  const processAnalysisQueue = useCallback(() => {
+    while (processingCount.current < MAX_CONCURRENT && analysisQueue.current.length > 0) {
+      const dbId = analysisQueue.current.shift()!;
+      processingCount.current++;
+      analyzeMutation.mutateAsync({ dbId }).then(() => {
+        videosQuery.refetch();
+        staticsQuery.refetch();
+      }).finally(() => {
+        processingCount.current--;
+        processAnalysisQueue();
+      });
+    }
+  }, [analyzeMutation, videosQuery, staticsQuery]);
+
+  const cardObserverRef = useCallback((node: HTMLElement | null, creative: Creative) => {
+    if (!node || !creative.dbId || creative.summary || analyzingIds.current.has(creative.dbId)) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && creative.dbId) {
+        analyzingIds.current.add(creative.dbId);
+        analysisQueue.current.push(creative.dbId);
+        processAnalysisQueue();
+        observer.disconnect();
+      }
+    }, { threshold: 0.5 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [processAnalysisQueue]);
+
+  const hasMore = filterType === "VIDEO" ? hasMoreVideos : filterType === "STATIC" ? hasMoreStatics : (hasMoreVideos || hasMoreStatics);
+
+  const loadMore = useCallback(() => {
+    if (filterType !== "STATIC" && hasMoreVideos) setVideoOffset(prev => prev + PAGE_SIZE);
+    if (filterType !== "VIDEO" && hasMoreStatics) setStaticOffset(prev => prev + PAGE_SIZE);
+  }, [filterType, hasMoreVideos, hasMoreStatics]);
 
   // Style quantity helpers
   const totalScripts = styleConfig.reduce((sum, s) => sum + s.quantity, 0);
@@ -164,9 +211,7 @@ export default function BrowseCreatives() {
   // Cost estimate for video pipeline (v3.0 — up to 5 review rounds)
   // Base cost: transcription + analysis + brief = ~$0.35
   // Per script: generation + review (avg 3 rounds) = ~$0.60 per script
-  const baseCost = 0.35;
-  const perScriptCost = 0.60;
-  const estimatedCost = baseCost + (totalScripts * perScriptCost);
+  const estimatedCost = COST_BASE + (totalScripts * COST_PER_SCRIPT);
 
   // Check if any UGC scripts are selected (to show archetype picker)
   const hasUgcScripts = styleConfig.find(s => s.styleId === "UGC")?.quantity ?? 0;
@@ -237,8 +282,31 @@ export default function BrowseCreatives() {
     },
   });
 
+  const [aiSuggested, setAiSuggested] = useState<Set<string>>(new Set());
+
   const handleSelectCreative = (creative: Creative) => {
     setSelectedCreative(creative);
+
+    // Auto-fill config from AI suggestion if available
+    if (creative.suggestedConfig) {
+      const cfg = creative.suggestedConfig as any;
+      const suggested = new Set<string>();
+      if (cfg.product) { setProduct(cfg.product); suggested.add("product"); }
+      if (cfg.funnelStage) { setFunnelStage(cfg.funnelStage); suggested.add("funnelStage"); }
+      if (cfg.duration) { setDuration(cfg.duration); suggested.add("duration"); }
+      if (cfg.actorArchetype) { setActorArchetype(cfg.actorArchetype); suggested.add("actorArchetype"); }
+      if (cfg.styleConfig?.length) {
+        setStyleConfig(SCRIPT_STYLES.map(s => {
+          const match = cfg.styleConfig.find((sc: any) => sc.styleId === s.id);
+          return { styleId: s.id, quantity: match?.quantity || 0 };
+        }));
+        suggested.add("styleConfig");
+      }
+      setAiSuggested(suggested);
+    } else {
+      setAiSuggested(new Set());
+    }
+
     // Auto-scroll to config panel on mobile
     setTimeout(() => {
       configPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -325,6 +393,7 @@ export default function BrowseCreatives() {
         <Button
           onClick={() => syncMutation.mutate()}
           disabled={isSyncing}
+          aria-label="Sync creatives from Foreplay"
           className="bg-[#0347ED] hover:bg-[#0347ED]/90 text-white h-10 text-sm whitespace-nowrap"
         >
           {isSyncing ? (
@@ -364,23 +433,54 @@ export default function BrowseCreatives() {
         </button>
       </div>
 
-      {/* Filter Tabs — only show in competitor mode */}
+      {/* Filter Tabs + Search — only show in competitor mode */}
       {sourceType === "competitor" && (
-        <div className="flex gap-2">
-          {(["All", "VIDEO", "STATIC"] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterType === type
-                  ? "bg-[#FF3838] text-white"
-                  : "bg-[#191B1F] text-gray-400 hover:text-white border border-white/10"
-              }`}
-            >
-              <Filter className="w-4 h-4 inline mr-2" />
-              {type}
-            </button>
-          ))}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-2">
+            {(["All", "VIDEO", "STATIC"] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                aria-pressed={filterType === type}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterType === type
+                    ? "bg-[#FF3838] text-white"
+                    : "bg-[#191B1F] text-gray-400 hover:text-white border border-white/10"
+                }`}
+              >
+                <Filter className="w-4 h-4 inline mr-2" />
+                {type}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search by title or brand..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search creatives"
+              className="w-full pl-10 pr-3 py-2 bg-[#191B1F] border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF3838]/50"
+            />
+          </div>
+          <div className="flex gap-1" role="radiogroup" aria-label="Sort order">
+            {([{ id: "newest", label: "Newest" }, { id: "quality", label: "Best Quality" }] as const).map((s) => (
+              <button
+                key={s.id}
+                role="radio"
+                aria-checked={sortBy === s.id}
+                onClick={() => setSortBy(s.id)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  sortBy === s.id
+                    ? "bg-[#FF3838] text-white"
+                    : "bg-[#191B1F] text-gray-400 hover:text-white border border-white/10"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -470,15 +570,24 @@ export default function BrowseCreatives() {
                   <p>No creatives found</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  {creatives.map((creative) => {
+                <>
+                <div className="grid grid-cols-2 gap-4" role="grid" aria-label="Creative gallery">
+                  {creatives.map((creative: Creative) => {
                     const pipelineStatus = getAdPipelineStatus(creative.id);
+                    const isSelected = selectedCreative?.id === creative.id;
                     return (
                       <div
                         key={creative.id}
+                        ref={(node) => cardObserverRef(node, creative)}
+                        role="gridcell"
+                        tabIndex={0}
+                        aria-selected={isSelected}
+                        aria-label={`${creative.type} ad: ${creative.title} by ${creative.brandName}${creative.qualityScore ? `. Quality score: ${creative.qualityScore} out of 10` : ""}`}
                         onClick={() => handleSelectCreative(creative)}
-                        className={`cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative ${
-                          selectedCreative?.id === creative.id
+                        onDoubleClick={() => setDetailCreative(creative)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSelectCreative(creative); } }}
+                        className={`cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative focus:outline-none focus:ring-2 focus:ring-[#FF3838]/50 ${
+                          isSelected
                             ? "border-[#FF3838] shadow-lg shadow-[#FF3838]/20"
                             : "border-white/10 hover:border-white/20"
                         }`}
@@ -517,6 +626,17 @@ export default function BrowseCreatives() {
                           </div>
                         )}
 
+                        {/* Quality Score Badge */}
+                        {creative.qualityScore != null && (
+                          <div className={`absolute top-2 right-12 z-10 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold backdrop-blur-sm ${
+                            creative.qualityScore >= 7 ? "bg-emerald-500/90 text-white"
+                            : creative.qualityScore >= 4 ? "bg-amber-500/90 text-white"
+                            : "bg-red-500/90 text-white"
+                          }`}>
+                            {creative.qualityScore}/10
+                          </div>
+                        )}
+
                         <div className="relative bg-[#01040A] aspect-square flex items-center justify-center overflow-hidden">
                           {creative.type === "VIDEO" && creative.thumbnailUrl ? (
                             <>
@@ -547,11 +667,33 @@ export default function BrowseCreatives() {
                             </span>
                           </div>
                           <p className="text-xs text-gray-400">{creative.brandName}</p>
+                          {creative.summary ? (
+                            <p className="text-xs text-gray-500 truncate mt-1">{creative.summary}</p>
+                          ) : creative.dbId && analyzingIds.current.has(creative.dbId) ? (
+                            <div className="mt-1 h-3 bg-gray-800 rounded animate-pulse" aria-busy="true" />
+                          ) : null}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                {hasMore && sourceType === "competitor" && (
+                  <div className="flex justify-center mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={loadMore}
+                      disabled={videosQuery.isLoading || staticsQuery.isLoading}
+                      className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                    >
+                      {(videosQuery.isLoading || staticsQuery.isLoading) ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading...</>
+                      ) : (
+                        "Load More"
+                      )}
+                    </Button>
+                  </div>
+                )}
+                </>
               )}
             </div>
           )}
@@ -611,9 +753,11 @@ export default function BrowseCreatives() {
 
                 {/* Product Selection */}
                 <div>
-                  <label className="text-xs font-medium text-gray-300 mb-2 block">Product</label>
+                  <label className="text-xs font-medium text-gray-300 mb-2 block">
+                    Product {aiSuggested.has("product") && <span className="text-emerald-400 ml-1">★ AI</span>}
+                  </label>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {PRODUCTS.map((p) => (
+                    {ACTIVE_PRODUCTS.map((p) => (
                       <button
                         key={p}
                         onClick={() => setProduct(p)}
@@ -656,7 +800,7 @@ export default function BrowseCreatives() {
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <Target className="w-3.5 h-3.5 text-gray-400" />
-                        <label className="text-xs font-medium text-gray-300">Funnel Stage</label>
+                        <label className="text-xs font-medium text-gray-300">Funnel Stage {aiSuggested.has("funnelStage") && <span className="text-emerald-400 ml-1">★ AI</span>}</label>
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
                         {FUNNEL_STAGES.map((stage) => (
@@ -699,7 +843,7 @@ export default function BrowseCreatives() {
                     {/* Script Style Picker */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-medium text-gray-300">Script Styles</label>
+                        <label className="text-xs font-medium text-gray-300">Script Styles {aiSuggested.has("styleConfig") && <span className="text-emerald-400 ml-1">★ AI</span>}</label>
                         <span className="text-xs text-gray-500">
                           {totalScripts > 0 ? `${totalScripts} total` : "Select styles"}
                         </span>
@@ -795,8 +939,8 @@ export default function BrowseCreatives() {
                           ${estimatedCost.toFixed(2)}
                         </div>
                         <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                          <div>Base (transcription + analysis + brief): ${baseCost.toFixed(2)}</div>
-                          <div>{totalScripts} script{totalScripts === 1 ? "" : "s"} x ${perScriptCost.toFixed(2)} (generation + review): ${(totalScripts * perScriptCost).toFixed(2)}</div>
+                          <div>Base (transcription + analysis + brief): ${COST_BASE.toFixed(2)}</div>
+                          <div>{totalScripts} script{totalScripts === 1 ? "" : "s"} x ${COST_PER_SCRIPT.toFixed(2)} (generation + review): ${(totalScripts * COST_PER_SCRIPT).toFixed(2)}</div>
                         </div>
                       </div>
                     )}
@@ -848,6 +992,17 @@ export default function BrowseCreatives() {
           </div>
         </div>
       </div>
+
+      {/* Detail Modal — opens on double-click */}
+      {detailCreative && (
+        <CreativeDetailModal
+          creative={detailCreative}
+          onClose={() => setDetailCreative(null)}
+          onRunPipeline={() => {
+            handleSelectCreative(detailCreative);
+          }}
+        />
+      )}
     </div>
   );
 }

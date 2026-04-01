@@ -5,6 +5,8 @@ import type { InsertForeplayCreative } from "../../drizzle/schema";
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 let _syncTimer: ReturnType<typeof setInterval> | null = null;
 let _lastSyncAt: Date | null = null;
+// NOTE: In-memory flag — only prevents concurrent syncs within a single process.
+// If scaling to multiple instances, use a DB advisory lock instead.
 let _isSyncing = false;
 
 /**
@@ -21,11 +23,7 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
   console.log("[ForeplaySync] Starting sync from Foreplay...");
 
   try {
-    // Fetch existing IDs for fast dedup check
-    const existingIds = await db.getExistingForeplayAdIds();
-    console.log(`[ForeplaySync] ${existingIds.size} existing creatives in local DB`);
-
-    // Fetch from both boards - request 1000 to get all available ads
+    // Fetch from both boards — dedup handled by upsert (onDuplicateKeyUpdate on foreplayAdId)
     const [videoAds, staticAds] = await Promise.all([
       fetchVideoAds(1000),
       fetchStaticAds(1000),
@@ -36,9 +34,8 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
 
     let newCount = 0;
 
-    // Process video ads
+    // Process video ads — upsert handles dedup via unique foreplayAdId constraint
     for (const ad of videoAds) {
-      if (existingIds.has(ad.id)) continue; // Already in DB
       try {
         const creative: InsertForeplayCreative = {
           foreplayAdId: ad.id,
@@ -58,8 +55,8 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
           foreplayCreatedAt: ad.createdAt || null,
           isNew: 1,
         };
-        await db.upsertForeplayCreative(creative);
-        newCount++;
+        const isNew = await db.upsertForeplayCreative(creative);
+        if (isNew) newCount++;
       } catch (err: any) {
         console.warn(`[ForeplaySync] Failed to upsert video ad ${ad.id}:`, err.message);
       }
@@ -67,7 +64,6 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
 
     // Process static ads
     for (const ad of staticAds) {
-      if (existingIds.has(ad.id)) continue; // Already in DB
       try {
         const creative: InsertForeplayCreative = {
           foreplayAdId: ad.id,
@@ -87,8 +83,8 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
           foreplayCreatedAt: ad.createdAt || null,
           isNew: 1,
         };
-        await db.upsertForeplayCreative(creative);
-        newCount++;
+        const isNew = await db.upsertForeplayCreative(creative);
+        if (isNew) newCount++;
       } catch (err: any) {
         console.warn(`[ForeplaySync] Failed to upsert static ad ${ad.id}:`, err.message);
       }
@@ -106,7 +102,7 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
 }
 
 /**
- * Start the hourly background sync job.
+ * Start the daily (24h) background sync job.
  * Also runs an initial sync immediately on startup.
  */
 export function startAutoSync(): void {
@@ -124,11 +120,11 @@ export function startAutoSync(): void {
     console.log(`[ForeplaySync] Initial sync: ${result.newCount} new creatives`);
   })();
 
-  // Set up hourly interval
+  // Set up 24-hour interval
   _syncTimer = setInterval(async () => {
     console.log("[ForeplaySync] Running scheduled daily sync...");
     const result = await syncFromForeplay();
-    console.log(`[ForeplaySync] Hourly sync: ${result.newCount} new creatives`);
+    console.log(`[ForeplaySync] Daily sync: ${result.newCount} new creatives`);
   }, SYNC_INTERVAL_MS);
 }
 

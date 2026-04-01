@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import axios from "axios";
 import { ENV } from "../_core/env";
 
@@ -38,6 +39,22 @@ export interface ForeplayAd {
  * Fetch ads from a Foreplay board by board_id.
  * Uses the correct endpoint: GET /api/board/ads?board_id=XXX
  */
+async function fetchWithRetry(url: string, params: Record<string, any>, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await foreplayClient.get(url, { params });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      // Don't retry 4xx client errors (except 429 rate limit)
+      if (status && status >= 400 && status < 500 && status !== 429) throw err;
+      if (attempt === maxRetries) throw err;
+      const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+      console.warn(`[Foreplay] Request failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
 export async function fetchBoardAds(boardId: string, limit = 100): Promise<ForeplayAd[]> {
   const allAds: any[] = [];
   let offset = 0;
@@ -48,9 +65,7 @@ export async function fetchBoardAds(boardId: string, limit = 100): Promise<Forep
     console.log(`[Foreplay] Fetching ads from board ${boardId}, limit=${limit} (paginated)`);
 
     for (let page = 0; page < maxPages; page++) {
-      const res = await foreplayClient.get("/api/board/ads", {
-        params: { board_id: boardId, limit: pageSize, offset },
-      });
+      const res = await fetchWithRetry("/api/board/ads", { board_id: boardId, limit: pageSize, offset });
 
       const data = res.data?.data || [];
       console.log(`[Foreplay] Page ${page + 1}: got ${data.length} ads (offset=${offset})`);
@@ -95,7 +110,7 @@ function normalizeAds(ads: any[]): ForeplayAd[] {
     const extractedImage = (ad.cards?.[0]?.image) || ad.image || "";
     
     return {
-      id: ad.id || ad.ad_id || String(Math.random()),
+      id: ad.id || ad.ad_id || `unknown-${crypto.createHash("sha256").update(`${ad.headline || ""}|${ad.name || ""}|${(ad.description || "").slice(0, 50)}`).digest("hex").slice(0, 16)}`,
       title: ad.headline || ad.name || ad.description?.slice(0, 80) || "Untitled Ad",
       brandName: ad.name || "",
       mediaUrl: ad.video || "",           // video URL
