@@ -13,6 +13,9 @@ import multer from "multer";
 import * as db from "../db";
 import { storagePut } from "../storage";
 import bcrypt from "bcryptjs";
+import axios from "axios";
+import { sdk } from "./sdk";
+import { ENV } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -110,7 +113,6 @@ async function startServer() {
 
       // Auth check: reuse SDK session verification
       try {
-        const { sdk } = await import("./sdk");
         await sdk.authenticateRequest(req);
       } catch {
         return res.status(401).json({ error: "Authentication required" });
@@ -131,14 +133,12 @@ async function startServer() {
         return res.status(400).json({ error: "URLs with credentials not allowed" });
       }
 
-      const { ENV } = await import("./env");
       const allowedHost = `${ENV.doSpacesBucket}.${ENV.doSpacesRegion}.cdn.digitaloceanspaces.com`;
       if (parsed.hostname !== allowedHost) {
         return res.status(403).json({ error: "URL not from allowed CDN domain" });
       }
 
       // Fetch the image server-side with timeout and size limit
-      const axios = (await import("axios")).default;
       const response = await axios.get(urlParam, {
         responseType: "arraybuffer",
         timeout: 30000,
