@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Save, Package, FileText, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import ProductRendersPanel from "@/components/ProductRendersPanel";
 
 const ACTIVE_PRODUCTS = ["Hyperburn", "Thermosleep", "Hyperload", "Thermoburn", "Carb Control"];
 
@@ -188,6 +189,9 @@ export default function ProductInfoHub() {
               </>
             )}
           </div>
+
+          {/* Product Renders */}
+          <ProductRendersPanel selectedProduct={selectedProduct} />
         </div>
 
         {/* Sidebar Stats */}

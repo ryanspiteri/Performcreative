@@ -11,7 +11,6 @@ import ManualTrigger from "./pages/ManualTrigger";
 import Results from "./pages/Results";
 import Settings from "./pages/Settings";
 import StaticPipeline from "./pages/StaticPipeline";
-import ProductRenders from "./pages/ProductRenders";
 import ProductInfoHub from "./pages/ProductInfoHub";
 import Backgrounds from "./pages/Backgrounds";
 import IterateWinners from "./pages/IterateWinners";
@@ -35,7 +34,6 @@ function AuthenticatedRoutes() {
         <Route path="/" component={BrowseCreatives} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/browse" component={BrowseCreatives} />
-        <Route path="/renders" component={ProductRenders} />
         <Route path="/backgrounds" component={Backgrounds} />
         <Route path="/iterate" component={IterateWinners} />
         <Route path="/iterate/generate-children" component={ParentSelection} />

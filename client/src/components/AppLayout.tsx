@@ -14,11 +14,10 @@ const navItems = [
   { icon: ImagePlus, label: "Social Graphics", path: "/organic/visual" },
   { icon: FileText, label: "Captions", path: "/organic/captions" },
   { icon: BookOpen, label: "Content Library", path: "/organic/library" },
-  // ASSETS (8-10)
+  // ASSETS (8-9)
   { icon: BookText, label: "Headline Bank", path: "/headlines" },
-  { icon: ImagePlus, label: "Product Renders", path: "/renders" },
   { icon: Palette, label: "Backgrounds", path: "/backgrounds" },
-  // SYSTEM (11-13)
+  // SYSTEM (10-12)
   { icon: FileText, label: "Product Info", path: "/product-info" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -124,7 +123,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">Assets</p>
         </div>
         <nav className="px-3 space-y-0.5">
-          {navItems.slice(8, 11).map((item) => {
+          {navItems.slice(8, 10).map((item) => {
             const isActive = location === item.path;
             return (
               <button
@@ -148,7 +147,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 px-3">System</p>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.slice(11).map((item) => {
+          {navItems.slice(10).map((item) => {
             const isActive = location === item.path;
             return (
               <button
