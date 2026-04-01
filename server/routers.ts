@@ -13,6 +13,7 @@ import { createMultipleScriptTasks } from "./services/clickup";
 import { runVideoPipelineStages1to3, runVideoPipelineStage4, runVideoPipelineStage5, completeVideoPipelineWithoutClickUp } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
 import { runIterationStages1to2, runIterationStage3, runIterationStage4, regenerateIterationVariation } from "./services/iterationPipeline";
+import { generateProductAdWithNanoBananaPro } from "./services/nanoBananaPro";
 import { pushIterationRunToClickUp } from "./services/iterationClickUp";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
@@ -1156,6 +1157,43 @@ Return JSON in this exact format:
       .mutation(async ({ input }) => {
         await db.deletePerson(input.id);
         return { success: true };
+      }),
+
+    generate: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(128),
+        description: z.string().min(1),
+        tags: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const prompt = `Generate a hyper-realistic portrait photograph of a person for use in fitness supplement advertising.
+The image should look like a professional photoshoot, indistinguishable from a real photograph.
+Shot on a high-end DSLR camera with shallow depth of field, natural skin texture, realistic lighting.
+Studio or environmental lighting. No AI artifacts, no uncanny valley effects. The person should look completely real.
+Professional color grading, sharp focus on the face, natural skin pores and texture visible.
+
+Subject: ${input.description}
+
+Style: Professional fitness/lifestyle photography. Magazine quality. The person should look like they could appear in a supplement brand campaign.`;
+
+        const result = await generateProductAdWithNanoBananaPro({
+          prompt,
+          aspectRatio: "1:1",
+          resolution: "2K",
+          model: "nano_banana_pro",
+          useCompositing: false,
+        });
+
+        const id = await db.createPerson({
+          name: input.name,
+          description: input.description,
+          tags: input.tags || null,
+          fileKey: result.s3Key,
+          url: result.imageUrl,
+          mimeType: "image/png",
+        });
+
+        return { id, url: result.imageUrl };
       }),
   }),
 

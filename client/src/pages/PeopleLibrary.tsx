@@ -1,21 +1,36 @@
 import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Users, Upload, Trash2, Loader2, Plus, X } from "lucide-react";
+import { Users, Upload, Trash2, Loader2, Plus, X, Sparkles, Wand2 } from "lucide-react";
 
 const TAG_OPTIONS = ["male", "female", "athletic", "casual", "young", "mature", "professional"];
+
+const AI_PRESETS = [
+  "Athletic female, mid-20s, toned physique, gym setting, confident expression",
+  "Professional male, early 30s, fit build, studio portrait, natural lighting",
+  "Fit mother, late 20s, casual activewear, bright natural light, warm smile",
+  "Young male athlete, early 20s, intense expression, dark dramatic background",
+  "Mature fitness enthusiast, 40s, confident pose, outdoor setting",
+  "Female bodybuilder, strong physique, gym environment, powerful stance",
+  "Male model, chiseled jawline, athletic wear, minimalist studio backdrop",
+  "Active young woman, running gear, outdoor trail, energetic pose",
+];
 
 export default function PeopleLibrary() {
   const { data: people, isLoading } = trpc.people.list.useQuery();
   const utils = trpc.useUtils();
 
   const [showUpload, setShowUpload] = useState(false);
+  const [createMode, setCreateMode] = useState<"upload" | "ai">("upload");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileData, setFileData] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPreview, setAiPreview] = useState<string | null>(null);
 
   const uploadPerson = trpc.people.upload.useMutation({
     onSuccess: () => {
@@ -24,6 +39,15 @@ export default function PeopleLibrary() {
       resetForm();
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  const generatePerson = trpc.people.generate.useMutation({
+    onSuccess: (data) => {
+      toast.success("Person generated and saved to library");
+      utils.people.list.invalidate();
+      resetForm();
+    },
+    onError: (err) => toast.error(`Generation failed: ${err.message}`),
   });
 
   const deletePerson = trpc.people.delete.useMutation({
@@ -36,11 +60,30 @@ export default function PeopleLibrary() {
 
   const resetForm = () => {
     setShowUpload(false);
+    setCreateMode("upload");
     setName("");
     setDescription("");
     setSelectedTags([]);
     setPreview(null);
     setFileData(null);
+    setAiPrompt("");
+    setAiGenerating(false);
+    setAiPreview(null);
+  };
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) { toast.error("Describe the person to generate"); return; }
+    if (!name.trim()) { toast.error("Name is required"); return; }
+    setAiGenerating(true);
+    try {
+      await generatePerson.mutateAsync({
+        name: name.trim(),
+        description: aiPrompt.trim(),
+        tags: selectedTags.length > 0 ? selectedTags.join(",") : undefined,
+      });
+    } finally {
+      setAiGenerating(false);
+    }
   };
 
   const handleFile = useCallback((file: File) => {
@@ -125,10 +168,112 @@ export default function PeopleLibrary() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Mode Toggle */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setCreateMode("upload")}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                  createMode === "upload" ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                }`}
+              >
+                <Upload className="w-4 h-4" />
+                Upload Photo
+              </button>
+              <button
+                onClick={() => setCreateMode("ai")}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                  createMode === "ai" ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                }`}
+              >
+                <Wand2 className="w-4 h-4" />
+                Create with AI
+              </button>
+            </div>
+
             <p className="text-gray-400 text-xs mb-4">
-              This is a TYPE reference, not identity preservation. AI will generate a new realistic person matching the general look, age, and style.
+              {createMode === "upload"
+                ? "Upload a reference photo. AI will generate a new realistic person matching the general look, age, and style."
+                : "Describe the person you want and AI will generate a hyper-realistic portrait using Nano Banana Pro."}
             </p>
 
+            {createMode === "ai" ? (
+              <div className="space-y-4">
+                {/* AI Preset Prompts */}
+                <div>
+                  <label className="block text-gray-400 text-xs font-medium mb-2">Quick Presets</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {AI_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => setAiPrompt(preset)}
+                        className={`px-3 py-2 rounded-lg text-xs text-left transition-all ${
+                          aiPrompt === preset
+                            ? "bg-[#FF3838]/10 border border-[#FF3838] text-white"
+                            : "bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-gray-400 text-xs font-medium mb-1">Name *</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g., Athletic Female Model"
+                    className="w-full bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 text-xs font-medium mb-1">Description / Prompt *</label>
+                  <textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="Describe the person in detail: age, gender, build, expression, setting, clothing, lighting..."
+                    className="w-full bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 resize-none"
+                    rows={4}
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 text-xs font-medium mb-1">Tags</label>
+                  <div className="flex flex-wrap gap-2">
+                    {TAG_OPTIONS.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                          selectedTags.includes(tag) ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={handleAiGenerate}
+                  disabled={aiGenerating || !name.trim() || !aiPrompt.trim()}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-4 py-3 rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {aiGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating with Nano Banana Pro (2-3 min)...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Generate Person
+                    </>
+                  )}
+                </button>
+                <p className="text-gray-600 text-[10px]">Uses Nano Banana Pro for highest quality. Cost: ~$0.12 per generation.</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Photo Upload */}
               <div>
@@ -218,6 +363,7 @@ export default function PeopleLibrary() {
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
 
