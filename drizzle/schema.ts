@@ -89,6 +89,8 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   selectedPersonId: int("selectedPersonId"),
   /** Iteration pipeline: target audience (predefined or custom) */
   selectedAudience: varchar("selectedAudience", { length: 256 }),
+  /** Iteration pipeline: image resolution (2K or 4K) */
+  resolution: varchar("resolution", { length: 4 }),
   /** Script Generator pipeline columns */
   scriptStyle: varchar("scriptStyle", { length: 16 }),
   scriptSubStructure: varchar("scriptSubStructure", { length: 16 }),

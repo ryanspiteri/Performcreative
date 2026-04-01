@@ -842,6 +842,7 @@ Return JSON in this exact format:
         selectedFlavour: z.string().optional(),
         selectedPersonId: z.number().optional(),
         selectedAudience: z.string().optional(),
+        resolution: z.enum(["2K", "4K"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const sourceType = input.sourceType ?? "own_ad";
@@ -877,6 +878,7 @@ Return JSON in this exact format:
           selectedFlavour: input.selectedFlavour ?? null,
           selectedPersonId: input.selectedPersonId ?? null,
           selectedAudience: input.selectedAudience ?? null,
+          resolution: input.resolution ?? "2K",
         });
         runIterationStages1to2(runId, input).catch(err => {
           console.error("[Pipeline] Iteration pipeline stages 1-2 failed:", err);

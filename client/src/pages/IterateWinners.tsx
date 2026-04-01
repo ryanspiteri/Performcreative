@@ -41,6 +41,7 @@ export default function IterateWinners() {
   const [usePerVariationMode, setUsePerVariationMode] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [imageModel, setImageModel] = useState<ImageModel>("nano_banana_pro");
+  const [resolution, setResolution] = useState<"2K" | "4K">("2K");
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [selectedFlavour, setSelectedFlavour] = useState<string | null>(null);
   const [selectedRenderId, setSelectedRenderId] = useState<number | null>(null);
@@ -186,6 +187,7 @@ export default function IterateWinners() {
         variationCount,
         aspectRatio,
         imageModel,
+        resolution,
         selectedRenderId: selectedRenderId || undefined,
         selectedFlavour: selectedFlavour || undefined,
         selectedPersonId: selectedPersonId || undefined,
@@ -638,6 +640,38 @@ export default function IterateWinners() {
                 </div>
               </button>
             </div>
+          </div>
+
+          {/* Resolution */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Resolution</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setResolution("2K")}
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  resolution === "2K"
+                    ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                2K (Default)
+              </button>
+              <button
+                onClick={() => setResolution("4K")}
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  resolution === "4K"
+                    ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                4K (Higher Detail)
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {resolution === "2K"
+                ? `${aspectRatio === '1:1' ? '2048x2048' : aspectRatio === '4:5' ? '2048x2560' : aspectRatio === '9:16' ? '2304x4096' : '4096x2304'} px`
+                : `${aspectRatio === '1:1' ? '4096x4096' : aspectRatio === '4:5' ? '4096x5120' : aspectRatio === '9:16' ? '4608x8192' : '8192x4608'} px — larger file, longer generation`}
+            </p>
           </div>
 
           {/* People Selector */}
