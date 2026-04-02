@@ -21,6 +21,7 @@ export const ENV = {
   googleAiApiKey: process.env.GOOGLE_AI_API_KEY ?? "",
   CANVA_CLIENT_ID: process.env.CANVA_CLIENT_ID ?? "",
   CANVA_CLIENT_SECRET: process.env.CANVA_CLIENT_SECRET ?? "",
+  APP_URL: process.env.APP_URL ?? "https://www.performcreative.io",
   /** AutoEdit Python service URL (organic video pipeline). Phase 1: local, Phase 3: Docker. */
   autoEditApiUrl: process.env.AUTOEDIT_API_URL ?? "",
   /** Allowed base directory for local file paths (organic video pipeline). */

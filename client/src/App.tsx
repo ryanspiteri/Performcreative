@@ -26,6 +26,8 @@ import ContentLibrary from "./pages/ContentLibrary";
 import VisualContent from "./pages/VisualContent";
 import PeopleLibrary from "./pages/PeopleLibrary";
 import AppLayout from "./components/AppLayout";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 function AuthenticatedRoutes() {
@@ -79,7 +81,11 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Switch>
+            <Route path="/terms" component={Terms} />
+            <Route path="/privacy" component={Privacy} />
+            <Route component={Router} />
+          </Switch>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

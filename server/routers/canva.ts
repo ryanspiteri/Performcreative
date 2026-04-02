@@ -28,8 +28,8 @@ export const canvaRouter = router({
     const { verifier, challenge } = generatePKCE();
     const state = `${ctx.user.openId}-${Date.now()}`;
     // Use fixed redirect URI to match Canva portal configuration
-    const redirectUri = "https://3000-ilfzg47vdtu2vrhca80ig-263dd919.sg1.manus.computer/api/canva/callback";
-    
+    const redirectUri = `${ENV.APP_URL}/api/canva/callback`;
+
     // Store verifier for 10 minutes
     pkceStore.set(state, { verifier, expiresAt: Date.now() + 10 * 60 * 1000 });
     
@@ -245,7 +245,7 @@ export async function handleCanvaCallback(req: any, res: any) {
 
   const openId = (state as string).split("-")[0];
   // Use same fixed redirect URI as authorization
-  const redirectUri = "https://3000-ilfzg47vdtu2vrhca80ig-263dd919.sg1.manus.computer/api/canva/callback";
+  const redirectUri = `${ENV.APP_URL}/api/canva/callback`;
 
   try {
     const tokenResponse = await exchangeCodeForToken(code as string, redirectUri, pkceData.verifier);
