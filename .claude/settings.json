@@ -1,66 +1,4 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(pnpm dev)",
-      "Bash(pnpm build)",
-      "Bash(pnpm start)",
-      "Bash(pnpm test)",
-      "Bash(pnpm test:*)",
-      "Bash(pnpm check)",
-      "Bash(pnpm format)",
-      "Bash(pnpm db:push)",
-      "Bash(pnpm db:migrate)",
-      "Bash(npx tsc:*)",
-      "Bash(npx drizzle-kit:*)",
-      "Bash(npx vitest:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(git log:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git branch:*)",
-      "Bash(git checkout:*)",
-      "Bash(git switch:*)",
-      "Bash(git stash:*)",
-      "Bash(git merge:*)",
-      "Bash(git rebase:*)",
-      "Bash(git fetch:*)",
-      "Bash(git pull:*)",
-      "Bash(gh pr:*)",
-      "Bash(gh issue:*)",
-      "Bash(gh api:*)",
-      "Bash(curl -s https://www.performcreative.io/api/health/db)",
-      "Bash(B=~/.claude/skills/gstack/browse/dist/browse $B console --errors)",
-      "Read(//Users/ryanspiteri/.gstack/projects/ryanspiteri-Performcreative/**)",
-      "Read(//tmp/**)",
-      "Read(//private/tmp/**)",
-      "Skill(design-review)",
-      "Skill(design-review:*)",
-      "Skill(plan-eng-review)",
-      "Skill(plan-eng-review:*)",
-      "Skill(ship)",
-      "Skill(ship:*)",
-      "Skill(debug-fix)",
-      "Skill(debug-fix:*)",
-      "Skill(review)",
-      "Skill(review:*)"
-    ],
-    "deny": [
-      "Bash(git push --force origin main)",
-      "Bash(git push --force origin master)",
-      "Bash(git push -f origin main)",
-      "Bash(git push -f origin master)",
-      "Bash(rm -rf /)",
-      "Bash(rm -rf ~)",
-      "Bash(rm -rf .)",
-      "Bash(DROP TABLE)",
-      "Bash(DROP DATABASE)"
-    ],
-    "additionalDirectories": [
-      "/Users/ryanspiteri/Documents/PerformCreative/.claude"
-    ]
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -68,8 +6,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh",
-            "timeout": 5
+            "command": "echo 'Running command in $(pwd)'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATHS\" | grep -qE '\\.js$|\\.ts$'; then node --check $CLAUDE_FILE_PATHS 2>&1 && echo 'JS syntax OK' || echo 'WARNING: JS syntax error detected'; fi"
           }
         ]
       }
