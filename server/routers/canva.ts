@@ -223,6 +223,68 @@ export const canvaRouter = router({
   }),
 });
 
+// Express route handler for Canva webhooks (not tRPC)
+// Canva signs webhook payloads with HMAC-SHA256 using the webhook secret.
+// Signature: HMAC-SHA256(webhookSecret, `${timestamp}.${rawBody}`)
+// Headers: x-canva-timestamp, x-canva-signature
+export async function handleCanvaWebhook(req: any, res: any) {
+  const timestamp = req.headers["x-canva-timestamp"] as string;
+  const signature = req.headers["x-canva-signature"] as string;
+
+  if (!timestamp || !signature) {
+    console.warn("[Canva Webhook] Missing signature headers");
+    return res.status(401).json({ error: "Missing signature headers" });
+  }
+
+  // Reject requests older than 5 minutes to prevent replay attacks
+  const timestampMs = parseInt(timestamp, 10) * 1000;
+  if (Math.abs(Date.now() - timestampMs) > 5 * 60 * 1000) {
+    console.warn("[Canva Webhook] Timestamp too old, possible replay attack");
+    return res.status(401).json({ error: "Timestamp too old" });
+  }
+
+  // Verify HMAC signature using raw body
+  const rawBody = req.body instanceof Buffer ? req.body.toString("utf8") : JSON.stringify(req.body);
+  const expected = crypto
+    .createHmac("sha256", ENV.CANVA_WEBHOOK_SECRET)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
+
+  // Timing-safe comparison to prevent timing attacks
+  const signatureBuffer = Buffer.from(signature, "hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    console.warn("[Canva Webhook] Invalid signature");
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+
+  // Parse and handle event
+  let event: any;
+  try {
+    event = typeof req.body === "string" ? JSON.parse(rawBody) : req.body;
+  } catch {
+    return res.status(400).json({ error: "Invalid JSON body" });
+  }
+
+  console.log(`[Canva Webhook] Received event: ${event?.type ?? "unknown"}`);
+
+  switch (event?.type) {
+    case "design:export:completed": {
+      const { design_id, export_url } = event.data ?? {};
+      console.log(`[Canva Webhook] Export completed — design ${design_id}, url: ${export_url}`);
+      // TODO: store exported URL against the originating pipeline run
+      break;
+    }
+    default:
+      console.log(`[Canva Webhook] Unhandled event type: ${event?.type}`);
+  }
+
+  res.status(200).json({ received: true });
+}
+
 // Express route handler for OAuth callback (not tRPC)
 export async function handleCanvaCallback(req: any, res: any) {
   const { code, state, error, error_description } = req.query;

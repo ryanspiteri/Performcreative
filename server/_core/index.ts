@@ -8,7 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startAutoSync } from "../services/foreplaySync";
-import { handleCanvaCallback } from "../routers/canva";
+import { handleCanvaCallback, handleCanvaWebhook } from "../routers/canva";
 import multer from "multer";
 import * as db from "../db";
 import { storagePut } from "../storage";
@@ -57,6 +57,9 @@ async function seedAdminUser() {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // Canva webhook — must be registered BEFORE express.json() to capture raw body for HMAC verification
+  app.post("/api/canva/webhook", express.raw({ type: "application/json" }), handleCanvaWebhook);
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "500mb" }));
   app.use(express.urlencoded({ limit: "500mb", extended: true }));
