@@ -28,6 +28,7 @@ import PeopleLibrary from "./pages/PeopleLibrary";
 import AppLayout from "./components/AppLayout";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
+import Security from "./pages/Security";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 function AuthenticatedRoutes() {
@@ -84,6 +85,7 @@ function App() {
           <Switch>
             <Route path="/terms" component={Terms} />
             <Route path="/privacy" component={Privacy} />
+            <Route path="/security" component={Security} />
             <Route component={Router} />
           </Switch>
         </TooltipProvider>
