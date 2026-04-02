@@ -11,8 +11,8 @@ export default function Terms() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">1. Overview</h2>
             <p>
-              Perform Creative ("the Platform") is an AI-powered ad creative tool operated by Ryan Spiteri
-              ("we", "us"). By accessing or using the Platform, you agree to these Terms of Service.
+              Perform Creative ("the Platform") is an AI-powered ad creative tool operated by ONEST Health
+              Pty Ltd ("we", "us"). By accessing or using the Platform, you agree to these Terms of Service.
             </p>
           </section>
 

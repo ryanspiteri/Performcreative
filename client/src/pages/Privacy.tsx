@@ -11,7 +11,7 @@ export default function Privacy() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">1. Who We Are</h2>
             <p>
-              Perform Creative is operated by Ryan Spiteri (ABN available on request), based in Australia.
+              Perform Creative is operated by ONEST Health Pty Ltd, based in Australia.
               This policy explains how we collect, use, and protect your data when you use the Platform.
             </p>
           </section>
