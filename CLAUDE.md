@@ -22,3 +22,12 @@ AI-powered performance ad creative tool. Generates, tests, and varies ad creativ
 - /review — code review
 - /ship — commit and push
 - /qa — test UI
+
+
+## Email Access Rule — CRITICAL
+
+When accessing any Gmail inbox via IMAP:
+- ALWAYS use `BODY.PEEK[]` or `BODY.PEEK[HEADER]` — NEVER use `RFC822`
+- NEVER mark any email as read
+- NEVER call `mail.store(eid, '+FLAGS', '\Seen')`
+- Emails must remain in exactly the same read/unread state as before you accessed them
