@@ -469,6 +469,8 @@ export const appRouter = router({
     }),
 
     syncForeplayNow: protectedProcedure.mutation(async () => {
+      // Clean up existing content duplicates before syncing
+      const deleted = await db.deduplicateExistingCreatives();
       const result = await syncFromForeplay();
       if (result.error) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
@@ -476,7 +478,8 @@ export const appRouter = router({
       return {
         newCount: result.newCount,
         totalFetched: result.totalFetched,
-        message: `Imported ${result.newCount} new creatives from Foreplay`,
+        duplicatesRemoved: deleted,
+        message: `Imported ${result.newCount} new creatives from Foreplay${deleted > 0 ? `, removed ${deleted} duplicates` : ""}`,
       };
     }),
 

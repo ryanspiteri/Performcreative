@@ -427,13 +427,17 @@ export async function getExistingContentFingerprints(): Promise<Set<string>> {
 /**
  * Build a content fingerprint from an ad's visual identity.
  * Two ads with the same fingerprint are the same underlying creative.
+ * Uses title + brand only — thumbnail URLs vary across CDN paths for the same ad.
+ * Strips emoji and normalizes whitespace for stable matching.
  */
 export function contentFingerprint(thumbnailUrl: string | null, title: string | null, brandName: string | null): string {
-  // Strip query params from thumbnail URL for stable comparison
-  const thumbBase = (thumbnailUrl || "").split("?")[0].toLowerCase().trim();
-  const t = (title || "").toLowerCase().trim();
-  const b = (brandName || "").toLowerCase().trim();
-  return `${thumbBase}|${t}|${b}`;
+  const normalize = (s: string | null) =>
+    (s || "")
+      .replace(/[^a-zA-Z0-9\s]/g, "")  // strip everything except ASCII letters, numbers, whitespace
+      .replace(/\s+/g, " ")             // collapse whitespace
+      .toLowerCase()
+      .trim();
+  return `${normalize(title)}|${normalize(brandName)}`;
 }
 
 /**
