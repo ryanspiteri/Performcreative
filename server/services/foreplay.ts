@@ -57,6 +57,7 @@ async function fetchWithRetry(url: string, params: Record<string, any>, maxRetri
 
 export async function fetchBoardAds(boardId: string, limit = 100): Promise<ForeplayAd[]> {
   const allAds: any[] = [];
+  const seenRawIds = new Set<string>();
   let offset = 0;
   const pageSize = Math.min(limit, 100); // Fetch in pages of up to 100
   const maxPages = 10; // Safety limit: max 1000 ads
@@ -69,21 +70,35 @@ export async function fetchBoardAds(boardId: string, limit = 100): Promise<Forep
 
       const data = res.data?.data || [];
       console.log(`[Foreplay] Page ${page + 1}: got ${data.length} ads (offset=${offset})`);
-      allAds.push(...data);
+
+      // Dedup across pages — API can return overlapping results when ordering shifts
+      let dupsOnPage = 0;
+      for (const ad of data) {
+        const rawId = ad.id || ad.ad_id || "";
+        if (rawId && seenRawIds.has(rawId)) {
+          dupsOnPage++;
+          continue;
+        }
+        if (rawId) seenRawIds.add(rawId);
+        allAds.push(ad);
+      }
+      if (dupsOnPage > 0) {
+        console.log(`[Foreplay] Page ${page + 1}: skipped ${dupsOnPage} duplicate ads`);
+      }
 
       // Stop if we got fewer than requested (no more pages) or hit our limit
       if (data.length < pageSize || allAds.length >= limit) break;
       offset += data.length;
     }
 
-    console.log(`[Foreplay] Total: ${allAds.length} ads from board ${boardId}`);
-    return normalizeAds(allAds.slice(0, limit));
+    console.log(`[Foreplay] Total: ${allAds.length} unique ads from board ${boardId}`);
+    return deduplicateNormalized(normalizeAds(allAds.slice(0, limit)));
   } catch (error: any) {
     console.error("[Foreplay] Error fetching board ads:", error?.response?.status, error?.response?.data || error.message);
     // Return whatever we got before the error
     if (allAds.length > 0) {
       console.log(`[Foreplay] Returning ${allAds.length} ads fetched before error`);
-      return normalizeAds(allAds);
+      return deduplicateNormalized(normalizeAds(allAds));
     }
     return [];
   }
@@ -124,6 +139,20 @@ function normalizeAds(ads: any[]): ForeplayAd[] {
       displayFormat: ad.display_format || "",
       transcription,
     };
+  });
+}
+
+/**
+ * Remove duplicates from normalized ads by id.
+ * Catches cases where the hash-based fallback generates the same id for different raw entries,
+ * or where the same ad slips through raw-id dedup (e.g. missing id field).
+ */
+function deduplicateNormalized(ads: ForeplayAd[]): ForeplayAd[] {
+  const seen = new Set<string>();
+  return ads.filter(ad => {
+    if (seen.has(ad.id)) return false;
+    seen.add(ad.id);
+    return true;
   });
 }
 
