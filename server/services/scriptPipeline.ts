@@ -25,6 +25,7 @@ import {
   TRANSITION_LOGIC,
   SCRIPT_AUDIT_CHECKLIST,
   COMPLIANCE_RULES,
+  DEUTSCH_COPY_FRAMEWORK,
   getStyleSystemPrompt,
   getSubStructurePromptBlock,
   getArchetypePromptBlock,
@@ -43,6 +44,7 @@ export interface ScriptPipelineParams {
   subStructureId: string;
   funnelStage: FunnelStage;
   archetype: ActorArchetype;
+  angle: string;
   concept: string;
   scriptCount: number;
 }
@@ -59,6 +61,7 @@ export async function runScriptPipeline(
     subStructureId,
     funnelStage,
     archetype,
+    angle,
     concept,
     scriptCount,
   } = params;
@@ -84,6 +87,10 @@ export async function runScriptPipeline(
     const funnelRules = FUNNEL_STAGE_RULES[funnelStage];
     const archetypeProfile = ARCHETYPE_PROFILES[archetype];
 
+    const otherLevers = productIntel
+      ? productIntel.copyLevers.filter(l => l !== angle)
+      : [];
+
     const productIntelBlock = productIntel
       ? `
 === PRODUCT INTELLIGENCE (YOU MUST USE THIS) ===
@@ -92,13 +99,20 @@ Primary Benefit: ${productIntel.primaryBenefit}
 Differentiator: ${productIntel.differentiator}
 Key Ingredients: ${productIntel.keyIngredients.join(", ")}
 
-COPY LEVERS (weave these into the script):
-${productIntel.copyLevers.map((l, i) => `${i + 1}. ${l}`).join("\n")}
+PRIMARY SELLING ANGLE (emphasize this above all others — this is the core message of the script):
+${angle}
+
+OTHER PRODUCT LEVERS (secondary context — weave in naturally if relevant):
+${otherLevers.map((l, i) => `${i + 1}. ${l}`).join("\n")}
 
 COPY TRAPS (AVOID these):
 ${productIntel.copyTraps.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 === END PRODUCT INTELLIGENCE ===`
-      : "";
+      : `
+=== SELLING ANGLE (YOU MUST USE THIS) ===
+PRIMARY SELLING ANGLE (emphasize this above all others):
+${angle}
+=== END SELLING ANGLE ===`;
 
     await db.updatePipelineRun(runId, { scriptStage: "stage_2_generation" });
 
@@ -152,6 +166,8 @@ ${HOOK_BANK}
 ${CTA_BANK}
 
 ${TRANSITION_LOGIC}
+
+${DEUTSCH_COPY_FRAMEWORK}
 
 ${SCRIPT_AUDIT_CHECKLIST}
 

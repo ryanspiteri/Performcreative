@@ -1,7 +1,7 @@
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { isNull } from "drizzle-orm";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns, captionExamples, people, InsertPerson } from "../drizzle/schema";
+import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns, captionExamples, people, InsertPerson, scriptStructures, InsertScriptStructure, scriptAudiences, InsertScriptAudience } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -756,7 +756,7 @@ export async function updateUserCanvaTokens(openId: string, accessToken: string,
 export async function getUserCanvaTokens(openId: string) {
   const db = await getDb();
   if (!db) return null;
-  
+
   const result = await db.select({
     accessToken: users.canvaAccessToken,
     refreshToken: users.canvaRefreshToken,
@@ -765,6 +765,74 @@ export async function getUserCanvaTokens(openId: string) {
   .from(users)
   .where(eq(users.openId, openId))
   .limit(1);
-  
+
   return result.length > 0 ? result[0] : null;
+}
+
+// ─── Script Structures ───────────────────────────────────────────────────────
+
+export async function getScriptStructures() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(scriptStructures).orderBy(scriptStructures.category, scriptStructures.name);
+}
+
+export async function getScriptStructure(structureId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(scriptStructures).where(eq(scriptStructures.structureId, structureId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createScriptStructure(data: InsertScriptStructure) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(scriptStructures).values(data);
+  return (result as any)[0]?.insertId as number;
+}
+
+export async function updateScriptStructure(structureId: string, data: Partial<InsertScriptStructure>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(scriptStructures).set(data).where(eq(scriptStructures.structureId, structureId));
+}
+
+export async function deleteScriptStructure(structureId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(scriptStructures).where(eq(scriptStructures.structureId, structureId));
+}
+
+// ─── Script Audiences ────────────────────────────────────────────────────────
+
+export async function getScriptAudiences() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(scriptAudiences).orderBy(scriptAudiences.label);
+}
+
+export async function getScriptAudience(audienceId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(scriptAudiences).where(eq(scriptAudiences.audienceId, audienceId)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createScriptAudience(data: InsertScriptAudience) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(scriptAudiences).values(data);
+  return (result as any)[0]?.insertId as number;
+}
+
+export async function updateScriptAudience(audienceId: string, data: Partial<InsertScriptAudience>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(scriptAudiences).set(data).where(eq(scriptAudiences.audienceId, audienceId));
+}
+
+export async function deleteScriptAudience(audienceId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(scriptAudiences).where(eq(scriptAudiences.audienceId, audienceId));
 }

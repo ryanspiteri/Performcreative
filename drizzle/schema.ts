@@ -96,9 +96,12 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   scriptSubStructure: varchar("scriptSubStructure", { length: 16 }),
   scriptFunnelStage: mysqlEnum("scriptFunnelStage", ["cold", "warm", "retargeting", "retention"]),
   scriptArchetype: varchar("scriptArchetype", { length: 32 }),
+  scriptAngle: text("scriptAngle"),
   scriptConcept: text("scriptConcept"),
   scriptCount: int("scriptCount"),
   scriptStage: varchar("scriptStage", { length: 64 }),
+  /** Edits saved by the user — preserved separately so original scripts + review scores stay intact */
+  editedScriptsJson: json("editedScriptsJson"),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -405,3 +408,34 @@ export const captionExamples = mysqlTable("caption_examples", {
 
 export type CaptionExample = typeof captionExamples.$inferSelect;
 export type InsertCaptionExample = typeof captionExamples.$inferInsert;
+
+/**
+ * Script Generator — DB-managed script structures (seeded from SCRIPT_SUB_STRUCTURES constant).
+ * Admin can add/edit/delete via Settings UI.
+ */
+export const scriptStructures = mysqlTable("scriptStructures", {
+  id: int("id").autoincrement().primaryKey(),
+  structureId: varchar("structureId", { length: 16 }).notNull().unique(),
+  name: varchar("name", { length: 128 }).notNull(),
+  category: varchar("category", { length: 32 }).notNull(),
+  data: json("data").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ScriptStructure = typeof scriptStructures.$inferSelect;
+export type InsertScriptStructure = typeof scriptStructures.$inferInsert;
+
+/**
+ * Script Generator — DB-managed audience archetypes (seeded from ARCHETYPE_PROFILES constant).
+ * Admin can add/edit/delete via Settings UI.
+ */
+export const scriptAudiences = mysqlTable("scriptAudiences", {
+  id: int("id").autoincrement().primaryKey(),
+  audienceId: varchar("audienceId", { length: 32 }).notNull().unique(),
+  label: varchar("label", { length: 128 }).notNull(),
+  data: json("data").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ScriptAudience = typeof scriptAudiences.$inferSelect;
+export type InsertScriptAudience = typeof scriptAudiences.$inferInsert;

@@ -75,6 +75,7 @@ async function startServer() {
       "users", "pipeline_runs", "product_renders", "product_info", "people",
       "foreplay_creatives", "backgrounds", "ugc_uploads", "ugc_variants",
       "headline_bank", "face_swap_jobs", "organic_runs", "caption_examples",
+      "scriptStructures", "scriptAudiences",
     ];
     try {
       const dbConn = await db.getDb();

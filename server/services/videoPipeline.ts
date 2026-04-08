@@ -493,6 +493,10 @@ HOOK BANK — five archetypes (classify the competitor's hook, then use the same
 | Social proof lead | "47,000 Aussies have switched to this in the last 12 months." |
 | Named enemy | "Most fat burners don't tell you what's actually in them. Here's why." |
 | Bold claim + number | "250mg of two forms of caffeine. Here's what that actually does to your metabolism." |
+
+DEUTSCH HOOK FILTER — run every hook through this before committing:
+Test: "Hey [friend's name] — [hook]" said aloud to a real person at a barbecue. Genuine "wait, really?" = pass. Sounds like an ad = rewrite.
+Additional rule: the viewer must not be able to predict the second half of the hook sentence. If they can guess where it's going, they've already stopped watching.
 `;
 
 export const CTA_BANK = `
@@ -526,7 +530,7 @@ The four critical transitions:
 // ============================================================
 
 export const SCRIPT_AUDIT_CHECKLIST = `
-SCRIPT AUDIT CHECKLIST — run every completed script through these 10 checks:
+SCRIPT AUDIT CHECKLIST — run every completed script through these 14 checks:
 1. Awareness match — Does the script assume the right level of audience knowledge for the funnel stage?
 2. Hook independence — Does the hook work as a complete idea in under 3 seconds with no context?
 3. Banned phrases — Zero instances of "unlock your potential", "fuel your journey", "transform your body", "achieve your goals"
@@ -537,6 +541,10 @@ SCRIPT AUDIT CHECKLIST — run every completed script through these 10 checks:
 8. Brand voice — Could this script appear on a competitor's product without modification? If yes — rewrite
 9. Emotional logic — Script takes the viewer from one clear emotional state to a different one logically
 10. Peter / Lara test — Read it aloud imagining you are Peter or Lara hearing it for the first time
+11. Dimensionalization — At least one key benefit chains to emotional truth through 3+ "and that means..." levels. Surface benefit alone fails.
+12. Hey Test — Does the hook pass? Say "Hey [friend] — [hook]" aloud. Genuine reaction = pass. Sounds like an ad = rewrite.
+13. Inner Persuader — Does every line sound like what you'd actually say to one real person in conversation? Copy-sounding copy gets scrolled past.
+14. Unpredictability — Pick any sentence. Can the viewer predict what comes next? Generic predictability = scroll-past bait. Rewrite predictable lines.
 `;
 
 // ============================================================
@@ -552,6 +560,50 @@ SAFE FRAMING: "supports healthy metabolism" ✓ | "burns fat guaranteed" ✗
 SAFE FRAMING: "helps maintain energy levels" ✓ | "gives you unlimited energy" ✗
 SAFE FRAMING: "supports restful sleep" ✓ | "cures insomnia" ✗
 Any script with compliance violations MUST score 0 regardless of other qualities.
+`;
+
+// ============================================================
+// DAVID DEUTSCH COPY FRAMEWORK — v3.0 Copy Quality Layer
+// Based on: $1B+ in tracked direct response sales.
+// "It wasn't by out-writing anyone, but by out-thinking them."
+// ============================================================
+
+export const DEUTSCH_COPY_FRAMEWORK = `
+DAVID DEUTSCH COPY FRAMEWORK — apply to every script:
+
+DIMENSIONALIZATION (the "and that means..." chain):
+Never stop at the surface benefit. Chain every key claim through what it actually means at the emotional truth level — minimum 3 levels deep.
+Example chain: "sustained energy" → "you don't crash at 2pm" → "you stop dreading the second half of your day" → "you feel like yourself again — not the tired version everyone around you has gotten used to"
+RULE: Every script must dimensionalize at least one benefit to level 3 or deeper. Generic = surface claim only. Dimensionalized = what it means in this person's actual life.
+
+THE HEY TEST (for every hook):
+Before committing to a hook, test it: would you say "Hey [friend's name] — [hook]" to grab a real person's attention at a barbecue?
+Pass: "Hey Matt — did you know the reason you crash at 2pm has nothing to do with how much coffee you've had?"
+Fail: "Hey Matt — are you struggling to achieve your wellness goals?"
+If it sounds like an ad when said aloud to a real person — rewrite it.
+
+THE INNER PERSUADER RULE:
+Write to ONE specific person — not an audience. Ask: if my life depended on convincing a real person sitting across from me, what would I actually say?
+Read every line aloud. If it sounds like "copy" — if you'd never say it in a real conversation — rewrite it. Copy that sounds like copy gets scrolled past.
+
+THE UNPREDICTABILITY RULE:
+The viewer must never be able to predict the second half of a sentence or the next sentence.
+Generic (predictable): "ONEST HyperBurn gives you the energy you need to crush your workouts."
+Unpredictable: "Your metabolism isn't slow because you're lazy. It's slow because your body's been running the same programme for 15 years and nobody told you it could be updated."
+
+SENSORY DIMENSION:
+Make the viewer experience the before-state and after-state — not just understand them intellectually. Use sight, sound, feel.
+Before: "That 3pm slump where you're reading the same email for the fourth time."
+After: "Still thinking clearly at 7pm. Still wanting to do things."
+
+SEAL OFF THE EXITS:
+Address why the obvious alternatives fail for this specific situation before the viewer mentally goes there. Don't ignore competitors — acknowledge them and explain why they're insufficient.
+"Most fat burners give you a caffeine spike and call it thermogenesis. But once the caffeine wears off, your metabolism returns to baseline. CaloriBurn GP activates brown adipose tissue — the fat-burning mechanism that keeps working after the caffeine is gone."
+
+CHANGE OF PERSPECTIVE (for proof segments):
+The most believable proof shows results through how others notice the change — not how the speaker claims to feel.
+Weak: "I felt so much more energised since starting HyperBurn."
+Strong: "My training partner asked what I'd changed — she said I was finishing sets she'd never seen me finish before."
 `;
 
 // ============================================================
@@ -1209,6 +1261,7 @@ CRITICAL DR RULES:
 4. Every timestamp segment must include a transitionLine — required in every segment except the final CTA.
 5. Every segment must serve the sale — no filler, no generic motivation that could apply to any brand.
 6. The script must build sequentially — each segment must increase purchase intent before the next begins.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     case "UGC":
@@ -1231,6 +1284,7 @@ CRITICAL UGC RULES:
 5. Include at least one moment of genuine personality — a laugh, a tangent, a self-deprecating comment. Real people are not perfectly polished.
 6. BANNED: "formulated", "proprietary", "cutting-edge", "revolutionary", "unlock your potential", "fuel your journey", "transform your body", "achieve your goals". Instant inauthenticity signals.
 7. Australian English throughout. Casual AU colloquialisms where they fit naturally — do not force them.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     case "FOUNDER":
@@ -1251,6 +1305,7 @@ CRITICAL FOUNDER RULES:
 3. Be specific about ingredients and doses — founders know their products
 4. CTA is an invitation, not a hard sell — "I'd love for you to try it"
 5. Every timestamp segment must include a transitionLine.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     case "BRAND":
@@ -1275,6 +1330,7 @@ CRITICAL BRAND RULES:
 2. No hard sell, no urgency, no "buy now"
 3. Every timestamp segment must include a transitionLine.
 4. Focus on emotional resonance and identity alignment
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     case "EDUCATION":
@@ -1293,6 +1349,7 @@ CRITICAL EDUCATION RULES:
 - Transition from education to product must feel natural, not forced
 - CTA leverages the new knowledge: "Now that you know this, try..."
 - Every timestamp segment must include a transitionLine.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     case "LIFESTYLE":
@@ -1311,6 +1368,7 @@ CRITICAL LIFESTYLE RULES:
 - Visual direction is crucial — every shot should feel aspirational
 - CTA is soft and aspirational — invites the viewer into the lifestyle
 - Every timestamp segment must include a transitionLine.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     case "DEMO":
@@ -1329,10 +1387,12 @@ CRITICAL DEMO RULES:
 - Results should be specific and believable, not exaggerated
 - CTA connects the demonstrated results to the viewer's situation
 - Every timestamp segment must include a transitionLine.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
 
     default:
       return `You are an expert video ad scriptwriter for ONEST Health. Write a compelling ${durationRange}-second script for ${product}.
+${DEUTSCH_COPY_FRAMEWORK}
 ${baseRules}`;
   }
 }
