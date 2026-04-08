@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Users, Upload, Trash2, Loader2, Plus, X, Sparkles, Wand2, Camera, Smartphone, Sun, Dumbbell, Package, FileText, SlidersHorizontal, RefreshCw } from "lucide-react";
+import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 import {
   Dialog,
   DialogContent,
@@ -97,7 +98,8 @@ export default function PeopleLibrary() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiPreview, setAiPreview] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<GenerationStyle>("professional");
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductName, setSelectedProductName] = useState<string | null>(null);
+  const [selectedRenderId, setSelectedRenderId] = useState<number | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
 
   // Filter state
@@ -113,19 +115,41 @@ export default function PeopleLibrary() {
   const [highlightedPersonId, setHighlightedPersonId] = useState<number | null>(null);
   const gridTopRef = useRef<HTMLDivElement | null>(null);
 
-  // Group renders by product, picking the default render (or first) for each product
+  // Only real ONEST products — filter out iteration-source, regen-reference, etc.
+  const activeProductsSet = useMemo(() => new Set<string>(ACTIVE_PRODUCTS), []);
+
+  // Group renders by active product. Each entry shows the default render as the preview thumbnail.
   const productOptions = useMemo(() => {
     if (!allRenders) return [];
-    const byProduct = new Map<string, { id: number; product: string; url: string }>();
+    const byProduct = new Map<string, { product: string; previewUrl: string; previewId: number }>();
     for (const r of allRenders) {
-      if (!byProduct.has(r.product) || (r as any).isDefault === 1) {
-        byProduct.set(r.product, { id: r.id, product: r.product, url: r.url });
+      if (!activeProductsSet.has(r.product)) continue; // skip non-ONEST entries
+      const existing = byProduct.get(r.product);
+      // Prefer the default render as the preview; otherwise first-seen wins
+      if (!existing || (r as any).isDefault === 1) {
+        byProduct.set(r.product, { product: r.product, previewUrl: r.url, previewId: r.id });
       }
     }
     return Array.from(byProduct.values()).sort((a, b) => a.product.localeCompare(b.product));
-  }, [allRenders]);
+  }, [allRenders, activeProductsSet]);
 
-  const selectedProduct = productOptions.find((p) => p.id === selectedProductId);
+  // All renders for the currently selected product (for the "pick exact render" step)
+  const rendersForSelectedProduct = useMemo(() => {
+    if (!allRenders || !selectedProductName) return [];
+    return (allRenders as any[])
+      .filter((r) => r.product === selectedProductName)
+      .sort((a, b) => {
+        // Default first, then by most recent
+        if (a.isDefault === 1 && b.isDefault !== 1) return -1;
+        if (b.isDefault === 1 && a.isDefault !== 1) return 1;
+        return 0;
+      });
+  }, [allRenders, selectedProductName]);
+
+  const selectedRender = useMemo(
+    () => rendersForSelectedProduct.find((r) => r.id === selectedRenderId) || null,
+    [rendersForSelectedProduct, selectedRenderId]
+  );
 
   const uploadPerson = trpc.people.upload.useMutation({
     onSuccess: () => {
@@ -252,7 +276,8 @@ export default function PeopleLibrary() {
     setAiGenerating(false);
     setAiPreview(null);
     setSelectedStyle("professional");
-    setSelectedProductId(null);
+    setSelectedProductName(null);
+    setSelectedRenderId(null);
     setShowProductPicker(false);
   };
 
@@ -266,7 +291,7 @@ export default function PeopleLibrary() {
         description: aiPrompt.trim(),
         tags: selectedTags.length > 0 ? selectedTags.join(",") : undefined,
         style: selectedStyle,
-        productId: selectedProductId ?? undefined,
+        productId: selectedRenderId ?? undefined,
       });
     } finally {
       setAiGenerating(false);
@@ -416,7 +441,7 @@ export default function PeopleLibrary() {
                   </div>
                 </div>
 
-                {/* Product Picker */}
+                {/* Product Picker — two-step: pick product, then pick exact render */}
                 <div>
                   <button
                     onClick={() => setShowProductPicker(!showProductPicker)}
@@ -427,37 +452,80 @@ export default function PeopleLibrary() {
                     <span className="text-[10px] text-gray-600">{showProductPicker ? "v" : ">"}</span>
                   </button>
                   {showProductPicker && (
-                    <div className="mt-2 grid grid-cols-3 md:grid-cols-4 gap-2">
-                      <button
-                        onClick={() => setSelectedProductId(null)}
-                        className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs transition-all ${
-                          selectedProductId === null
-                            ? "bg-white/10 border border-white/20 text-white"
-                            : "bg-white/5 text-gray-500 hover:bg-white/10 border border-transparent"
-                        }`}
-                      >
-                        <X className="w-4 h-4" />
-                        None
-                      </button>
-                      {productOptions.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedProductId(p.id)}
-                          className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs transition-all ${
-                            selectedProductId === p.id
-                              ? "bg-[#FF3838]/10 border border-[#FF3838] text-white"
-                              : "bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent"
-                          }`}
-                        >
-                          <img src={p.url} alt={p.product} className="w-10 h-10 object-contain rounded" />
-                          <span className="text-[10px] text-center leading-tight truncate w-full">{p.product}</span>
-                        </button>
-                      ))}
+                    <div className="mt-2 space-y-3">
+                      {/* Step 1: Pick product */}
+                      <div>
+                        <label className="block text-gray-500 text-[10px] font-medium mb-1.5 uppercase tracking-wide">1. Product</label>
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                          <button
+                            onClick={() => { setSelectedProductName(null); setSelectedRenderId(null); }}
+                            className={`flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs transition-all aspect-square ${
+                              selectedProductName === null
+                                ? "bg-white/10 border border-white/20 text-white"
+                                : "bg-white/5 text-gray-500 hover:bg-white/10 border border-transparent"
+                            }`}
+                          >
+                            <X className="w-4 h-4" />
+                            None
+                          </button>
+                          {productOptions.map((p) => (
+                            <button
+                              key={p.product}
+                              onClick={() => {
+                                setSelectedProductName(p.product);
+                                setSelectedRenderId(p.previewId); // default to the preview render
+                              }}
+                              className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs transition-all ${
+                                selectedProductName === p.product
+                                  ? "bg-[#FF3838]/10 border border-[#FF3838] text-white"
+                                  : "bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent"
+                              }`}
+                            >
+                              <img src={p.previewUrl} alt={p.product} className="w-10 h-10 object-contain rounded" />
+                              <span className="text-[10px] text-center leading-tight truncate w-full">{p.product}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Step 2: Pick specific render (only if product selected) */}
+                      {selectedProductName && rendersForSelectedProduct.length > 0 && (
+                        <div>
+                          <label className="block text-gray-500 text-[10px] font-medium mb-1.5 uppercase tracking-wide">
+                            2. Render ({rendersForSelectedProduct.length} available)
+                          </label>
+                          <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+                            {rendersForSelectedProduct.map((r: any) => (
+                              <button
+                                key={r.id}
+                                onClick={() => setSelectedRenderId(r.id)}
+                                className={`relative flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all aspect-square ${
+                                  selectedRenderId === r.id
+                                    ? "bg-[#FF3838]/10 border border-[#FF3838]"
+                                    : "bg-white/5 hover:bg-white/10 border border-transparent"
+                                }`}
+                                title={r.fileName || `Render ${r.id}`}
+                              >
+                                <img src={r.url} alt={r.fileName || ""} className="w-full h-full object-contain rounded" />
+                                {r.isDefault === 1 && (
+                                  <span className="absolute top-0.5 left-0.5 bg-black/60 text-[9px] text-gray-300 px-1 rounded">default</span>
+                                )}
+                                {(r.flavour || r.angle) && (
+                                  <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-[9px] text-gray-300 px-1 rounded">
+                                    {[r.flavour, r.angle].filter(Boolean).join(" · ")}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                  {selectedProduct && (
-                    <p className="text-[10px] text-gray-500 mt-1">
-                      Product: <span className="text-gray-300">{selectedProduct.product}</span> — will be included in the generated image
+                  {selectedRender && (
+                    <p className="text-[10px] text-gray-500 mt-2">
+                      Selected: <span className="text-gray-300">{selectedProductName}</span>
+                      {selectedRender.fileName && <> · <span className="text-gray-400">{selectedRender.fileName}</span></>}
                     </p>
                   )}
                 </div>
@@ -531,7 +599,7 @@ export default function PeopleLibrary() {
                     <>
                       <Sparkles className="w-4 h-4" />
                       Generate {selectedStyle === "professional" ? "Professional" : selectedStyle === "ugc" ? "UGC" : selectedStyle === "lifestyle" ? "Lifestyle" : "Gym Selfie"} Person
-                      {selectedProduct ? ` with ${selectedProduct.product}` : ""}
+                      {selectedProductName ? ` with ${selectedProductName}` : ""}
                     </>
                   )}
                 </button>
@@ -867,7 +935,7 @@ export default function PeopleLibrary() {
 
       {/* View / edit prompt modal */}
       <Dialog open={!!viewingPerson} onOpenChange={(open) => { if (!open && !regenerating) setViewingPerson(null); }}>
-        <DialogContent className="bg-[#0D0F12] border-white/5 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#0D0F12] border-white/5 text-white sm:max-w-[min(1600px,95vw)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-white">{viewingPerson?.name}</DialogTitle>
             <DialogDescription className="text-gray-400">
