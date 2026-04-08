@@ -173,6 +173,7 @@ export const people = mysqlTable("people", {
   tags: varchar("tags", { length: 256 }),
   style: varchar("style", { length: 32 }),
   productName: varchar("productName", { length: 64 }),
+  prompt: text("prompt"),
   deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

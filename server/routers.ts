@@ -31,6 +31,132 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 // ============================================================
+// PEOPLE GENERATOR — prompt templates + builder
+// ============================================================
+
+export type PeopleStyle = "professional" | "ugc" | "lifestyle" | "gym-selfie" | "custom";
+
+/**
+ * Style-specific prompt templates for the people generator.
+ * `description` is injected as the Subject. `productName` triggers the product suffix.
+ *
+ * Prompt design rules:
+ * - UGC/lifestyle/gym-selfie prompts use hammer-strong anti-instructions ("NOT cinematic",
+ *   "FLAT LIGHTING ONLY", "NO dramatic shadows") because Gemini defaults to adding
+ *   professional key lighting even when asked for casual.
+ * - Product suffix demands pixel-for-pixel reproduction because Gemini interprets
+ *   reference images loosely by default.
+ */
+const PEOPLE_STYLE_PROMPTS: Record<Exclude<PeopleStyle, "custom">, (description: string) => string> = {
+  professional: (description) => `Generate a hyper-realistic portrait photograph of a person for use in fitness supplement advertising.
+The image should look like a professional photoshoot, indistinguishable from a real photograph.
+Shot on a high-end DSLR camera with shallow depth of field, natural skin texture, realistic lighting.
+Studio or environmental lighting. No AI artifacts, no uncanny valley effects. The person should look completely real.
+Professional color grading, sharp focus on the face, natural skin pores and texture visible.
+
+Subject: ${description}
+
+Style: Professional fitness/lifestyle photography. Magazine quality. The person should look like they could appear in a supplement brand campaign.`,
+
+  ugc: (description) => `Generate a hyper-realistic photo that looks like a RAW iPhone front-camera selfie or a casual phone snap taken by a friend.
+
+CRITICAL LIGHTING RULES (most important):
+- FLAT LIGHTING ONLY. No key light. No rim light. No dramatic shadows on the face.
+- Light source is iPhone front-facing camera flash OR overhead ceiling light OR bright window — whatever would exist in a normal room.
+- Face should be evenly lit front-on. No moody side shadows. No Hollywood chiaroscuro.
+- If outdoor: overcast daylight or open shade. NOT golden hour. NOT backlit. NOT dramatic.
+
+NOT THIS (AVOID):
+- NOT cinematic. NOT moody. NOT dramatic. NOT professional. NOT studio.
+- NO color grading. NO teal-and-orange. NO film emulation. NO bokeh/shallow depth of field.
+- NO rim lighting. NO key light. NO three-point lighting setup.
+- NO magazine quality. NO editorial polish.
+
+ACTUALLY THIS:
+- Raw iPhone camera look. Slight softness. Slight noise in shadows. JPEG compression artifacts visible at edges.
+- Everything in focus (phone camera deep focus, not shallow DOF).
+- Wide-angle phone camera lens distortion at the edges of frame if close.
+- Slightly off-center framing. Handheld angle. Thumb might be visible at edge if it were real.
+- Looks like it was posted to someone's Instagram story or a TikTok — not to a brand campaign.
+- The person looks relaxed, mid-action, talking to the camera or caught unposed.
+
+Subject: ${description}
+
+Final check: if this image could appear on a billboard, it's wrong. It should look like it was screenshot from a TikTok FYP.`,
+
+  lifestyle: (description) => `Generate a hyper-realistic candid lifestyle photo, shot as if by a friend with a phone camera. Natural, unposed, authentic.
+
+CRITICAL LIGHTING RULES:
+- Natural light only. FLAT diffuse light — overcast daylight, window light through sheer curtain, open shade.
+- NO golden hour backlight. NO dramatic sun. NO studio setup.
+- Even light across the face. No moody shadows. No spotlighting.
+
+NOT THIS (AVOID):
+- NOT editorial. NOT Vogue. NOT cinematic. NOT professional photoshoot.
+- NO color grading. NO film look. NO shallow depth of field that feels like a DSLR.
+- NO perfect hair and makeup. NO posed composition.
+
+ACTUALLY THIS:
+- Mid-range phone camera quality. Slight softness.
+- Candid expression — caught mid-action, mid-conversation, mid-motion.
+- Not looking directly at the camera (or barely). Unposed.
+- Environmental context visible (kitchen, park, walking path, home).
+- Looks like it would be sent in a text message or posted to a personal Instagram — not a brand account.
+
+Subject: ${description}
+
+Final check: if this looks like a brand photoshoot, it's wrong. It should look like a friend snapped it.`,
+
+  "gym-selfie": (description) => `Generate a hyper-realistic gym selfie or gym-floor phone photo. Raw, unfiltered, authentic gym content.
+
+CRITICAL LIGHTING RULES:
+- Harsh overhead fluorescent gym lighting OR phone flash. FLAT, slightly unflattering, top-down.
+- NO dramatic side lighting. NO cinematic shadows. NO moody atmosphere.
+- The lighting should look like what actually exists in a commercial gym — overhead fluorescent tubes, no warmth, no polish.
+
+NOT THIS (AVOID):
+- NOT a fitness magazine cover. NOT a supplement ad photoshoot. NOT cinematic.
+- NO color grading. NO oil-slicked bodybuilder stage lighting. NO golden pump hour.
+- NO shallow depth of field. NO professional camera.
+
+ACTUALLY THIS:
+- Phone camera, slightly sweaty skin, mid-workout energy.
+- Mirror selfie OR handheld close-up. Phone visible in hand if mirror selfie.
+- Gym equipment clearly visible in background (racks, dumbbells, cable machines, plates).
+- Raw phone camera look — slight compression, slight noise.
+- Looks like it was posted to a personal Instagram story or sent to a gym buddy.
+
+Subject: ${description}
+
+Final check: if this could be a supplement brand's Instagram post, it's wrong. It should look like a regular lifter's progress pic.`,
+};
+
+const PEOPLE_PRODUCT_SUFFIX = (productName: string) => `
+
+CRITICAL PRODUCT REQUIREMENT — this is non-negotiable:
+The person MUST be holding or using the ${productName} supplement product container that is provided as a reference image in this request.
+REPRODUCE THE PRODUCT EXACTLY. Pixel-for-pixel. Same label artwork. Same colors. Same logo placement. Same container shape. Same proportions. Same branding text.
+Do NOT generate a "similar" or "inspired by" product. Do NOT modify the label. Do NOT change the colors. Do NOT invent new branding.
+The provided product image is your literal ground truth. Copy it into the scene as faithfully as possible, only adjusting perspective/lighting to match how someone would hold it.
+If you cannot reproduce the product faithfully, prefer to show less of it (partial view, angled away) rather than inventing details.`;
+
+/**
+ * Builds the complete prompt for a people generation request.
+ * Exported for tests.
+ */
+export function buildPeoplePrompt(
+  style: Exclude<PeopleStyle, "custom">,
+  description: string,
+  productName?: string | null,
+): string {
+  let prompt = PEOPLE_STYLE_PROMPTS[style](description);
+  if (productName) {
+    prompt += PEOPLE_PRODUCT_SUFFIX(productName);
+  }
+  return prompt;
+}
+
+// ============================================================
 // FACE SWAP ROUTER — declared before appRouter to avoid hoisting issues
 // ============================================================
 const faceSwapRouter = router({
@@ -1198,59 +1324,7 @@ Return JSON in this exact format:
           productName = render.product;
         }
 
-        // Style-specific prompt templates
-        const stylePrompts: Record<string, string> = {
-          professional: `Generate a hyper-realistic portrait photograph of a person for use in fitness supplement advertising.
-The image should look like a professional photoshoot, indistinguishable from a real photograph.
-Shot on a high-end DSLR camera with shallow depth of field, natural skin texture, realistic lighting.
-Studio or environmental lighting. No AI artifacts, no uncanny valley effects. The person should look completely real.
-Professional color grading, sharp focus on the face, natural skin pores and texture visible.
-
-Subject: ${input.description}
-
-Style: Professional fitness/lifestyle photography. Magazine quality. The person should look like they could appear in a supplement brand campaign.`,
-
-          ugc: `Generate a hyper-realistic photo of a person that looks like user-generated content filmed on an iPhone.
-NOT a professional photo. Should look like a real person took a selfie or someone filmed them casually.
-Slightly imperfect lighting, no studio setup. Natural indoor or outdoor light, maybe slight overexposure or shadow on face.
-Phone camera quality — slight softness, not razor sharp. No professional color grading.
-Casual angle, slightly off-center framing. The person should look relaxed and natural, not posed.
-No AI artifacts. Must look like a real photo from someone's camera roll.
-
-Subject: ${input.description}
-
-Style: iPhone selfie / UGC content creator. Looks like it was posted on TikTok or Instagram stories.`,
-
-          lifestyle: `Generate a hyper-realistic candid photo of a person in a natural lifestyle setting.
-Shot as if by a friend with a decent phone camera. Natural light only — golden hour, window light, or overcast outdoor.
-Candid expression, caught mid-action or mid-conversation. Not looking directly at camera (or barely).
-Warm, natural tones. No studio, no professional lighting setup. Slight motion or environmental context.
-No AI artifacts. Must look like a real candid photo.
-
-Subject: ${input.description}
-
-Style: Lifestyle / candid photography. Natural, warm, authentic.`,
-
-          "gym-selfie": `Generate a hyper-realistic gym selfie or gym-floor photo of a person.
-Shot on a phone in a gym environment. Overhead fluorescent or harsh gym lighting.
-Mirror selfie angle or handheld close-up. Slightly sweaty skin, mid-workout energy.
-Gym equipment visible in background. Phone camera quality — not professional.
-No color grading, raw phone camera look. Slightly compressed, not crisp.
-No AI artifacts. Must look like a real gym selfie someone posted on social media.
-
-Subject: ${input.description}
-
-Style: Gym selfie / post-workout content. Raw, unfiltered, authentic gym energy.`,
-        };
-
-        let prompt = stylePrompts[input.style];
-
-        // Append product instructions if a product was selected
-        if (productName) {
-          prompt += `\n\nThe person is naturally holding or using a ${productName} supplement product container/tub.
-The product should be clearly visible and recognizable. Match the product appearance to the provided product render image exactly — same label, same colors, same branding.
-Do not invent a generic product — use ONLY the provided product render as reference.`;
-        }
+        const prompt = buildPeoplePrompt(input.style, input.description, productName);
 
         const result = await generateProductAdWithNanoBananaPro({
           prompt,
@@ -1267,6 +1341,54 @@ Do not invent a generic product — use ONLY the provided product render as refe
           tags: input.tags || null,
           style: input.style,
           productName: productName || null,
+          prompt,
+          fileKey: result.s3Key,
+          url: result.imageUrl,
+          mimeType: "image/png",
+        });
+
+        return { id, url: result.imageUrl };
+      }),
+
+    regenerate: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        prompt: z.string().min(10),
+      }))
+      .mutation(async ({ input }) => {
+        // Look up the original person
+        const original = await db.getPerson(input.id);
+        if (!original) throw new TRPCError({ code: "NOT_FOUND", message: "Person not found" });
+
+        // If the original was generated with a product, re-fetch the default render by product name
+        let productRenderUrl: string | undefined;
+        if (original.productName) {
+          const render = await db.getDefaultProductRender(original.productName);
+          if (render) productRenderUrl = render.url;
+        }
+
+        const result = await generateProductAdWithNanoBananaPro({
+          prompt: input.prompt,
+          productRenderUrl,
+          aspectRatio: "1:1",
+          resolution: "2K",
+          model: "nano_banana_pro",
+          useCompositing: false,
+        });
+
+        // Name the new record with a version suffix so it's distinguishable in the grid
+        const baseName = original.name.replace(/\s*\(v\d+\)$/, "");
+        const versionMatch = original.name.match(/\(v(\d+)\)$/);
+        const nextVersion = versionMatch ? parseInt(versionMatch[1], 10) + 1 : 2;
+        const newName = `${baseName} (v${nextVersion})`;
+
+        const id = await db.createPerson({
+          name: newName,
+          description: original.description,
+          tags: original.tags,
+          style: "custom",
+          productName: original.productName,
+          prompt: input.prompt,
           fileKey: result.s3Key,
           url: result.imageUrl,
           mimeType: "image/png",

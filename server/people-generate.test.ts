@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
+import { buildPeoplePrompt } from "./routers";
 
 /**
- * Tests for the people.generate endpoint's input validation and style handling.
- * Tests the Zod schema + style enum without hitting the actual Gemini API.
+ * Tests for the people.generate / people.regenerate endpoints' input validation
+ * and the exported buildPeoplePrompt helper. No Gemini API calls in tests.
  */
 
 const generateInputSchema = z.object({
@@ -12,6 +13,11 @@ const generateInputSchema = z.object({
   tags: z.string().optional(),
   style: z.enum(["professional", "ugc", "lifestyle", "gym-selfie"]).optional().default("professional"),
   productId: z.number().optional(),
+});
+
+const regenerateInputSchema = z.object({
+  id: z.number(),
+  prompt: z.string().min(10),
 });
 
 describe("people.generate input validation", () => {
@@ -102,70 +108,89 @@ describe("people.generate input validation", () => {
   });
 });
 
-describe("people.generate prompt building", () => {
-  // Mirrors the style prompt map from server/routers.ts
-  const buildPrompt = (style: string, description: string, productName?: string) => {
-    const stylePrompts: Record<string, string> = {
-      professional: `Generate a hyper-realistic portrait photograph of a person for use in fitness supplement advertising.
-Shot on a high-end DSLR camera with shallow depth of field, natural skin texture, realistic lighting.
-Subject: ${description}
-Style: Professional fitness/lifestyle photography. Magazine quality.`,
-      ugc: `Generate a hyper-realistic photo of a person that looks like user-generated content filmed on an iPhone.
-NOT a professional photo. Phone camera quality.
-Subject: ${description}
-Style: iPhone selfie / UGC content creator.`,
-      lifestyle: `Generate a hyper-realistic candid photo of a person in a natural lifestyle setting.
-Natural light only. Candid expression.
-Subject: ${description}
-Style: Lifestyle / candid photography.`,
-      "gym-selfie": `Generate a hyper-realistic gym selfie or gym-floor photo of a person.
-Shot on a phone in a gym environment. Harsh gym lighting.
-Subject: ${description}
-Style: Gym selfie / post-workout content.`,
-    };
+describe("people.regenerate input validation", () => {
+  it("accepts valid id + prompt", () => {
+    const result = regenerateInputSchema.safeParse({
+      id: 42,
+      prompt: "Generate a hyper-realistic photo of a person with flat iPhone lighting.",
+    });
+    expect(result.success).toBe(true);
+  });
 
-    let prompt = stylePrompts[style];
-    if (productName) {
-      prompt += `\n\nThe person is naturally holding or using a ${productName} supplement product container/tub.`;
-    }
-    return prompt;
-  };
+  it("rejects prompt shorter than 10 characters", () => {
+    const result = regenerateInputSchema.safeParse({
+      id: 42,
+      prompt: "short",
+    });
+    expect(result.success).toBe(false);
+  });
 
+  it("rejects missing id", () => {
+    const result = regenerateInputSchema.safeParse({
+      prompt: "A valid prompt that is definitely more than ten characters long",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("buildPeoplePrompt — exported helper", () => {
   it("builds professional prompt with DSLR language", () => {
-    const prompt = buildPrompt("professional", "Athletic female, mid-20s");
+    const prompt = buildPeoplePrompt("professional", "Athletic female, mid-20s");
     expect(prompt).toContain("DSLR");
     expect(prompt).toContain("Magazine quality");
     expect(prompt).toContain("Athletic female, mid-20s");
     expect(prompt).not.toContain("iPhone");
+    expect(prompt).not.toContain("FLAT LIGHTING");
   });
 
-  it("builds UGC prompt with iPhone language", () => {
-    const prompt = buildPrompt("ugc", "Girl mid-workout");
+  it("builds UGC prompt with hammer-strong flat lighting language", () => {
+    const prompt = buildPeoplePrompt("ugc", "Girl mid-workout");
+    // Core UGC signals
+    expect(prompt).toContain("FLAT LIGHTING ONLY");
     expect(prompt).toContain("iPhone");
-    expect(prompt).toContain("NOT a professional photo");
+    expect(prompt).toContain("NOT cinematic");
+    expect(prompt).toContain("NOT moody");
+    expect(prompt).toContain("NOT dramatic");
+    // Anti-professional
     expect(prompt).not.toContain("DSLR");
     expect(prompt).not.toContain("Magazine quality");
+    // Subject injected
+    expect(prompt).toContain("Girl mid-workout");
   });
 
-  it("builds lifestyle prompt with candid language", () => {
-    const prompt = buildPrompt("lifestyle", "Woman walking");
+  it("builds lifestyle prompt with flat natural light requirement", () => {
+    const prompt = buildPeoplePrompt("lifestyle", "Woman walking");
     expect(prompt).toContain("candid");
-    expect(prompt).toContain("Natural light");
+    expect(prompt).toContain("FLAT diffuse light");
+    expect(prompt).toContain("NOT editorial");
+    // Explicitly anti-directed (not present as a positive instruction)
+    expect(prompt).toContain("NO golden hour backlight");
+    expect(prompt).toContain("Woman walking");
   });
 
-  it("builds gym-selfie prompt with gym language", () => {
-    const prompt = buildPrompt("gym-selfie", "Guy flexing");
+  it("builds gym-selfie prompt with gym lighting language", () => {
+    const prompt = buildPeoplePrompt("gym-selfie", "Guy flexing");
     expect(prompt).toContain("gym");
-    expect(prompt).toContain("Harsh gym lighting");
+    expect(prompt).toContain("fluorescent");
+    expect(prompt).toContain("NOT a fitness magazine");
   });
 
-  it("appends product suffix when productName provided", () => {
-    const prompt = buildPrompt("ugc", "Girl mid-workout", "Hyperburn");
-    expect(prompt).toContain("Hyperburn supplement product");
+  it("appends product suffix with HAMMER-STRONG pixel-for-pixel language when productName provided", () => {
+    const prompt = buildPeoplePrompt("ugc", "Girl mid-workout", "Hyperburn");
+    expect(prompt).toContain("Hyperburn");
+    expect(prompt).toContain("CRITICAL PRODUCT REQUIREMENT");
+    expect(prompt).toContain("Pixel-for-pixel");
+    expect(prompt).toContain("Do NOT generate a \"similar\"");
   });
 
   it("does NOT append product suffix when productName is undefined", () => {
-    const prompt = buildPrompt("ugc", "Girl mid-workout");
-    expect(prompt).not.toContain("supplement product");
+    const prompt = buildPeoplePrompt("ugc", "Girl mid-workout");
+    expect(prompt).not.toContain("CRITICAL PRODUCT REQUIREMENT");
+    expect(prompt).not.toContain("Pixel-for-pixel");
+  });
+
+  it("does NOT append product suffix when productName is null", () => {
+    const prompt = buildPeoplePrompt("ugc", "Girl mid-workout", null);
+    expect(prompt).not.toContain("CRITICAL PRODUCT REQUIREMENT");
   });
 });

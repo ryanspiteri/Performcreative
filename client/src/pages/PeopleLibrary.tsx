@@ -1,7 +1,20 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Users, Upload, Trash2, Loader2, Plus, X, Sparkles, Wand2, Camera, Smartphone, Sun, Dumbbell, Package } from "lucide-react";
+import { Users, Upload, Trash2, Loader2, Plus, X, Sparkles, Wand2, Camera, Smartphone, Sun, Dumbbell, Package, FileText, SlidersHorizontal, RefreshCw } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 const TAG_OPTIONS = ["male", "female", "athletic", "casual", "young", "mature", "professional"];
 
@@ -57,6 +70,16 @@ const STYLE_PRESETS: Record<GenerationStyle, string[]> = {
   ],
 };
 
+const STYLE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All styles" },
+  { value: "professional", label: "Professional" },
+  { value: "ugc", label: "UGC" },
+  { value: "lifestyle", label: "Lifestyle" },
+  { value: "gym-selfie", label: "Gym Selfie" },
+  { value: "custom", label: "Custom (edited)" },
+  { value: "uploaded", label: "Uploaded" },
+];
+
 export default function PeopleLibrary() {
   const { data: people, isLoading } = trpc.people.list.useQuery();
   const { data: allRenders } = trpc.renders.list.useQuery();
@@ -76,6 +99,19 @@ export default function PeopleLibrary() {
   const [selectedStyle, setSelectedStyle] = useState<GenerationStyle>("professional");
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
+
+  // Filter state
+  const [filterStyle, setFilterStyle] = useState<string>("all");
+  const [filterProduct, setFilterProduct] = useState<string>("all");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  // View/edit prompt modal state
+  const [viewingPerson, setViewingPerson] = useState<any | null>(null);
+  const [editedPrompt, setEditedPrompt] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [highlightedPersonId, setHighlightedPersonId] = useState<number | null>(null);
+  const gridTopRef = useRef<HTMLDivElement | null>(null);
 
   // Group renders by product, picking the default render (or first) for each product
   const productOptions = useMemo(() => {
@@ -116,6 +152,93 @@ export default function PeopleLibrary() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const regeneratePerson = trpc.people.regenerate.useMutation({
+    onSuccess: (data) => {
+      toast.success("New person generated");
+      utils.people.list.invalidate();
+      // Close modal, scroll to top, highlight the new person for ~2s
+      setViewingPerson(null);
+      setRegenerating(false);
+      setHighlightedPersonId(data.id);
+      gridTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => setHighlightedPersonId(null), 2000);
+    },
+    onError: (err) => {
+      setRegenerating(false);
+      toast.error(`Regeneration failed: ${err.message}`);
+    },
+  });
+
+  // Distinct product names that appear on existing people (for the filter dropdown)
+  const filterProductOptions = useMemo(() => {
+    if (!people) return [];
+    const set = new Set<string>();
+    for (const p of people as any[]) {
+      if (p.productName) set.add(p.productName);
+    }
+    return Array.from(set).sort();
+  }, [people]);
+
+  // Filtered people list (client-side, combines style + product + tags with AND)
+  const filteredPeople = useMemo(() => {
+    if (!people) return [];
+    return (people as any[]).filter((p) => {
+      // Style filter: "uploaded" means style is null (upload mode, not AI-generated)
+      if (filterStyle !== "all") {
+        if (filterStyle === "uploaded") {
+          if (p.style) return false;
+        } else {
+          if (p.style !== filterStyle) return false;
+        }
+      }
+      // Product filter
+      if (filterProduct !== "all" && p.productName !== filterProduct) return false;
+      // Tag filter (OR within tags)
+      if (filterTags.length > 0) {
+        const personTags = (p.tags || "").split(",").map((t: string) => t.trim());
+        if (!filterTags.some((t) => personTags.includes(t))) return false;
+      }
+      return true;
+    });
+  }, [people, filterStyle, filterProduct, filterTags]);
+
+  const activeFilterCount =
+    (filterStyle !== "all" ? 1 : 0) +
+    (filterProduct !== "all" ? 1 : 0) +
+    (filterTags.length > 0 ? 1 : 0);
+
+  const clearFilters = () => {
+    setFilterStyle("all");
+    setFilterProduct("all");
+    setFilterTags([]);
+  };
+
+  const toggleFilterTag = (tag: string) => {
+    setFilterTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  };
+
+  const openViewPrompt = (person: any) => {
+    setViewingPerson(person);
+    setEditedPrompt(person.prompt || "");
+  };
+
+  const handleRegenerate = async () => {
+    if (!viewingPerson) return;
+    if (!editedPrompt.trim() || editedPrompt.trim().length < 10) {
+      toast.error("Prompt must be at least 10 characters");
+      return;
+    }
+    setRegenerating(true);
+    try {
+      await regeneratePerson.mutateAsync({
+        id: viewingPerson.id,
+        prompt: editedPrompt.trim(),
+      });
+    } catch {
+      // error handled in mutation onError
+    }
+  };
 
   const resetForm = () => {
     setShowUpload(false);
@@ -508,6 +631,89 @@ export default function PeopleLibrary() {
           </div>
         )}
 
+        {/* Filter bar (sticky desktop, button + sheet on mobile) */}
+        {people && people.length > 0 && (
+          <div ref={gridTopRef} className="sticky top-0 z-10 -mx-6 px-6 py-3 mb-4 bg-[#01040A]/95 backdrop-blur-sm border-b border-white/5">
+            {/* Desktop filter row */}
+            <div className="hidden md:flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-gray-500 text-xs font-medium">Style</label>
+                <select
+                  value={filterStyle}
+                  onChange={(e) => setFilterStyle(e.target.value)}
+                  className="bg-[#0D0F12] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF3838]"
+                >
+                  {STYLE_FILTER_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                {filterStyle !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-[#FF3838]" />}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-gray-500 text-xs font-medium">Product</label>
+                <select
+                  value={filterProduct}
+                  onChange={(e) => setFilterProduct(e.target.value)}
+                  className="bg-[#0D0F12] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF3838]"
+                >
+                  <option value="all">All products</option>
+                  {filterProductOptions.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                {filterProduct !== "all" && <span className="w-1.5 h-1.5 rounded-full bg-[#FF3838]" />}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="text-gray-500 text-xs font-medium">Tags</label>
+                {TAG_OPTIONS.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleFilterTag(tag)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+                      filterTags.includes(tag) ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearFilters}
+                  className="ml-auto flex items-center gap-1 text-gray-400 hover:text-white text-xs"
+                >
+                  <X className="w-3 h-3" />
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {/* Mobile filter button */}
+            <div className="md:hidden flex items-center justify-between">
+              <button
+                onClick={() => setMobileFiltersOpen(true)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeFilterCount > 0 ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400"
+                }`}
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{activeFilterCount}</span>
+                )}
+              </button>
+              {activeFilterCount > 0 && (
+                <button onClick={clearFilters} className="text-gray-400 hover:text-white text-xs">
+                  Clear all
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* People Grid */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -519,15 +725,39 @@ export default function PeopleLibrary() {
             <p className="text-gray-400 text-sm mb-1">No people in your library yet</p>
             <p className="text-gray-600 text-xs">Add reference photos to include realistic people in your ad generations</p>
           </div>
+        ) : filteredPeople.length === 0 ? (
+          <div className="bg-[#0D0F12] border border-white/5 rounded-2xl p-12 text-center">
+            <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400 text-sm mb-1">No people match these filters</p>
+            <p className="text-gray-600 text-xs mb-4">Try a different combination</p>
+            <button
+              onClick={clearFilters}
+              className="bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            >
+              Clear filters
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {people.map((person: any) => (
+            {filteredPeople.map((person: any) => (
               <div
                 key={person.id}
-                className="bg-[#0D0F12] border border-white/5 rounded-xl overflow-hidden group"
+                className={`bg-[#0D0F12] border rounded-xl overflow-hidden group transition-all ${
+                  highlightedPersonId === person.id
+                    ? "border-[#FF3838] ring-2 ring-[#FF3838]/40"
+                    : "border-white/5"
+                }`}
               >
-                <div className="aspect-square overflow-hidden">
+                <div className="aspect-square overflow-hidden relative">
                   <img src={person.url} alt={person.name} className="w-full h-full object-cover" />
+                  {/* View prompt button — overlay on hover */}
+                  <button
+                    onClick={() => openViewPrompt(person)}
+                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="View / edit prompt"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </button>
                 </div>
                 <div className="p-3">
                   <p className="text-white text-sm font-medium truncate">{person.name}</p>
@@ -568,6 +798,163 @@ export default function PeopleLibrary() {
           </div>
         )}
       </div>
+
+      {/* Mobile filter sheet */}
+      <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+        <SheetContent side="bottom" className="bg-[#0D0F12] border-white/5 text-white">
+          <SheetHeader>
+            <SheetTitle className="text-white">Filters</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-5 py-4 px-4">
+            <div>
+              <label className="block text-gray-400 text-xs font-medium mb-2">Style</label>
+              <select
+                value={filterStyle}
+                onChange={(e) => setFilterStyle(e.target.value)}
+                className="w-full bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FF3838]"
+              >
+                {STYLE_FILTER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-gray-400 text-xs font-medium mb-2">Product</label>
+              <select
+                value={filterProduct}
+                onChange={(e) => setFilterProduct(e.target.value)}
+                className="w-full bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FF3838]"
+              >
+                <option value="all">All products</option>
+                {filterProductOptions.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-gray-400 text-xs font-medium mb-2">Tags</label>
+              <div className="flex flex-wrap gap-2">
+                {TAG_OPTIONS.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleFilterTag(tag)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      filterTags.includes(tag) ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={clearFilters}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 px-4 py-2.5 rounded-lg text-sm font-medium"
+              >
+                Clear all
+              </button>
+              <button
+                onClick={() => setMobileFiltersOpen(false)}
+                className="flex-1 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-4 py-2.5 rounded-lg text-sm font-medium"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* View / edit prompt modal */}
+      <Dialog open={!!viewingPerson} onOpenChange={(open) => { if (!open && !regenerating) setViewingPerson(null); }}>
+        <DialogContent className="bg-[#0D0F12] border-white/5 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white">{viewingPerson?.name}</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              View or edit the prompt used to generate this person, then regenerate with your changes.
+            </DialogDescription>
+          </DialogHeader>
+          {viewingPerson && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left: image */}
+              <div>
+                <img
+                  src={viewingPerson.url}
+                  alt={viewingPerson.name}
+                  className="w-full aspect-square object-cover rounded-lg border border-white/10"
+                />
+              </div>
+
+              {/* Right: metadata + prompt + regenerate */}
+              <div className="space-y-4 flex flex-col">
+                <div className="flex flex-wrap gap-1.5">
+                  {viewingPerson.style && (
+                    <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] rounded-full">
+                      {viewingPerson.style}
+                    </span>
+                  )}
+                  {viewingPerson.productName && (
+                    <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] rounded-full">
+                      {viewingPerson.productName}
+                    </span>
+                  )}
+                  {viewingPerson.tags && viewingPerson.tags.split(",").map((tag: string) => (
+                    <span key={tag} className="px-2 py-0.5 bg-white/5 text-gray-400 text-[10px] rounded-full">
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
+                {viewingPerson.description && (
+                  <p className="text-gray-400 text-xs">{viewingPerson.description}</p>
+                )}
+
+                <div className="flex flex-col flex-1 min-h-0">
+                  <label className="block text-gray-400 text-xs font-medium mb-1">Prompt</label>
+                  {viewingPerson.prompt ? (
+                    <textarea
+                      value={editedPrompt}
+                      onChange={(e) => setEditedPrompt(e.target.value)}
+                      disabled={regenerating}
+                      className="w-full flex-1 min-h-[240px] bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white placeholder-gray-600 resize-none font-mono leading-relaxed disabled:opacity-60"
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-amber-200/80 text-xs">
+                        This person was generated before prompts were stored (or was uploaded as a photo). You can still regenerate a new version by writing a prompt from scratch below.
+                      </div>
+                      <textarea
+                        value={editedPrompt}
+                        onChange={(e) => setEditedPrompt(e.target.value)}
+                        disabled={regenerating}
+                        placeholder="Describe the person you want to generate..."
+                        className="w-full min-h-[180px] bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 resize-none font-mono leading-relaxed disabled:opacity-60"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleRegenerate}
+                  disabled={regenerating || !editedPrompt.trim() || editedPrompt.trim().length < 10}
+                  className="w-full flex items-center justify-center gap-2 bg-[#FF3838] hover:bg-[#FF3838]/80 text-white px-4 py-3 rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {regenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Regenerating... (~15s)
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Regenerate with edited prompt
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
