@@ -171,6 +171,8 @@ export const people = mysqlTable("people", {
   mimeType: varchar("mimeType", { length: 64 }).default("image/png").notNull(),
   fileSize: int("fileSize"),
   tags: varchar("tags", { length: 256 }),
+  style: varchar("style", { length: 32 }),
+  productName: varchar("productName", { length: 64 }),
   deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

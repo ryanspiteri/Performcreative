@@ -1184,9 +1184,23 @@ Return JSON in this exact format:
         name: z.string().min(1).max(128),
         description: z.string().min(1),
         tags: z.string().optional(),
+        style: z.enum(["professional", "ugc", "lifestyle", "gym-selfie"]).optional().default("professional"),
+        productId: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
-        const prompt = `Generate a hyper-realistic portrait photograph of a person for use in fitness supplement advertising.
+        // Look up product render if selected
+        let productRenderUrl: string | undefined;
+        let productName: string | undefined;
+        if (input.productId) {
+          const render = await db.getProductRenderById(input.productId);
+          if (!render) throw new TRPCError({ code: "NOT_FOUND", message: "Product render not found" });
+          productRenderUrl = render.url;
+          productName = render.product;
+        }
+
+        // Style-specific prompt templates
+        const stylePrompts: Record<string, string> = {
+          professional: `Generate a hyper-realistic portrait photograph of a person for use in fitness supplement advertising.
 The image should look like a professional photoshoot, indistinguishable from a real photograph.
 Shot on a high-end DSLR camera with shallow depth of field, natural skin texture, realistic lighting.
 Studio or environmental lighting. No AI artifacts, no uncanny valley effects. The person should look completely real.
@@ -1194,10 +1208,53 @@ Professional color grading, sharp focus on the face, natural skin pores and text
 
 Subject: ${input.description}
 
-Style: Professional fitness/lifestyle photography. Magazine quality. The person should look like they could appear in a supplement brand campaign.`;
+Style: Professional fitness/lifestyle photography. Magazine quality. The person should look like they could appear in a supplement brand campaign.`,
+
+          ugc: `Generate a hyper-realistic photo of a person that looks like user-generated content filmed on an iPhone.
+NOT a professional photo. Should look like a real person took a selfie or someone filmed them casually.
+Slightly imperfect lighting, no studio setup. Natural indoor or outdoor light, maybe slight overexposure or shadow on face.
+Phone camera quality — slight softness, not razor sharp. No professional color grading.
+Casual angle, slightly off-center framing. The person should look relaxed and natural, not posed.
+No AI artifacts. Must look like a real photo from someone's camera roll.
+
+Subject: ${input.description}
+
+Style: iPhone selfie / UGC content creator. Looks like it was posted on TikTok or Instagram stories.`,
+
+          lifestyle: `Generate a hyper-realistic candid photo of a person in a natural lifestyle setting.
+Shot as if by a friend with a decent phone camera. Natural light only — golden hour, window light, or overcast outdoor.
+Candid expression, caught mid-action or mid-conversation. Not looking directly at camera (or barely).
+Warm, natural tones. No studio, no professional lighting setup. Slight motion or environmental context.
+No AI artifacts. Must look like a real candid photo.
+
+Subject: ${input.description}
+
+Style: Lifestyle / candid photography. Natural, warm, authentic.`,
+
+          "gym-selfie": `Generate a hyper-realistic gym selfie or gym-floor photo of a person.
+Shot on a phone in a gym environment. Overhead fluorescent or harsh gym lighting.
+Mirror selfie angle or handheld close-up. Slightly sweaty skin, mid-workout energy.
+Gym equipment visible in background. Phone camera quality — not professional.
+No color grading, raw phone camera look. Slightly compressed, not crisp.
+No AI artifacts. Must look like a real gym selfie someone posted on social media.
+
+Subject: ${input.description}
+
+Style: Gym selfie / post-workout content. Raw, unfiltered, authentic gym energy.`,
+        };
+
+        let prompt = stylePrompts[input.style];
+
+        // Append product instructions if a product was selected
+        if (productName) {
+          prompt += `\n\nThe person is naturally holding or using a ${productName} supplement product container/tub.
+The product should be clearly visible and recognizable. Match the product appearance to the provided product render image exactly — same label, same colors, same branding.
+Do not invent a generic product — use ONLY the provided product render as reference.`;
+        }
 
         const result = await generateProductAdWithNanoBananaPro({
           prompt,
+          productRenderUrl,
           aspectRatio: "1:1",
           resolution: "2K",
           model: "nano_banana_pro",
@@ -1208,6 +1265,8 @@ Style: Professional fitness/lifestyle photography. Magazine quality. The person 
           name: input.name,
           description: input.description,
           tags: input.tags || null,
+          style: input.style,
+          productName: productName || null,
           fileKey: result.s3Key,
           url: result.imageUrl,
           mimeType: "image/png",

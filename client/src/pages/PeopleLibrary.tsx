@@ -1,23 +1,65 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Users, Upload, Trash2, Loader2, Plus, X, Sparkles, Wand2 } from "lucide-react";
+import { Users, Upload, Trash2, Loader2, Plus, X, Sparkles, Wand2, Camera, Smartphone, Sun, Dumbbell, Package } from "lucide-react";
 
 const TAG_OPTIONS = ["male", "female", "athletic", "casual", "young", "mature", "professional"];
 
-const AI_PRESETS = [
-  "Athletic female, mid-20s, toned physique, gym setting, confident expression",
-  "Professional male, early 30s, fit build, studio portrait, natural lighting",
-  "Fit mother, late 20s, casual activewear, bright natural light, warm smile",
-  "Young male athlete, early 20s, intense expression, dark dramatic background",
-  "Mature fitness enthusiast, 40s, confident pose, outdoor setting",
-  "Female bodybuilder, strong physique, gym environment, powerful stance",
-  "Male model, chiseled jawline, athletic wear, minimalist studio backdrop",
-  "Active young woman, running gear, outdoor trail, energetic pose",
+type GenerationStyle = "professional" | "ugc" | "lifestyle" | "gym-selfie";
+
+const STYLE_OPTIONS: { value: GenerationStyle; label: string; description: string; icon: typeof Camera }[] = [
+  { value: "professional", label: "Professional", description: "Studio lighting, DSLR quality, magazine look", icon: Camera },
+  { value: "ugc", label: "UGC", description: "iPhone selfie, imperfect lighting, casual angle", icon: Smartphone },
+  { value: "lifestyle", label: "Lifestyle", description: "Candid, natural light, shot by a friend", icon: Sun },
+  { value: "gym-selfie", label: "Gym Selfie", description: "Mirror selfie, harsh gym lighting, sweaty", icon: Dumbbell },
 ];
+
+const STYLE_PRESETS: Record<GenerationStyle, string[]> = {
+  professional: [
+    "Athletic female, mid-20s, toned physique, gym setting, confident expression",
+    "Professional male, early 30s, fit build, studio portrait, natural lighting",
+    "Fit mother, late 20s, casual activewear, bright natural light, warm smile",
+    "Young male athlete, early 20s, intense expression, dark dramatic background",
+    "Mature fitness enthusiast, 40s, confident pose, outdoor setting",
+    "Female bodybuilder, strong physique, gym environment, powerful stance",
+    "Male model, chiseled jawline, athletic wear, minimalist studio backdrop",
+    "Active young woman, running gear, outdoor trail, energetic pose",
+  ],
+  ugc: [
+    "Girl filming herself mid-workout, messy bun, gym clothes, holding shaker bottle",
+    "Guy recording a quick testimonial video, casual t-shirt, kitchen background",
+    "Young woman taking a mirror selfie with supplement tub, bathroom lighting",
+    "Fitness girl talking to camera, slightly out of breath, post-workout glow",
+    "Man in his 30s doing an unboxing video at his desk, natural window light",
+    "College-age girl showing off her gym bag contents, dorm room background",
+    "Athletic guy filming himself making a protein shake, messy kitchen counter",
+    "Woman in her 20s doing a product review, couch background, ring light glow",
+  ],
+  lifestyle: [
+    "Woman walking with coffee and gym bag, morning golden hour light, city sidewalk",
+    "Man stretching outdoors at sunrise, park setting, candid mid-motion",
+    "Friends laughing after a workout, outdoor cafe, natural warm tones",
+    "Woman preparing a smoothie in a bright kitchen, morning light through window",
+    "Athletic guy hiking on a trail, backpack, natural mountain backdrop",
+    "Young woman doing yoga on a balcony, soft overcast light, peaceful expression",
+    "Couple jogging together on a beach path, sunset lighting, candid shot",
+    "Man sitting with a shaker bottle post-gym, park bench, relaxed expression",
+  ],
+  "gym-selfie": [
+    "Guy flexing in gym mirror, tank top, sweaty, post-workout pump",
+    "Girl mid-set on cable machine, gym mirror reflection, focused expression",
+    "Athletic man taking a progress selfie, gym locker room, overhead lighting",
+    "Woman posing with dumbbells, gym floor, fluorescent lighting, confident stance",
+    "Guy doing a front double bicep, gym mirror, harsh overhead lights, veiny arms",
+    "Girl post-cardio, red-faced, holding water bottle, gym background",
+    "Man filming a set of deadlifts, phone on ground angle, chalk on hands",
+    "Athletic woman flexing in sports bra, gym mirror, phone flash visible",
+  ],
+};
 
 export default function PeopleLibrary() {
   const { data: people, isLoading } = trpc.people.list.useQuery();
+  const { data: allRenders } = trpc.renders.list.useQuery();
   const utils = trpc.useUtils();
 
   const [showUpload, setShowUpload] = useState(false);
@@ -31,6 +73,23 @@ export default function PeopleLibrary() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiPreview, setAiPreview] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<GenerationStyle>("professional");
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [showProductPicker, setShowProductPicker] = useState(false);
+
+  // Group renders by product, picking the default render (or first) for each product
+  const productOptions = useMemo(() => {
+    if (!allRenders) return [];
+    const byProduct = new Map<string, { id: number; product: string; url: string }>();
+    for (const r of allRenders) {
+      if (!byProduct.has(r.product) || (r as any).isDefault === 1) {
+        byProduct.set(r.product, { id: r.id, product: r.product, url: r.url });
+      }
+    }
+    return Array.from(byProduct.values()).sort((a, b) => a.product.localeCompare(b.product));
+  }, [allRenders]);
+
+  const selectedProduct = productOptions.find((p) => p.id === selectedProductId);
 
   const uploadPerson = trpc.people.upload.useMutation({
     onSuccess: () => {
@@ -69,6 +128,9 @@ export default function PeopleLibrary() {
     setAiPrompt("");
     setAiGenerating(false);
     setAiPreview(null);
+    setSelectedStyle("professional");
+    setSelectedProductId(null);
+    setShowProductPicker(false);
   };
 
   const handleAiGenerate = async () => {
@@ -80,6 +142,8 @@ export default function PeopleLibrary() {
         name: name.trim(),
         description: aiPrompt.trim(),
         tags: selectedTags.length > 0 ? selectedTags.join(",") : undefined,
+        style: selectedStyle,
+        productId: selectedProductId ?? undefined,
       });
     } finally {
       setAiGenerating(false);
@@ -133,6 +197,8 @@ export default function PeopleLibrary() {
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
+
+  const currentPresets = STYLE_PRESETS[selectedStyle];
 
   return (
     <div className="min-h-screen bg-[#01040A] p-6">
@@ -199,11 +265,85 @@ export default function PeopleLibrary() {
 
             {createMode === "ai" ? (
               <div className="space-y-4">
+                {/* Style Selector */}
+                <div>
+                  <label className="block text-gray-400 text-xs font-medium mb-2">Generation Style</label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {STYLE_OPTIONS.map((style) => {
+                      const Icon = style.icon;
+                      return (
+                        <button
+                          key={style.value}
+                          onClick={() => {
+                            setSelectedStyle(style.value);
+                            setAiPrompt("");
+                          }}
+                          className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg text-center transition-all ${
+                            selectedStyle === style.value
+                              ? "bg-[#FF3838]/10 border-2 border-[#FF3838] text-white"
+                              : "bg-white/5 text-gray-400 hover:bg-white/10 border-2 border-transparent"
+                          }`}
+                        >
+                          <Icon className="w-5 h-5" />
+                          <span className="text-xs font-medium">{style.label}</span>
+                          <span className="text-[10px] text-gray-500 leading-tight">{style.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Product Picker */}
+                <div>
+                  <button
+                    onClick={() => setShowProductPicker(!showProductPicker)}
+                    className="flex items-center gap-2 text-gray-400 text-xs font-medium hover:text-white transition-colors"
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    Include ONEST Product (optional)
+                    <span className="text-[10px] text-gray-600">{showProductPicker ? "v" : ">"}</span>
+                  </button>
+                  {showProductPicker && (
+                    <div className="mt-2 grid grid-cols-3 md:grid-cols-4 gap-2">
+                      <button
+                        onClick={() => setSelectedProductId(null)}
+                        className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs transition-all ${
+                          selectedProductId === null
+                            ? "bg-white/10 border border-white/20 text-white"
+                            : "bg-white/5 text-gray-500 hover:bg-white/10 border border-transparent"
+                        }`}
+                      >
+                        <X className="w-4 h-4" />
+                        None
+                      </button>
+                      {productOptions.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedProductId(p.id)}
+                          className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs transition-all ${
+                            selectedProductId === p.id
+                              ? "bg-[#FF3838]/10 border border-[#FF3838] text-white"
+                              : "bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent"
+                          }`}
+                        >
+                          <img src={p.url} alt={p.product} className="w-10 h-10 object-contain rounded" />
+                          <span className="text-[10px] text-center leading-tight truncate w-full">{p.product}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedProduct && (
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Product: <span className="text-gray-300">{selectedProduct.product}</span> — will be included in the generated image
+                    </p>
+                  )}
+                </div>
+
                 {/* AI Preset Prompts */}
                 <div>
                   <label className="block text-gray-400 text-xs font-medium mb-2">Quick Presets</label>
                   <div className="grid grid-cols-2 gap-2">
-                    {AI_PRESETS.map((preset) => (
+                    {currentPresets.map((preset) => (
                       <button
                         key={preset}
                         onClick={() => setAiPrompt(preset)}
@@ -262,16 +402,17 @@ export default function PeopleLibrary() {
                   {aiGenerating ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating with Nano Banana Pro (2-3 min)...
+                      Generating with Nano Banana Pro...
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      Generate Person
+                      Generate {selectedStyle === "professional" ? "Professional" : selectedStyle === "ugc" ? "UGC" : selectedStyle === "lifestyle" ? "Lifestyle" : "Gym Selfie"} Person
+                      {selectedProduct ? ` with ${selectedProduct.product}` : ""}
                     </>
                   )}
                 </button>
-                <p className="text-gray-600 text-[10px]">Uses Nano Banana Pro for highest quality. Cost: ~$0.12 per generation.</p>
+                <p className="text-gray-600 text-[10px]">Uses Nano Banana Pro for highest quality. Cost: ~$0.15 per generation.</p>
               </div>
             ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -393,15 +534,23 @@ export default function PeopleLibrary() {
                   {person.description && (
                     <p className="text-gray-500 text-xs mt-0.5 line-clamp-2">{person.description}</p>
                   )}
-                  {person.tags && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {person.tags.split(",").map((tag: string) => (
-                        <span key={tag} className="px-2 py-0.5 bg-white/5 text-gray-400 text-[10px] rounded-full">
-                          {tag.trim()}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {person.style && (
+                      <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] rounded-full">
+                        {person.style}
+                      </span>
+                    )}
+                    {person.productName && (
+                      <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] rounded-full">
+                        {person.productName}
+                      </span>
+                    )}
+                    {person.tags && person.tags.split(",").map((tag: string) => (
+                      <span key={tag} className="px-2 py-0.5 bg-white/5 text-gray-400 text-[10px] rounded-full">
+                        {tag.trim()}
+                      </span>
+                    ))}
+                  </div>
                   <button
                     onClick={() => {
                       if (confirm(`Remove "${person.name}" from the library?`)) {
