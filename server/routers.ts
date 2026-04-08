@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import { contentFingerprint } from "./db";
 import { fetchVideoAds, fetchStaticAds, listBoards } from "./services/foreplay";
 import { syncFromForeplay, startAutoSync, getSyncStatus } from "./services/foreplaySync";
 import { analyzeAndPersist } from "./services/creativeAnalysis";
@@ -405,6 +406,8 @@ export const appRouter = router({
           isNew: false,
         }));
       }
+      // Deduplicate by content — same ad can exist under different foreplayAdIds
+      const seen = new Set<string>();
       return creatives.map(c => ({
         id: c.foreplayAdId,
         dbId: c.id,
@@ -417,7 +420,12 @@ export const appRouter = router({
         summary: c.summary,
         qualityScore: c.qualityScore,
         suggestedConfig: c.suggestedConfig,
-      }));
+      })).filter(c => {
+        const fp = contentFingerprint(c.thumbnailUrl ?? null, c.title ?? null, c.brandName ?? null);
+        if (seen.has(fp)) return false;
+        seen.add(fp);
+        return true;
+      });
     }),
 
     fetchForeplayStatics: protectedProcedure
@@ -438,6 +446,8 @@ export const appRouter = router({
           isNew: false,
         }));
       }
+      // Deduplicate by content — same ad can exist under different foreplayAdIds
+      const seen = new Set<string>();
       return creatives.map(c => ({
         id: c.foreplayAdId,
         dbId: c.id,
@@ -450,7 +460,12 @@ export const appRouter = router({
         summary: c.summary,
         qualityScore: c.qualityScore,
         suggestedConfig: c.suggestedConfig,
-      }));
+      })).filter(c => {
+        const fp = contentFingerprint(c.thumbnailUrl ?? null, c.title ?? null, c.brandName ?? null);
+        if (seen.has(fp)) return false;
+        seen.add(fp);
+        return true;
+      });
     }),
 
     syncForeplayNow: protectedProcedure.mutation(async () => {

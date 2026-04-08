@@ -1,5 +1,6 @@
 import { fetchVideoAds, fetchStaticAds, type ForeplayAd } from "./foreplay";
 import * as db from "../db";
+import { contentFingerprint } from "../db";
 import type { InsertForeplayCreative } from "../../drizzle/schema";
 
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -32,11 +33,20 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
     const totalFetched = videoAds.length + staticAds.length;
     console.log(`[ForeplaySync] Fetched ${videoAds.length} video + ${staticAds.length} static = ${totalFetched} total from Foreplay`);
 
+    // Load existing content fingerprints to skip ads whose content already exists
+    // under a different foreplayAdId (same ad saved to Foreplay board multiple times)
+    const existingFingerprints = await db.getExistingContentFingerprints();
     let newCount = 0;
+    let contentDupes = 0;
 
     // Process video ads — upsert handles dedup via unique foreplayAdId constraint
     for (const ad of videoAds) {
       try {
+        const fp = contentFingerprint(ad.thumbnailUrl || null, ad.title || null, ad.brandName || null);
+        if (existingFingerprints.has(fp)) {
+          contentDupes++;
+          continue;
+        }
         const creative: InsertForeplayCreative = {
           foreplayAdId: ad.id,
           type: "VIDEO",
@@ -56,7 +66,10 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
           isNew: 1,
         };
         const isNew = await db.upsertForeplayCreative(creative);
-        if (isNew) newCount++;
+        if (isNew) {
+          newCount++;
+          existingFingerprints.add(fp); // Track within this sync batch too
+        }
       } catch (err: any) {
         console.warn(`[ForeplaySync] Failed to upsert video ad ${ad.id}:`, err.message);
       }
@@ -65,6 +78,11 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
     // Process static ads
     for (const ad of staticAds) {
       try {
+        const fp = contentFingerprint(ad.thumbnailUrl || null, ad.title || null, ad.brandName || null);
+        if (existingFingerprints.has(fp)) {
+          contentDupes++;
+          continue;
+        }
         const creative: InsertForeplayCreative = {
           foreplayAdId: ad.id,
           type: "STATIC",
@@ -84,10 +102,17 @@ export async function syncFromForeplay(): Promise<{ newCount: number; totalFetch
           isNew: 1,
         };
         const isNew = await db.upsertForeplayCreative(creative);
-        if (isNew) newCount++;
+        if (isNew) {
+          newCount++;
+          existingFingerprints.add(fp);
+        }
       } catch (err: any) {
         console.warn(`[ForeplaySync] Failed to upsert static ad ${ad.id}:`, err.message);
       }
+    }
+
+    if (contentDupes > 0) {
+      console.log(`[ForeplaySync] Skipped ${contentDupes} content-duplicate ads (same ad, different Foreplay IDs)`);
     }
 
     _lastSyncAt = new Date();
@@ -113,8 +138,12 @@ export function startAutoSync(): void {
 
   console.log("[ForeplaySync] Starting auto-sync (every 24 hours)");
 
-  // Run initial sync immediately
+  // Run initial sync immediately — also clean up existing content duplicates
   (async () => {
+    console.log("[ForeplaySync] Cleaning up content-duplicate creatives...");
+    const deleted = await db.deduplicateExistingCreatives();
+    if (deleted > 0) console.log(`[ForeplaySync] Removed ${deleted} content-duplicate rows`);
+
     console.log("[ForeplaySync] Running initial sync...");
     const result = await syncFromForeplay();
     console.log(`[ForeplaySync] Initial sync: ${result.newCount} new creatives`);

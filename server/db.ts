@@ -410,6 +410,74 @@ export async function getExistingForeplayAdIds(): Promise<Set<string>> {
 }
 
 /**
+ * Get content fingerprints for all existing creatives.
+ * Used to skip ads whose content already exists under a different foreplayAdId.
+ */
+export async function getExistingContentFingerprints(): Promise<Set<string>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({
+    thumbnailUrl: foreplayCreatives.thumbnailUrl,
+    title: foreplayCreatives.title,
+    brandName: foreplayCreatives.brandName,
+  }).from(foreplayCreatives);
+  return new Set(rows.map(r => contentFingerprint(r.thumbnailUrl, r.title, r.brandName)));
+}
+
+/**
+ * Build a content fingerprint from an ad's visual identity.
+ * Two ads with the same fingerprint are the same underlying creative.
+ */
+export function contentFingerprint(thumbnailUrl: string | null, title: string | null, brandName: string | null): string {
+  // Strip query params from thumbnail URL for stable comparison
+  const thumbBase = (thumbnailUrl || "").split("?")[0].toLowerCase().trim();
+  const t = (title || "").toLowerCase().trim();
+  const b = (brandName || "").toLowerCase().trim();
+  return `${thumbBase}|${t}|${b}`;
+}
+
+/**
+ * Remove duplicate creatives from the DB, keeping the oldest row per content fingerprint.
+ * Returns the number of rows deleted.
+ */
+export async function deduplicateExistingCreatives(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Fetch all rows, group by content fingerprint, delete all but the oldest per group
+  const rows = await db.select({
+    id: foreplayCreatives.id,
+    thumbnailUrl: foreplayCreatives.thumbnailUrl,
+    title: foreplayCreatives.title,
+    brandName: foreplayCreatives.brandName,
+    createdAt: foreplayCreatives.createdAt,
+  }).from(foreplayCreatives).orderBy(foreplayCreatives.createdAt);
+
+  const seen = new Map<string, number>(); // fingerprint → kept id
+  const toDelete: number[] = [];
+
+  for (const row of rows) {
+    const fp = contentFingerprint(row.thumbnailUrl, row.title, row.brandName);
+    if (seen.has(fp)) {
+      toDelete.push(row.id);
+    } else {
+      seen.set(fp, row.id);
+    }
+  }
+
+  if (toDelete.length > 0) {
+    // Delete in batches of 100
+    for (let i = 0; i < toDelete.length; i += 100) {
+      const batch = toDelete.slice(i, i + 100);
+      await db.delete(foreplayCreatives).where(inArray(foreplayCreatives.id, batch));
+    }
+    console.log(`[DB] Deduplicated ${toDelete.length} duplicate creatives`);
+  }
+
+  return toDelete.length;
+}
+
+/**
  * Mark all creatives as seen (isNew = 0).
  */
 export async function markAllCreativesSeen(): Promise<void> {
