@@ -28,7 +28,6 @@ import {
   DEUTSCH_COPY_FRAMEWORK,
   getStyleSystemPrompt,
   getSubStructurePromptBlock,
-  getArchetypePromptBlock,
   reviewScriptWithPanel,
   type ScriptStyleId,
   type FunnelStage,
@@ -82,10 +81,49 @@ export async function runScriptPipeline(
     );
 
     const productIntel = PRODUCT_INTELLIGENCE[product];
-    const subStructure = SCRIPT_SUB_STRUCTURES.find(s => s.id === subStructureId);
+
+    // Resolve sub-structure: DB first (custom structures), fall back to hardcoded
+    const hardcodedSubStructure = SCRIPT_SUB_STRUCTURES.find(s => s.id === subStructureId);
+    let subStructure: { name: string; awarenessLevel: string; psychologicalLever: string } | undefined = hardcodedSubStructure;
+    if (!subStructure && subStructureId) {
+      const dbStructure = await db.getScriptStructure(subStructureId).catch(() => null);
+      if (dbStructure) {
+        const d = dbStructure.data as any;
+        subStructure = {
+          name: dbStructure.name,
+          awarenessLevel: d?.awarenessLevel || "PROBLEM_AWARE",
+          psychologicalLever: d?.psychologicalLever || "Product-benefit driven",
+        };
+      }
+    }
+
     const styleLabel = SCRIPT_STYLES.find(s => s.id === scriptStyle)?.label || scriptStyle;
     const funnelRules = FUNNEL_STAGE_RULES[funnelStage];
-    const archetypeProfile = ARCHETYPE_PROFILES[archetype];
+
+    // Resolve archetype profile: DB first (custom audiences), fall back to hardcoded
+    let archetypeProfile: { label: string; lifeContext: string; languageRegister: string; preProductObjection: string } | undefined =
+      ARCHETYPE_PROFILES[archetype as ActorArchetype];
+    if (!archetypeProfile) {
+      const dbAudience = await db.getScriptAudience(archetype).catch(() => null);
+      if (dbAudience) {
+        const d = dbAudience.data as any;
+        archetypeProfile = {
+          label: dbAudience.label,
+          lifeContext: d?.lifeContext || "",
+          languageRegister: d?.languageRegister || "",
+          preProductObjection: d?.preProductObjection || "",
+        };
+      }
+    }
+    // Last-resort safety net so the pipeline never crashes on a missing archetype
+    if (!archetypeProfile) {
+      archetypeProfile = {
+        label: archetype || "General audience",
+        lifeContext: "",
+        languageRegister: "",
+        preProductObjection: "",
+      };
+    }
 
     const otherLevers = productIntel
       ? productIntel.copyLevers.filter(l => l !== angle)
@@ -124,8 +162,17 @@ ${angle}
     const segmentCount = "8-12";
 
     const system = getStyleSystemPrompt(scriptStyle, product, duration, funnelStage);
-    const subStructureBlock = getSubStructurePromptBlock(subStructureId);
-    const archetypeBlock = getArchetypePromptBlock(archetype);
+
+    // Build sub-structure block from the resolved structure (works for both hardcoded + DB structures)
+    const subStructureBlock = subStructure
+      ? `
+ASSIGNED SUB-STRUCTURE: ${subStructureId} — ${subStructure.name}
+Awareness: ${subStructure.awarenessLevel}
+Psychological lever: ${subStructure.psychologicalLever}
+
+Follow this sub-structure's progression in the script.
+`
+      : getSubStructurePromptBlock(subStructureId);
 
     const scriptTypeDesc =
       scriptStyle === "DR" ? "direct response script"
