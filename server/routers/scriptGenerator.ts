@@ -68,10 +68,49 @@ export const scriptGeneratorRouter = router({
   // ── Options ──────────────────────────────────────────────────────────────
 
   options: publicProcedure.query(async () => {
-    const [structures, audiences] = await Promise.all([
-      db.getScriptStructures().catch(() => []),
-      db.getScriptAudiences().catch(() => []),
+    const [dbStructures, dbAudiences] = await Promise.all([
+      db.getScriptStructures().catch(() => [] as any[]),
+      db.getScriptAudiences().catch(() => [] as any[]),
     ]);
+
+    // Fall back to hardcoded defaults when a table is empty — avoids a blank
+    // dropdown before an admin runs "Seed Defaults". Any rows in the DB
+    // override the defaults completely so admin edits stay authoritative.
+    const structures = dbStructures.length > 0
+      ? dbStructures.map(s => ({
+          id: s.structureId,
+          name: s.name,
+          category: s.category,
+          data: s.data as any,
+        }))
+      : SCRIPT_SUB_STRUCTURES.map(s => ({
+          id: s.id,
+          name: s.name,
+          category: s.category,
+          data: {
+            funnelStages: s.funnelStages,
+            awarenessLevel: s.awarenessLevel,
+            psychologicalLever: s.psychologicalLever,
+            whyItConverts: s.whyItConverts,
+            stages: s.stages,
+          },
+        }));
+
+    const audiences = dbAudiences.length > 0
+      ? dbAudiences.map(a => ({
+          id: a.audienceId,
+          label: a.label,
+          data: a.data as any,
+        }))
+      : Object.entries(ARCHETYPE_PROFILES).map(([id, profile]) => ({
+          id,
+          label: profile.label,
+          data: {
+            lifeContext: profile.lifeContext,
+            languageRegister: profile.languageRegister,
+            preProductObjection: profile.preProductObjection,
+          },
+        }));
 
     const angles: Record<string, string[]> = {};
     for (const [product, intel] of Object.entries(PRODUCT_INTELLIGENCE)) {
@@ -80,17 +119,8 @@ export const scriptGeneratorRouter = router({
 
     return {
       styles: SCRIPT_STYLES.map(s => ({ id: s.id, label: s.label, description: s.description })),
-      structures: structures.map(s => ({
-        id: s.structureId,
-        name: s.name,
-        category: s.category,
-        data: s.data as any,
-      })),
-      audiences: audiences.map(a => ({
-        id: a.audienceId,
-        label: a.label,
-        data: a.data as any,
-      })),
+      structures,
+      audiences,
       angles,
     };
   }),
