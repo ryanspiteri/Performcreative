@@ -688,12 +688,23 @@ export default function ScriptGenerator() {
                                         )}
                                         <td className="py-2 px-2 text-white align-top">
                                           <EditableText
-                                            value={`${seg.dialogue || ""}${seg.transitionLine ? ` ${seg.transitionLine}` : ""}`}
+                                            value={seg.dialogue || ""}
                                             onChange={v => updateEditedScript(i, ["script", String(j), "dialogue"], v)}
                                             label={`Edit dialogue for segment ${j + 1}`}
                                             multiline
                                             className="text-white text-xs"
                                           />
+                                          {seg.transitionLine !== undefined && (
+                                            <div className="mt-1 pl-2 border-l-2 border-white/10">
+                                              <EditableText
+                                                value={seg.transitionLine || ""}
+                                                onChange={v => updateEditedScript(i, ["script", String(j), "transitionLine"], v)}
+                                                label={`Edit transition for segment ${j + 1}`}
+                                                multiline
+                                                className="text-gray-500 text-[11px] italic"
+                                              />
+                                            </div>
+                                          )}
                                         </td>
                                       </tr>
                                     ))}

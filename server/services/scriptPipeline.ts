@@ -184,13 +184,39 @@ Follow this sub-structure's progression in the script.
       : scriptStyle === "DEMO" ? "product demo script"
       : `${styleLabel} script`;
 
+    // Testimonial-flavoured styles where the voice IS the character.
+    // All other styles (DR, EDUCATION, DEMO, BRAND, custom) should NOT speak in first person —
+    // the archetype is the target viewer, not the narrator.
+    const isTestimonialStyle = scriptStyle === "UGC" || scriptStyle === "LIFESTYLE" || scriptStyle === "FOUNDER";
+
+    const audienceBlock = isTestimonialStyle
+      ? `AUDIENCE ARCHETYPE (your character's voice — speak AS this person):
+Label: ${archetypeProfile.label}
+Life context: ${archetypeProfile.lifeContext}
+Language register: ${archetypeProfile.languageRegister}
+Pre-product objection: ${archetypeProfile.preProductObjection}
+
+Apply this voice profile throughout the script. The character's life context, language register, and pre-product objection must be woven into the dialogue naturally.`
+      : `TARGET VIEWER (who you are writing TO — NOT who you are writing AS):
+Label: ${archetypeProfile.label}
+Life context: ${archetypeProfile.lifeContext}
+Their primary objection before buying: ${archetypeProfile.preProductObjection}
+
+Use this to understand the viewer's situation and pain points. The script's voice must remain the ${styleLabel} voice defined in the system prompt — do NOT write in first person or mimic the viewer's tone.`;
+
+    const styleGuardrail = isTestimonialStyle
+      ? ""
+      : `
+CRITICAL STYLE ENFORCEMENT: This is a ${scriptTypeDesc}, NOT a UGC testimonial. Do NOT write in first person ("I've been...", "I was struggling..."). Do NOT narrate personal experience. Do NOT sound like a customer review. Write scripted ad copy in the voice of the ${styleLabel} format.
+`;
+
     const generateOne = async (index: number) => {
       const variationNote = scriptCount > 1
         ? `This is variation ${index + 1} of ${scriptCount}. Make each variation DISTINCTLY DIFFERENT — use a different hook archetype, different proof structure, and different emotional arc. Do NOT repeat hooks or structures from other variations.`
         : "";
 
       const prompt = `Write a ${scriptTypeDesc} for ONEST Health's ${product} based on the user's creative concept.
-
+${styleGuardrail}
 CREATIVE CONCEPT (from the user):
 ${concept}
 
@@ -201,12 +227,7 @@ ${subStructureBlock}
 FUNNEL STAGE: ${funnelStage}
 ${funnelRules}
 
-AUDIENCE ARCHETYPE: ${archetypeProfile.label}
-Life context: ${archetypeProfile.lifeContext}
-Language register: ${archetypeProfile.languageRegister}
-Pre-product objection: ${archetypeProfile.preProductObjection}
-
-Apply this voice profile throughout the script. The character's life context, language register, and pre-product objection must be woven into the dialogue naturally.
+${audienceBlock}
 
 ${HOOK_BANK}
 

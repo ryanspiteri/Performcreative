@@ -1802,7 +1802,14 @@ ${JSON.stringify(currentScript, null, 2)}
 
 Return the COMPLETE revised script in the same JSON format (title, hook, script array with timestamp/visual/dialogue/transitionLine, visualDirection, strategicThesis).`;
 
-      const revisionSystem = getStyleSystemPrompt(currentScript.scriptMetadata?.scriptStyle === 'UGC' ? 'UGC' : currentScript.scriptMetadata?.scriptStyle === 'Founder-Led' ? 'FOUNDER' : currentScript.scriptMetadata?.scriptStyle === 'Brand / Equity' ? 'BRAND' : 'DR', product, 60, funnelStage);
+      // Resolve the stored scriptStyle (can be the label like "Direct Response" or the ID like "DR")
+      // back to a style ID so we hand getStyleSystemPrompt the correct value. The previous inline
+      // checks compared the label against bare IDs and always fell through to 'DR'.
+      const metadataStyleValue = currentScript.scriptMetadata?.scriptStyle;
+      const resolvedStyleId = (SCRIPT_STYLES.find(
+        s => s.id === metadataStyleValue || s.label === metadataStyleValue
+      )?.id ?? 'DR') as ScriptStyleId;
+      const revisionSystem = getStyleSystemPrompt(resolvedStyleId, product, 60, funnelStage);
 
       const revisionResponse = await callClaude([{ role: "user", content: revisionPrompt }], revisionSystem, 6000);
 
