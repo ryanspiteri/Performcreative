@@ -355,4 +355,137 @@ export const adminSyncRouter = router({
       });
       return { linkId };
     }),
+
+  /**
+   * Count creative assets with vs without thumbnails. Used by the SyncAdmin
+   * UI to surface the "thumbnails missing" case so we can tell whether the
+   * Meta creative backfill actually populated visual assets or not.
+   */
+  getThumbnailStats: adminProcedure.query(async () => {
+    const dbConn = await db.getDb();
+    if (!dbConn) {
+      return {
+        total: 0,
+        withThumbnail: 0,
+        withoutThumbnail: 0,
+        adsWithoutThumbnail: 0,
+      };
+    }
+    const rows: any = await dbConn.execute(sql`
+      SELECT
+        COUNT(*) AS totalCreatives,
+        SUM(CASE WHEN ca.thumbnailUrl IS NOT NULL AND ca.thumbnailUrl <> '' THEN 1 ELSE 0 END) AS withThumbnail,
+        SUM(CASE WHEN ca.thumbnailUrl IS NULL OR ca.thumbnailUrl = '' THEN 1 ELSE 0 END) AS withoutThumbnail
+      FROM creativeAssets ca
+    `);
+    const row: any = (Array.isArray(rows[0]) ? rows[0][0] : rows[0]) ?? {};
+
+    // Also count distinct ads pointing to thumbnailless assets — gives a
+    // clearer picture of the user-facing impact (since one asset can have
+    // many ads using it).
+    const adRows: any = await dbConn.execute(sql`
+      SELECT COUNT(DISTINCT a.id) AS adsAffected
+      FROM ads a
+      JOIN creativeAssets ca ON ca.id = a.creativeAssetId
+      WHERE ca.thumbnailUrl IS NULL OR ca.thumbnailUrl = ''
+    `);
+    const adRow: any = (Array.isArray(adRows[0]) ? adRows[0][0] : adRows[0]) ?? {};
+
+    return {
+      total: Number(row.totalCreatives) || 0,
+      withThumbnail: Number(row.withThumbnail) || 0,
+      withoutThumbnail: Number(row.withoutThumbnail) || 0,
+      adsWithoutThumbnail: Number(adRow.adsAffected) || 0,
+    };
+  }),
+
+  /**
+   * Force-backfill creative thumbnails for ALL ads whose creative asset
+   * lacks a thumbnailUrl, regardless of whether they were upserted in the
+   * current Meta sync run.
+   *
+   * This closes a gap in the existing metaAdsSyncService backfill loop:
+   * that loop only retries creatives for ads it upserted in the current
+   * listing pass. If the first sync errored partway through the backfill,
+   * subsequent syncs wouldn't retry because they re-populate
+   * `adsNeedingCreative` from scratch each time. This endpoint does the
+   * cross-sync retry.
+   *
+   * Safe to run repeatedly. Skips creatives that already have a thumbnail.
+   * Stops early if `maxAds` is reached to avoid burning the whole Meta
+   * rate limit on one click. Defaults to 200.
+   */
+  forceCreativeBackfill: adminProcedure
+    .input(
+      z.object({
+        maxAds: z.number().int().min(1).max(2000).default(200),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const dbConn = await db.getDb();
+      if (!dbConn) {
+        throw new Error("Database not available");
+      }
+
+      // Find ads whose creative asset lacks a thumbnail. Order by launch
+      // date DESC so newer creatives get fixed first (they matter more).
+      const rows: any = await dbConn.execute(sql`
+        SELECT a.externalAdId, a.adAccountId, a.id AS adId, ca.id AS assetId
+        FROM ads a
+        JOIN creativeAssets ca ON ca.id = a.creativeAssetId
+        WHERE (ca.thumbnailUrl IS NULL OR ca.thumbnailUrl = '')
+          AND a.platform = 'meta'
+          AND a.externalAdId IS NOT NULL
+        ORDER BY a.launchDate DESC
+        LIMIT ${input.maxAds}
+      `);
+      const adRows: any[] = Array.isArray(rows[0]) ? rows[0] : rows;
+
+      const client = new MetaAdsClient();
+      let fetched = 0;
+      let updated = 0;
+      let errors = 0;
+      const errorSamples: string[] = [];
+
+      for (const row of adRows) {
+        try {
+          const fullAd = await client.getAdById(String(row.externalAdId));
+          fetched++;
+          if (!fullAd?.creative) continue;
+
+          const creative = fullAd.creative;
+          const thumbnailUrl = creative.thumbnail_url ?? null;
+          const videoId = creative.video_id ?? null;
+          if (!thumbnailUrl && !videoId) continue;
+
+          // Update the asset in place rather than computing a new hash and
+          // creating a duplicate row. We're fixing the same asset.
+          await dbConn.execute(sql`
+            UPDATE creativeAssets
+            SET
+              thumbnailUrl = ${thumbnailUrl},
+              videoUrl = ${videoId ? `https://www.facebook.com/watch/?v=${videoId}` : null},
+              creativeType = ${videoId ? "video" : "image"},
+              updatedAt = NOW()
+            WHERE id = ${Number(row.assetId)}
+          `);
+          updated++;
+        } catch (err: any) {
+          errors++;
+          if (errorSamples.length < 5) {
+            errorSamples.push(
+              `ad ${row.externalAdId}: ${err?.response?.data?.error?.message ?? err?.message ?? "unknown"}`,
+            );
+          }
+        }
+      }
+
+      return {
+        candidates: adRows.length,
+        fetched,
+        updated,
+        errors,
+        errorSamples,
+      };
+    }),
 });

@@ -381,6 +381,25 @@ export class MetaAdsClient {
     return value;
   }
 
+  /**
+   * Fetch the public `preview_shareable_link` for an ad. Returns a short
+   * fb.me URL that opens the ad preview on Facebook Business. Requires the
+   * user to be logged into Facebook Business to see the preview content —
+   * which is why we open it in a new tab (first-party context) instead of
+   * embedding in an iframe.
+   *
+   * Returns null if the field is missing from Meta's response.
+   */
+  async getAdShareableLink(adId: string): Promise<string | null> {
+    const res = await this.http.get(`/${adId}`, {
+      params: {
+        fields: "preview_shareable_link",
+        access_token: this.accessToken,
+      },
+    });
+    return (res.data?.preview_shareable_link as string | undefined) ?? null;
+  }
+
   /** Test-only: clear the module-level ad preview cache. */
   static __clearAdPreviewCache(): void {
     adPreviewCache.clear();

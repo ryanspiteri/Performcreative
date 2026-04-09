@@ -104,17 +104,23 @@ export const analyticsRouter = router({
     }),
 
   /**
-   * Fetch a signed Meta Ad Preview iframe for a creative.
+   * Fetch the best-available Meta preview URLs for a creative.
    *
-   * Picks the most-recently-launched ad that uses this creative as the
-   * representative (matching what Motion does — one preview per creative
-   * even when N ads reuse the same asset) and returns the iframe src so
-   * the frontend can embed it directly.
+   * Picks the most-recently-launched ad that uses this creative and returns
+   * multiple URLs the frontend can use to open the ad preview in a NEW TAB.
    *
-   * Uses Meta's /ads/{id}/previews endpoint because /videos/{id}?fields=source
-   * is denied for our System User token. The iframe renders the full ad
-   * (video + copy + CTA) exactly as it appears on Facebook/Instagram, which
-   * is a better creative review UX than a bare MP4 anyway.
+   * Why a new tab and not an inline iframe: Meta's preview iframe
+   * (business.facebook.com/ads/api/preview_iframe.php) and the shareable
+   * fb.me link both require a Facebook Business login session. Modern
+   * browsers block third-party cookies in cross-origin iframes, so the
+   * iframe loads Meta's auth-check page instead of the ad and renders as
+   * a broken-doc icon. Opening in a new tab is a top-level navigation →
+   * cookies work → FB login context applies → preview renders correctly.
+   *
+   * Returned URL priority (frontend picks first non-null):
+   *   1. previewShareableLink (fb.me short link) — mobile-friendly
+   *   2. adPermalinkUrl        — direct Facebook ad post URL (if we have it)
+   *   3. iframeSrc             — signed preview_iframe URL as last resort
    */
   getAdPreview: protectedProcedure
     .input(
@@ -150,26 +156,46 @@ export const analyticsRouter = router({
         });
       }
 
-      try {
-        const client = new MetaAdsClient();
-        const preview = await client.getAdPreview(externalAdId, input.format as MetaAdPreviewFormat);
-        return {
-          adId: externalAdId,
-          adName: representativeAd.name,
-          format: input.format,
-          iframeSrc: preview.iframeSrc,
-          body: preview.body,
-          permalink: representativeAd.permalink ?? null,
-        };
-      } catch (err: any) {
-        // Surface a typed error so the dialog can show a graceful fallback.
+      const client = new MetaAdsClient();
+
+      // Fetch preview_shareable_link + the iframe preview in parallel.
+      // Either can fail independently; we want to return whatever works.
+      const [shareableRes, previewRes] = await Promise.allSettled([
+        client.getAdShareableLink(externalAdId),
+        client.getAdPreview(externalAdId, input.format as MetaAdPreviewFormat),
+      ]);
+
+      const previewShareableLink =
+        shareableRes.status === "fulfilled" ? shareableRes.value : null;
+      const preview =
+        previewRes.status === "fulfilled" ? previewRes.value : null;
+
+      // If BOTH calls failed, surface the clearer error (shareable link
+      // tends to have the cleaner failure message).
+      if (!previewShareableLink && !preview) {
+        const err: any =
+          shareableRes.status === "rejected"
+            ? shareableRes.reason
+            : previewRes.status === "rejected"
+              ? previewRes.reason
+              : new Error("Unknown Meta API error");
         const status = err?.response?.status;
-        const metaMessage = err?.response?.data?.error?.message ?? err?.message ?? "Unknown Meta API error";
+        const metaMessage =
+          err?.response?.data?.error?.message ?? err?.message ?? "Unknown Meta API error";
         throw new TRPCError({
           code: status === 404 ? "NOT_FOUND" : "BAD_GATEWAY",
           message: `Meta preview failed: ${metaMessage}`,
           cause: err,
         });
       }
+
+      return {
+        adId: externalAdId,
+        adName: representativeAd.name,
+        format: input.format,
+        previewShareableLink,
+        iframeSrc: preview?.iframeSrc ?? null,
+        adPermalinkUrl: representativeAd.permalink ?? null,
+      };
     }),
 });
