@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { IterationResults } from "@/components/IterationResults";
 import { useRoute, useLocation } from "wouter";
 import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import SelectionGate from "@/components/SelectionGate";
@@ -54,6 +54,14 @@ export default function Results() {
     }}
   );
 
+  // Script pipeline runs live on the /scripts page — redirect once the run loads
+  // so dashboard deep links (e.g. /results/42) land on the right UI.
+  useEffect(() => {
+    if (run?.pipelineType === "script") {
+      setLocation(`/scripts?runId=${run.id}`, { replace: true });
+    }
+  }, [run?.pipelineType, run?.id, setLocation]);
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
@@ -66,6 +74,15 @@ export default function Results() {
     return (
       <div className="p-6">
         <p className="text-gray-400">Pipeline run not found.</p>
+      </div>
+    );
+  }
+
+  // While the redirect is in flight, show the spinner instead of a blank body
+  if (run.pipelineType === "script") {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-[#FF3838] animate-spin" />
       </div>
     );
   }

@@ -86,7 +86,13 @@ export default function ScriptGenerator() {
   const [customAngle, setCustomAngle] = useState("");
   const [concept, setConcept] = useState("");
   const [scriptCount, setScriptCount] = useState("3");
-  const [runId, setRunId] = useState<number | null>(null);
+  const [runId, setRunId] = useState<number | null>(() => {
+    // Hydrate from ?runId= query param so deep links from the dashboard/results page work
+    if (typeof window === "undefined") return null;
+    const raw = new URLSearchParams(window.location.search).get("runId");
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  });
   const [expandedScripts, setExpandedScripts] = useState<Set<number>>(new Set());
   const [showVisuals, setShowVisuals] = useState(true);
   const [editedScripts, setEditedScripts] = useState<Record<number, any>>({});
