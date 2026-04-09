@@ -9,12 +9,13 @@
  *   5. Ads table (Meta ads using this creative)
  *   6. Linked pipeline asset card (if any)
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useRoute, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, BarChart3, PlayCircle } from "lucide-react";
+import { CreativePreviewDialog } from "@/components/analytics/CreativePreviewDialog";
 
 const VALID_DAYS = new Set([7, 14, 30, 90]);
 function parseDaysFromSearch(search: string): number {
@@ -150,6 +151,8 @@ export default function AdDetail() {
   const backQueryString = (search && search.length > 0) ? (search.startsWith("?") ? search : `?${search}`) : `?days=${lookbackDays}`;
   const backHref = `/analytics${backQueryString}`;
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (isNaN(creativeAssetId)) {
     return <div className="p-6 text-white">Invalid creative ID</div>;
   }
@@ -193,19 +196,27 @@ export default function AdDetail() {
 
         {/* Header */}
         <div className="flex gap-6 mb-8">
-          <div className="flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            aria-label={`Preview ${asset.name || "creative"}`}
+            className="relative w-[120px] h-[120px] rounded-lg bg-[#15171B] overflow-hidden flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-[#FF3838] group"
+          >
             {asset.thumbnailUrl ? (
               <img
                 src={asset.thumbnailUrl}
                 alt=""
-                className="w-[120px] h-[120px] rounded-lg object-cover bg-[#15171B]"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-[120px] h-[120px] rounded-lg bg-[#15171B] flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center">
                 <BarChart3 className="w-10 h-10 text-[#71717A]" />
               </div>
             )}
-          </div>
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-80 group-hover:opacity-100 transition-opacity">
+              <PlayCircle className="w-10 h-10 text-white drop-shadow-md" />
+            </div>
+          </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-semibold text-white truncate">{asset.name || "(unnamed creative)"}</h1>
             <div className="flex gap-4 mt-2 text-sm text-[#A1A1AA]">
@@ -215,16 +226,13 @@ export default function AdDetail() {
               <span>Launched: {asset.firstSeenAt ? new Date(asset.firstSeenAt).toLocaleDateString() : "—"}</span>
               <span>{ads.length} ad{ads.length !== 1 ? "s" : ""} using this creative</span>
             </div>
-            {asset.videoUrl && (
-              <a
-                href={asset.videoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-[#FF3838] hover:text-[#FF5555] mt-2"
-              >
-                <PlayCircle className="w-4 h-4" /> View video on Meta
-              </a>
-            )}
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="inline-flex items-center gap-1 text-sm text-[#FF3838] hover:text-[#FF5555] mt-2"
+            >
+              <PlayCircle className="w-4 h-4" /> Preview ad
+            </button>
           </div>
         </div>
 
@@ -310,6 +318,14 @@ export default function AdDetail() {
           </div>
         )}
       </div>
+
+      <CreativePreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        creativeAssetId={creativeAssetId}
+        creativeName={asset.name ?? ""}
+        thumbnailUrl={asset.thumbnailUrl ?? null}
+      />
     </div>
   );
 }

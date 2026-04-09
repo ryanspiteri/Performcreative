@@ -30,7 +30,7 @@ vi.mock("../../_core/env", () => ({
   },
 }));
 
-import { parseActionCount, parseMetaMoneyToCents, parseMetaRateToBp } from "./metaAdsClient";
+import { parseActionCount, parseMetaMoneyToCents, parseMetaRateToBp, extractIframeSrc } from "./metaAdsClient";
 
 describe("parseActionCount", () => {
   it("extracts the matching action_type value from an array", () => {
@@ -108,5 +108,34 @@ describe("parseMetaRateToBp", () => {
 
   it("rounds half-up", () => {
     expect(parseMetaRateToBp("0.00005")).toBe(1); // 0.00005 * 10000 = 0.5 → round → 1
+  });
+});
+
+describe("extractIframeSrc", () => {
+  it("extracts the src URL from a Meta preview iframe body", () => {
+    const body = `<iframe src="https://business.facebook.com/ads/api/preview_iframe.php?d=ABC123" width="540" height="720" frameborder="0"></iframe>`;
+    expect(extractIframeSrc(body)).toBe("https://business.facebook.com/ads/api/preview_iframe.php?d=ABC123");
+  });
+
+  it("handles single-quoted src attributes", () => {
+    const body = `<iframe src='https://example.com/preview?d=XYZ' width='540'></iframe>`;
+    expect(extractIframeSrc(body)).toBe("https://example.com/preview?d=XYZ");
+  });
+
+  it("handles iframes with other attributes before src", () => {
+    const body = `<iframe width="540" height="720" src="https://example.com/p" frameborder="0"></iframe>`;
+    expect(extractIframeSrc(body)).toBe("https://example.com/p");
+  });
+
+  it("returns null for an empty body", () => {
+    expect(extractIframeSrc("")).toBeNull();
+  });
+
+  it("returns null when there is no iframe", () => {
+    expect(extractIframeSrc("<div>no iframe here</div>")).toBeNull();
+  });
+
+  it("returns null when the iframe has no src", () => {
+    expect(extractIframeSrc("<iframe width='540'></iframe>")).toBeNull();
   });
 });

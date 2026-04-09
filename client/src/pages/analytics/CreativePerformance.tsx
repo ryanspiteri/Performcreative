@@ -27,8 +27,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings } from "lucide-react";
+import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings, PlayCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CreativePreviewDialog } from "@/components/analytics/CreativePreviewDialog";
 
 type SortBy = "spendCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
 type CreativeType = "all" | "video" | "image";
@@ -154,6 +155,13 @@ export default function CreativePerformance() {
   const [creativeType, setCreativeType] = useState<CreativeType>(initial.type);
   const [sortBy, setSortBy] = useState<SortBy>(initial.sort);
   const [sortDir, setSortDir] = useState<SortDir>(initial.dir);
+
+  // Preview dialog state: which creative (if any) is being previewed.
+  const [previewTarget, setPreviewTarget] = useState<{
+    id: number;
+    name: string;
+    thumbnailUrl: string | null;
+  } | null>(null);
 
   // Sync filter state to URL via replaceState so back button doesn't pile up.
   useEffect(() => {
@@ -381,17 +389,36 @@ export default function CreativePerformance() {
                 className="border-b border-[rgba(255,255,255,0.06)] hover:bg-[#1E2126] cursor-pointer"
               >
                 <TableCell className="sticky left-0 bg-[#0A0B0D] hover:bg-[#1E2126] z-[1] py-2">
-                  {row.thumbnailUrl ? (
-                    <img
-                      src={row.thumbnailUrl}
-                      alt=""
-                      className="w-16 h-16 rounded-md object-cover bg-[#15171B]"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-md bg-[#15171B] flex items-center justify-center">
-                      <BarChart3 className="w-5 h-5 text-[#71717A]" />
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewTarget({
+                        id: row.creativeAssetId,
+                        name: row.creativeName,
+                        thumbnailUrl: row.thumbnailUrl,
+                      });
+                    }}
+                    aria-label={`Preview ${row.creativeName || "creative"}`}
+                    className="relative w-16 h-16 rounded-md bg-[#15171B] overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#FF3838] group"
+                  >
+                    {row.thumbnailUrl ? (
+                      <img
+                        src={row.thumbnailUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <BarChart3 className="w-5 h-5 text-[#71717A]" />
+                      </div>
+                    )}
+                    {row.creativeType === "video" && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <PlayCircle className="w-6 h-6 text-white drop-shadow-md" />
+                      </div>
+                    )}
+                  </button>
                 </TableCell>
                 <TableCell className="sticky left-[84px] bg-[#0A0B0D] hover:bg-[#1E2126] z-[1]">
                   <div className="flex flex-col max-w-[260px]">
@@ -417,6 +444,16 @@ export default function CreativePerformance() {
           </TableBody>
         </Table>
       </div>
+
+      <CreativePreviewDialog
+        open={previewTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewTarget(null);
+        }}
+        creativeAssetId={previewTarget?.id ?? null}
+        creativeName={previewTarget?.name ?? ""}
+        thumbnailUrl={previewTarget?.thumbnailUrl ?? null}
+      />
     </div>
   );
 }
