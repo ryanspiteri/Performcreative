@@ -228,16 +228,31 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
   });
 }
 
-/** Get the KPI strip summary for the same date range + filters. */
+/**
+ * Get the KPI strip summary for the same date range + filters.
+ *
+ * Prior bug (codex critical #2): the revenue subquery joined on `1 = 1` with
+ * no creativeType/campaign/account filter. Selecting "Video only" would show
+ * video spend against total account revenue, silently lying about ROAS. Fixed
+ * by mirroring the same filters inside the revenue subquery via a JOIN through
+ * ads + creativeAssets. Both the outer query and the subquery now respect the
+ * same WHERE clauses.
+ */
 export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuery, "sortBy" | "sortDirection" | "limit" | "offset">): Promise<CreativePerfSummary> {
   const dbConn = await db.getDb();
   if (!dbConn) {
     return { totalSpendCents: 0, totalRevenueCents: 0, blendedRoasBp: 0, totalConversions: 0, activeCreativesCount: 0 };
   }
 
+  // Outer query filters
   const creativeTypeFilter = query.creativeType ? sql`AND ca.creativeType = ${query.creativeType}` : sql``;
   const campaignFilter = query.campaignId ? sql`AND a.campaignId = ${query.campaignId}` : sql``;
   const accountFilter = query.adAccountId ? sql`AND a.adAccountId = ${query.adAccountId}` : sql``;
+
+  // Same filters reapplied inside the revenue subquery (aliased as ca2/a2)
+  const creativeTypeFilterAttr = query.creativeType ? sql`AND ca2.creativeType = ${query.creativeType}` : sql``;
+  const campaignFilterAttr = query.campaignId ? sql`AND a2.campaignId = ${query.campaignId}` : sql``;
+  const accountFilterAttr = query.adAccountId ? sql`AND a2.adAccountId = ${query.adAccountId}` : sql``;
 
   const rows: any = await dbConn.execute(sql`
     SELECT
@@ -252,11 +267,18 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
       AND d.date <= ${query.dateTo}
       AND d.source = 'meta'
     LEFT JOIN (
-      SELECT SUM(attr.revenueCents) AS revenueCents, SUM(attr.conversions) AS conversions
+      SELECT
+        SUM(attr.revenueCents) AS revenueCents,
+        SUM(attr.conversions) AS conversions
       FROM adAttributionStats attr
+      JOIN ads a2 ON a2.id = attr.adId
+      JOIN creativeAssets ca2 ON ca2.id = a2.creativeAssetId
       WHERE attr.date >= ${query.dateFrom}
         AND attr.date <= ${query.dateTo}
         AND attr.attributionModel = 'first_click'
+        ${creativeTypeFilterAttr}
+        ${campaignFilterAttr}
+        ${accountFilterAttr}
     ) attr ON 1 = 1
     WHERE 1 = 1
       ${creativeTypeFilter}
@@ -274,6 +296,127 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
     blendedRoasBp,
     totalConversions: Number(row.totalConversions) || 0,
     activeCreativesCount: Number(row.activeCreatives) || 0,
+  };
+}
+
+/**
+ * Fetch a single creative's performance row for a date range. Used by AdDetail
+ * so it doesn't have to refetch the top-500 list just to find one creative and
+ * so it respects the caller's date range (not a hardcoded 30-day fallback).
+ *
+ * Returns `null` if the creative doesn't exist or has no activity in range.
+ */
+export async function getCreativeRow(
+  creativeAssetId: number,
+  dateFrom: Date,
+  dateTo: Date,
+): Promise<CreativePerfRow | null> {
+  const dbConn = await db.getDb();
+  if (!dbConn) return null;
+
+  const rows: any = await dbConn.execute(sql`
+    SELECT
+      ca.id AS creativeAssetId,
+      ca.name AS creativeName,
+      ca.thumbnailUrl,
+      ca.creativeType,
+      ca.pipelineRunId,
+      MIN(a.launchDate) AS launchDate,
+      COUNT(DISTINCT a.id) AS adCount,
+      COALESCE(SUM(d.spendCents), 0) AS spendCents,
+      COALESCE(SUM(d.impressions), 0) AS impressions,
+      COALESCE(SUM(d.clicks), 0) AS clicks,
+      COALESCE(SUM(d.reach), 0) AS reach,
+      COALESCE(SUM(d.videoPlayCount), 0) AS videoPlayCount,
+      COALESCE(SUM(d.video50Count), 0) AS video50Count,
+      COALESCE(SUM(d.cpmCents), 0) AS sumCpmCents,
+      COALESCE(COUNT(DISTINCT d.id), 0) AS dailyStatRowCount,
+      COALESCE(attr.revenueCents, 0) AS revenueCents,
+      COALESCE(attr.conversions, 0) AS conversions,
+      COALESCE(cs.hookScore, 0) AS hookScore,
+      COALESCE(cs.watchScore, 0) AS watchScore,
+      COALESCE(cs.clickScore, 0) AS clickScore,
+      COALESCE(cs.convertScore, 0) AS convertScore
+    FROM creativeAssets ca
+    JOIN ads a ON a.creativeAssetId = ca.id
+    LEFT JOIN adDailyStats d ON d.adId = a.id
+      AND d.date >= ${dateFrom}
+      AND d.date <= ${dateTo}
+      AND d.source = 'meta'
+    LEFT JOIN (
+      SELECT
+        a3.creativeAssetId,
+        SUM(attr.revenueCents) AS revenueCents,
+        SUM(attr.conversions) AS conversions
+      FROM adAttributionStats attr
+      JOIN ads a3 ON a3.id = attr.adId
+      WHERE attr.date >= ${dateFrom}
+        AND attr.date <= ${dateTo}
+        AND attr.attributionModel = 'first_click'
+      GROUP BY a3.creativeAssetId
+    ) attr ON attr.creativeAssetId = ca.id
+    LEFT JOIN (
+      SELECT cs2.creativeAssetId, cs2.hookScore, cs2.watchScore, cs2.clickScore, cs2.convertScore,
+             ROW_NUMBER() OVER (PARTITION BY cs2.creativeAssetId ORDER BY cs2.date DESC) AS rn
+      FROM creativeScores cs2
+      WHERE cs2.date >= ${dateFrom}
+        AND cs2.date <= ${dateTo}
+    ) cs ON cs.creativeAssetId = ca.id AND cs.rn = 1
+    WHERE ca.id = ${creativeAssetId}
+    GROUP BY ca.id, ca.name, ca.thumbnailUrl, ca.creativeType, ca.pipelineRunId,
+             attr.revenueCents, attr.conversions,
+             cs.hookScore, cs.watchScore, cs.clickScore, cs.convertScore
+    LIMIT 1
+  `);
+
+  const resultRows: any[] = Array.isArray(rows[0]) ? rows[0] : rows;
+  const row = resultRows[0];
+  if (!row) return null;
+
+  const impressions = Number(row.impressions) || 0;
+  const spendCents = Number(row.spendCents) || 0;
+  const clicks = Number(row.clicks) || 0;
+  const videoPlayCount = Number(row.videoPlayCount) || 0;
+  const video50Count = Number(row.video50Count) || 0;
+  const revenueCents = Number(row.revenueCents) || 0;
+  const conversions = Number(row.conversions) || 0;
+
+  const ctrBp = impressions > 0 ? Math.round((clicks / impressions) * 10000) : 0;
+  const thumbstopBp = impressions > 0 ? Math.round((videoPlayCount / impressions) * 10000) : 0;
+  const holdRateBp = impressions > 0 ? Math.round((video50Count / impressions) * 10000) : 0;
+  const roasBp = spendCents > 0 ? Math.round((revenueCents / spendCents) * 100) : 0;
+  const cpaCents = conversions > 0 ? Math.round(spendCents / conversions) : 0;
+  const aovCents = conversions > 0 ? Math.round(revenueCents / conversions) : 0;
+  const dailyStatRowCount = Number(row.dailyStatRowCount) || 0;
+  const cpmCents = dailyStatRowCount > 0 ? Math.round(Number(row.sumCpmCents) / dailyStatRowCount) : 0;
+
+  return {
+    creativeAssetId: Number(row.creativeAssetId),
+    creativeName: row.creativeName ?? "",
+    thumbnailUrl: row.thumbnailUrl ?? null,
+    creativeType: row.creativeType ?? "image",
+    launchDate: row.launchDate ? new Date(row.launchDate) : null,
+    adCount: Number(row.adCount) || 0,
+    spendCents,
+    impressions,
+    clicks,
+    reach: Number(row.reach) || 0,
+    videoPlayCount,
+    video50Count,
+    ctrBp,
+    thumbstopBp,
+    holdRateBp,
+    cpmCents,
+    revenueCents,
+    conversions,
+    aovCents,
+    roasBp,
+    cpaCents,
+    hookScore: Number(row.hookScore) || 0,
+    watchScore: Number(row.watchScore) || 0,
+    clickScore: Number(row.clickScore) || 0,
+    convertScore: Number(row.convertScore) || 0,
+    pipelineRunId: row.pipelineRunId ? Number(row.pipelineRunId) : null,
   };
 }
 

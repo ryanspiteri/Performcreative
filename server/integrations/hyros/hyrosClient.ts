@@ -14,63 +14,19 @@
  */
 import axios, { type AxiosInstance } from "axios";
 import { ENV } from "../../_core/env";
+import {
+  parseHyrosSalesResponse,
+  type HyrosSale,
+  type HyrosSaleResponse,
+} from "./hyrosSchemas";
 
 const TAG = "[HyrosClient]";
 
-export interface HyrosAdSource {
-  adSourceId: string;
-  adAccountId: string;
-  platform: string; // "FACEBOOK", "GOOGLE", etc.
-}
-
-export interface HyrosSourceLinkAd {
-  name: string;
-  adSourceId: string;
-}
-
-export interface HyrosSource {
-  sourceLinkId?: string;
-  name?: string;
-  tag?: string;
-  disregarded?: boolean;
-  organic?: boolean;
-  trafficSource?: { id: string; name: string };
-  goal?: { id: string; name: string };
-  category?: { id: string; name: string };
-  adSource?: HyrosAdSource;
-  sourceLinkAd?: HyrosSourceLinkAd;
-  clickDate?: string;
-}
-
-export interface HyrosLead {
-  email?: string;
-  id: string;
-  creationDate: string;
-  firstName?: string;
-  lastName?: string;
-  ips?: string[];
-  phoneNumbers?: string[];
-  tags?: string[];
-  firstSource?: HyrosSource;
-  lastSource?: HyrosSource;
-}
-
-export interface HyrosSale {
-  id: string;
-  orderId: string;
-  creationDate: string; // "Thu Apr 09 10:33:18 UTC 2026" or ISO
-  qualified: boolean;
-  score: number;
-  recurring: boolean;
-  quantity: number;
-  price?: number;
-  usdPrice?: number;
-  product?: string;
-  provider?: string;
-  lead: HyrosLead;
-  firstSource?: HyrosSource;
-  lastSource?: HyrosSource;
-}
+// Re-export the Zod-inferred type so existing imports of HyrosSale keep working.
+// The shape is now derived from HyrosSaleSchema — usdPrice is an object
+// ({ price, discount, hardCost, refunded, currency }) NOT a number.
+export type { HyrosSale, HyrosSaleResponse } from "./hyrosSchemas";
+export { HyrosShapeError } from "./hyrosSchemas";
 
 export interface HyrosPage<T> {
   result: T[];
@@ -108,13 +64,19 @@ export class HyrosClient {
     }
   }
 
-  /** List sales with attribution in a date range. Paginated via nextPageId. */
+  /**
+   * List sales with attribution in a date range. Paginated via nextPageId.
+   *
+   * Response is parsed through `parseHyrosSalesResponse` (Zod) at the boundary
+   * so shape drift throws a named `HyrosShapeError` instead of silently
+   * producing NaN downstream.
+   */
   async listSales(params: {
     fromDate: Date;
     toDate: Date;
     pageId?: string;
     pageSize?: number;
-  }): Promise<HyrosPage<HyrosSale>> {
+  }): Promise<HyrosSaleResponse> {
     const query: Record<string, string | number> = {
       fromDate: toHyrosDate(params.fromDate),
       toDate: toHyrosDate(params.toDate),
@@ -123,11 +85,16 @@ export class HyrosClient {
     if (params.pageSize) query.pageSize = params.pageSize;
 
     const res = await this.http.get("/sales", { params: query });
-    return res.data;
+    return parseHyrosSalesResponse(res.data);
   }
 
-  /** List leads with attribution. Use for V1.5 attribution features. */
-  async listLeads(params: { fromDate: Date; toDate: Date; pageId?: string }): Promise<HyrosPage<HyrosLead>> {
+  /**
+   * List leads with attribution. Use for V1.5 attribution features.
+   *
+   * NOTE: Not Zod-parsed yet — add a schema to `hyrosSchemas.ts` before the
+   * lead flow is wired to the DB. Current V1 callers don't depend on shape.
+   */
+  async listLeads(params: { fromDate: Date; toDate: Date; pageId?: string }): Promise<HyrosPage<unknown>> {
     const query: Record<string, string | number> = {
       fromDate: toHyrosDate(params.fromDate),
       toDate: toHyrosDate(params.toDate),

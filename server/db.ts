@@ -1109,6 +1109,37 @@ export async function linkAttributionStatsByHyrosAdId(hyrosAdId: string, adId: n
   return (result as any)[0]?.affectedRows ?? 0;
 }
 
+/**
+ * Bulk re-link ALL orphaned adAttributionStats rows to their corresponding ads
+ * in a single UPDATE. Called at the end of Meta sync after new ads are upserted
+ * so that Hyros rows previously written with adId=null (because Meta hadn't
+ * seen the ad yet) get retroactively linked.
+ *
+ * This is the fix for the "Hyros sync writes rows but reportService drops them"
+ * bug — the repair hook existed (linkAttributionStatsByHyrosAdId) but was never
+ * called from any sync flow. Dead code until now.
+ *
+ * Returns the number of attribution rows that got linked.
+ */
+export async function relinkOrphanedAttributions(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  // Raw SQL via Drizzle template: the JOIN-UPDATE form is simpler here than
+  // Drizzle's query builder (which doesn't expose UPDATE...JOIN directly).
+  // Both sides indexed: adAttributionStats.hyrosAdId via the compound unique,
+  // ads.externalAdId via ads_platform_external_unique.
+  const result: any = await db.execute(sql`
+    UPDATE adAttributionStats attr
+    JOIN ads a ON a.externalAdId = attr.hyrosAdId AND a.platform = 'meta'
+    SET attr.adId = a.id
+    WHERE attr.adId IS NULL
+  `);
+  // MySQL UPDATE via mysql2 returns [ResultSetHeader, ...] or a single ResultSetHeader
+  // depending on the driver wrapper. Handle both.
+  const header = Array.isArray(result) ? result[0] : result;
+  return (header?.affectedRows as number) ?? 0;
+}
+
 // --- creativeScores ---
 
 export async function upsertCreativeScore(data: InsertCreativeScore): Promise<void> {
