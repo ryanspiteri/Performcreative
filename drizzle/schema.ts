@@ -92,7 +92,7 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   /** Iteration pipeline: image resolution (2K or 4K) */
   resolution: varchar("resolution", { length: 4 }),
   /** Script Generator pipeline columns */
-  scriptStyle: varchar("scriptStyle", { length: 16 }),
+  scriptStyle: varchar("scriptStyle", { length: 255 }),
   scriptSubStructure: varchar("scriptSubStructure", { length: 16 }),
   scriptFunnelStage: mysqlEnum("scriptFunnelStage", ["cold", "warm", "retargeting", "retention"]),
   scriptArchetype: varchar("scriptArchetype", { length: 32 }),

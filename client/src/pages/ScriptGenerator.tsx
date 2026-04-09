@@ -118,6 +118,7 @@ export default function ScriptGenerator() {
       setEditedScripts({});
       setSavedScripts({});
       setEditHintDismissed(false);
+      window.history.replaceState({}, "", `/scripts?runId=${data.runId}`);
       toast.success("Script pipeline started");
     },
     onError: (err: any) => toast.error(`Failed: ${err.message}`),
@@ -143,9 +144,9 @@ export default function ScriptGenerator() {
   const currentStage = run?.scriptStage || "";
   const scripts = (run?.scriptsJson as any[]) || [];
 
-  // Initialize edits from run data when scripts arrive
+  // Initialize edits from run data (reinitializes when switching between runs)
   useEffect(() => {
-    if (run && scripts.length > 0 && Object.keys(editedScripts).length === 0) {
+    if (run && scripts.length > 0) {
       const source = ((run as any).editedScriptsJson ?? run.scriptsJson) as any[];
       if (source) {
         const initial: Record<number, any> = {};
@@ -154,7 +155,31 @@ export default function ScriptGenerator() {
         setSavedScripts(initial);
       }
     }
-  }, [run?.scriptsJson]);
+  }, [run?.id]);
+
+  // Hydrate form fields from loaded run (for ?runId= deep links from dashboard)
+  useEffect(() => {
+    if (!run) return;
+    if (run.product) setProduct(run.product);
+    if (run.scriptFunnelStage) setFunnelStage(run.scriptFunnelStage);
+    if (run.scriptSubStructure) setSubStructureId(run.scriptSubStructure);
+    if (run.scriptArchetype) setArchetype(run.scriptArchetype);
+    if (run.scriptConcept) setConcept(run.scriptConcept);
+    if (run.scriptCount) setScriptCount(String(run.scriptCount));
+
+    const knownStyleIds = ["DR", "UGC", "FOUNDER", "BRAND", "EDUCATION", "LIFESTYLE", "DEMO"];
+    if (run.scriptStyle && knownStyleIds.includes(run.scriptStyle)) {
+      setScriptStyle(run.scriptStyle);
+    } else if (run.scriptStyle) {
+      setScriptStyle("__custom__");
+      setCustomScriptStyle(run.scriptStyle);
+    }
+
+    if (run.scriptAngle) {
+      setAngle("__custom__");
+      setCustomAngle(run.scriptAngle);
+    }
+  }, [run?.id]);
 
   const isCustomStyle = scriptStyle === "__custom__";
   const effectiveAngle = angle === "__custom__" ? customAngle : angle;
@@ -700,16 +725,14 @@ export default function ScriptGenerator() {
                                             multiline
                                             className="text-white text-xs"
                                           />
-                                          {seg.transitionLine !== undefined && (
-                                            <div className="mt-1 pl-2 border-l-2 border-white/10">
-                                              <EditableText
-                                                value={seg.transitionLine || ""}
-                                                onChange={v => updateEditedScript(i, ["script", String(j), "transitionLine"], v)}
-                                                label={`Edit transition for segment ${j + 1}`}
-                                                multiline
-                                                className="text-gray-500 text-[11px] italic"
-                                              />
-                                            </div>
+                                          {seg.transitionLine != null && seg.transitionLine !== "" && (
+                                            <EditableText
+                                              value={seg.transitionLine}
+                                              onChange={v => updateEditedScript(i, ["script", String(j), "transitionLine"], v)}
+                                              label={`Edit transition for segment ${j + 1}`}
+                                              multiline
+                                              className="text-gray-500 text-[11px] italic mt-1"
+                                            />
                                           )}
                                         </td>
                                       </tr>
