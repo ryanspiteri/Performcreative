@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { AlertCircle, CheckCircle2, Clock, RefreshCw, AlertTriangle, ArrowLeft, Database } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, RefreshCw, AlertTriangle, ArrowLeft, Database, Play } from "lucide-react";
 
 function formatRelative(date: Date | null | undefined): string {
   if (!date) return "never";
@@ -90,6 +90,17 @@ export default function SyncAdmin() {
     onSuccess: (data) => toast.success(`Recomputed ${data.rowsUpserted} creative scores`),
     onError: (err) => toast.error(`Recompute failed: ${err.message}`),
   });
+  const runMigration = trpc.adminSync.runMigration.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`Migration complete: ${data.summary}`);
+      } else {
+        toast.error(`Migration incomplete: ${data.summary}`);
+      }
+      syncStatus.refetch();
+    },
+    onError: (err) => toast.error(`Migration failed: ${err.message}`),
+  });
 
   const states = syncStatus.data?.states ?? [];
   const metaStates = states.filter((s) => s.sourceName === "meta");
@@ -114,6 +125,55 @@ export default function SyncAdmin() {
         <h1 className="text-2xl font-semibold text-white">Sync Admin</h1>
         <p className="text-sm text-[#A1A1AA] mt-0.5">Meta Ads + Hyros sync controls and diagnostics</p>
       </div>
+
+      {/* Migration card — only shows if sync has never been run (first deploy) */}
+      {states.length === 0 && !runMigration.data?.success && (
+        <div className="px-6 mb-6">
+          <div className="p-6 rounded-lg bg-[#15171B] border-l-4 border-[#F59E0B] border border-[rgba(255,255,255,0.06)]">
+            <div className="flex gap-3 items-start">
+              <AlertTriangle className="w-5 h-5 text-[#F59E0B] flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-medium text-white mb-1">Database Migration Required</h2>
+                <p className="text-sm text-[#A1A1AA] mb-4">
+                  This is a first-time setup. Click below to create the 7 tables needed for Creative Analytics OS.
+                  Safe to run multiple times, idempotent.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => runMigration.mutate()}
+                  disabled={runMigration.isPending}
+                  className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-black rounded-sm"
+                >
+                  {runMigration.isPending ? <Clock className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
+                  Run Migration
+                </Button>
+                {runMigration.data && (
+                  <div className="mt-4 p-3 rounded-md bg-[rgba(16,185,129,0.08)] border border-[rgba(16,185,129,0.3)]">
+                    <div className="text-sm text-[#10B981] font-medium">{runMigration.data.summary}</div>
+                    <div className="mt-2 space-y-1">
+                      {runMigration.data.results.map((r) => (
+                        <div key={r.table} className="flex justify-between text-xs font-mono">
+                          <span className="text-[#A1A1AA]">{r.table}</span>
+                          <span
+                            className={
+                              r.status === "created" ? "text-[#10B981]"
+                              : r.status === "exists" ? "text-[#71717A]"
+                              : "text-[#EF4444]"
+                            }
+                          >
+                            {r.status}
+                            {r.error ? ` — ${r.error}` : ""}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error alerts */}
       {errorsFromSyncs.length > 0 && (
