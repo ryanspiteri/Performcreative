@@ -13,6 +13,47 @@ import { ENV } from "../../_core/env";
 
 const TAG = "[MetaAdsClient]";
 
+/**
+ * Ad Preview API format.
+ *
+ * MOBILE_FEED_STANDARD renders the ad as it appears in the Facebook mobile
+ * feed — the closest match to the default creative review experience.
+ * Other common values: DESKTOP_FEED_STANDARD, INSTAGRAM_STANDARD,
+ * INSTAGRAM_STORY, INSTAGRAM_REELS. V1 only uses MOBILE_FEED_STANDARD
+ * because it handles video / image / carousel uniformly.
+ * Docs: https://developers.facebook.com/docs/marketing-api/reference/ad-group/previews/
+ */
+export type MetaAdPreviewFormat =
+  | "MOBILE_FEED_STANDARD"
+  | "DESKTOP_FEED_STANDARD"
+  | "INSTAGRAM_STANDARD"
+  | "INSTAGRAM_STORY"
+  | "INSTAGRAM_REELS";
+
+export interface MetaAdPreview {
+  body: string;
+  iframeSrc: string | null;
+}
+
+/**
+ * In-memory cache for ad previews. Meta's preview URLs are signed and
+ * expire within hours, so a short TTL is fine. Keyed on (adId, format).
+ *
+ * Module-level on purpose: survives across MetaAdsClient instances but
+ * resets on process restart — good enough for a single-instance DO App
+ * Platform deployment. Multi-instance would want Redis, but the cache is
+ * best-effort anyway (a miss just re-fetches).
+ */
+const AD_PREVIEW_CACHE_TTL_MS = 15 * 60 * 1000;
+const adPreviewCache = new Map<string, { value: MetaAdPreview; expiresAt: number }>();
+
+/** Extract the `src="..."` URL out of a Meta-returned iframe body. */
+export function extractIframeSrc(body: string): string | null {
+  if (!body) return null;
+  const match = body.match(/<iframe[^>]*\ssrc=["']([^"']+)["']/i);
+  return match?.[1] ?? null;
+}
+
 export interface MetaAd {
   id: string;
   name: string;
@@ -295,6 +336,54 @@ export class MetaAdsClient {
       if (err.response?.status === 404) return null;
       throw err;
     }
+  }
+
+  /**
+   * Fetch a signed preview iframe for an ad via the Ad Preview API.
+   *
+   * Why this and not `/videos/{id}?fields=source`: the /videos endpoint is
+   * denied for our System User token (requires Live Video API App Review).
+   * The ads/{id}/previews endpoint works with the ads_read permission we
+   * already have and is actually a better UX — it renders the full ad
+   * (video + copy + CTA + brand) exactly as it appears in Feed, not just a
+   * bare MP4 file. Verified working in Phase 1 of PR 2.
+   *
+   * Returned iframe src is signed and expires within hours. Cached in
+   * memory with a 15-minute TTL so rapid clicks don't hammer the API; a
+   * cache miss just re-fetches.
+   *
+   * Throws on 400/401/403/404 from Meta; upstream should present a fallback
+   * "View on Meta" link when the call fails.
+   */
+  async getAdPreview(
+    adId: string,
+    format: MetaAdPreviewFormat = "MOBILE_FEED_STANDARD",
+  ): Promise<MetaAdPreview> {
+    const cacheKey = `${adId}|${format}`;
+    const cached = adPreviewCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const res = await this.http.get(`/${adId}/previews`, {
+      params: {
+        ad_format: format,
+        access_token: this.accessToken,
+      },
+    });
+    const body: string = res.data?.data?.[0]?.body ?? "";
+    if (!body) {
+      throw new Error(`Meta returned no preview body for ad ${adId} (format=${format})`);
+    }
+    const iframeSrc = extractIframeSrc(body);
+    const value: MetaAdPreview = { body, iframeSrc };
+    adPreviewCache.set(cacheKey, { value, expiresAt: Date.now() + AD_PREVIEW_CACHE_TTL_MS });
+    return value;
+  }
+
+  /** Test-only: clear the module-level ad preview cache. */
+  static __clearAdPreviewCache(): void {
+    adPreviewCache.clear();
   }
 
   /** Get the list of ad account IDs configured via env (CSV). */
