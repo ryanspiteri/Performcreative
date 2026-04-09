@@ -13,7 +13,7 @@
  *   - Numeric cells: font-mono tabular-nums
  *   - Score thresholds: green 70+, yellow 40-69, red 0-39 (semantic tokens)
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import {
@@ -31,6 +31,36 @@ import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings } from "lucide-react
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type SortBy = "spendCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
+type CreativeType = "all" | "video" | "image";
+type SortDir = "asc" | "desc";
+
+// Allowlist for URL query-string validation. Invalid values fall back to defaults.
+const VALID_DAYS = new Set([7, 14, 30, 90]);
+const VALID_TYPES: CreativeType[] = ["all", "video", "image"];
+const VALID_SORTS: SortBy[] = ["spendCents", "roasBp", "hookScore", "watchScore", "clickScore", "convertScore", "launchDate"];
+const VALID_DIRS: SortDir[] = ["asc", "desc"];
+
+function parseFilters(search: string): { days: number; type: CreativeType; sort: SortBy; dir: SortDir } {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const daysRaw = Number(params.get("days"));
+  const days = VALID_DAYS.has(daysRaw) ? daysRaw : 30;
+  const typeRaw = params.get("type");
+  const type = (VALID_TYPES as string[]).includes(typeRaw ?? "") ? (typeRaw as CreativeType) : "all";
+  const sortRaw = params.get("sort") as SortBy | null;
+  const sort = sortRaw && VALID_SORTS.includes(sortRaw) ? sortRaw : "spendCents";
+  const dirRaw = params.get("dir") as SortDir | null;
+  const dir = dirRaw && VALID_DIRS.includes(dirRaw) ? dirRaw : "desc";
+  return { days, type, sort, dir };
+}
+
+function serializeFilters(f: { days: number; type: CreativeType; sort: SortBy; dir: SortDir }): string {
+  const params = new URLSearchParams();
+  params.set("days", String(f.days));
+  if (f.type !== "all") params.set("type", f.type);
+  params.set("sort", f.sort);
+  params.set("dir", f.dir);
+  return params.toString();
+}
 
 const DATE_PRESETS = [
   { label: "Last 7 days", days: 7 },
@@ -62,23 +92,40 @@ function scoreFillClass(score: number): string {
   return "bg-[#EF4444]";
 }
 
-function ScoreCell({ score, label }: { score: number; label: string }) {
+/** Formats the underlying metric value shown inside a score tooltip. */
+function formatScoreMetric(label: string, bpOrCount: number): string {
+  switch (label) {
+    case "Hook":
+      return `${(bpOrCount / 100).toFixed(2)}% thumbstop rate`;
+    case "Watch":
+      return `${(bpOrCount / 100).toFixed(2)}% hold rate`;
+    case "Click":
+      return `${(bpOrCount / 100).toFixed(2)}% CTR`;
+    case "Convert":
+      return `${(bpOrCount / 100).toFixed(2)}x ROAS`;
+    default:
+      return String(bpOrCount);
+  }
+}
+
+function ScoreCell({ score, label, metricBp }: { score: number; label: string; metricBp: number }) {
+  const metricText = formatScoreMetric(label, metricBp);
   return (
     <TooltipProvider delayDuration={400}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex flex-col gap-1 items-end min-w-[48px]">
+          <div className="flex flex-col gap-1 items-end min-w-[48px]" aria-label={`${label} score ${score} of 100`}>
             <span className={`font-mono tabular-nums text-sm font-medium ${scoreColorClass(score)}`}>{score}</span>
             <div className="w-12 h-[2px] bg-[rgba(255,255,255,0.06)] rounded-none">
               <div className={`h-full ${scoreFillClass(score)}`} style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
             </div>
           </div>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[280px]">
+        <TooltipContent side="top" className="max-w-[300px]">
           <div className="text-sm">
             <div className="font-medium">{label} score: {score}/100</div>
             <div className="text-xs text-[#A1A1AA] mt-1">
-              Percentile of this creative vs your account's 90-day distribution.
+              This creative's {metricText} beats {score}% of your account's ads in the last 90 days.
             </div>
           </div>
         </TooltipContent>
@@ -99,10 +146,24 @@ function KpiCard({ label, value, subLabel }: { label: string; value: string; sub
 
 export default function CreativePerformance() {
   const [, setLocation] = useLocation();
-  const [lookbackDays, setLookbackDays] = useState(30);
-  const [creativeType, setCreativeType] = useState<"all" | "video" | "image">("all");
-  const [sortBy, setSortBy] = useState<SortBy>("spendCents");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // Hydrate filters from the URL query string on first render so deep-links
+  // and back-nav from AdDetail preserve state.
+  const initial = typeof window !== "undefined" ? parseFilters(window.location.search) : parseFilters("");
+  const [lookbackDays, setLookbackDays] = useState(initial.days);
+  const [creativeType, setCreativeType] = useState<CreativeType>(initial.type);
+  const [sortBy, setSortBy] = useState<SortBy>(initial.sort);
+  const [sortDir, setSortDir] = useState<SortDir>(initial.dir);
+
+  // Sync filter state to URL via replaceState so back button doesn't pile up.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const qs = serializeFilters({ days: lookbackDays, type: creativeType, sort: sortBy, dir: sortDir });
+    const next = `${window.location.pathname}?${qs}`;
+    if (window.location.pathname + window.location.search !== next) {
+      window.history.replaceState(null, "", next);
+    }
+  }, [lookbackDays, creativeType, sortBy, sortDir]);
 
   const { dateFrom, dateTo } = useMemo(() => {
     const to = new Date();
@@ -168,11 +229,16 @@ export default function CreativePerformance() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => perfQuery.refetch()}
-              className="text-[#A1A1AA] border-[rgba(255,255,255,0.10)] bg-[#15171B] hover:bg-[#1E2126] hover:text-white"
+              onClick={() => {
+                void perfQuery.refetch();
+                void summary.refetch();
+              }}
+              disabled={perfQuery.isFetching || summary.isFetching}
+              aria-busy={perfQuery.isFetching || summary.isFetching}
+              className="text-[#A1A1AA] border-[rgba(255,255,255,0.10)] bg-[#15171B] hover:bg-[#1E2126] hover:text-white disabled:opacity-60"
             >
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-              Refresh
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${perfQuery.isFetching || summary.isFetching ? "animate-spin" : ""}`} />
+              {perfQuery.isFetching || summary.isFetching ? "Refreshing…" : "Refresh"}
             </Button>
             <Button
               variant="outline"
@@ -248,6 +314,9 @@ export default function CreativePerformance() {
                 <span className="uppercase text-[11px] tracking-wider font-medium text-[#71717A]">Ads</span>
               </TableHead>
               <TableHead className="text-right"><SortHeader field="spendCents" label="Spend" /></TableHead>
+              <TableHead className="text-right">
+                <span className="uppercase text-[11px] tracking-wider font-medium text-[#71717A]">Revenue</span>
+              </TableHead>
               <TableHead className="text-right"><SortHeader field="roasBp" label="ROAS" /></TableHead>
               <TableHead className="text-right">
                 <span className="uppercase text-[11px] tracking-wider font-medium text-[#71717A]">AOV</span>
@@ -275,7 +344,7 @@ export default function CreativePerformance() {
               <>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i} className="border-b border-[rgba(255,255,255,0.06)]">
-                    <TableCell colSpan={14}>
+                    <TableCell colSpan={15}>
                       <Skeleton className="h-16 w-full bg-[rgba(255,255,255,0.04)]" />
                     </TableCell>
                   </TableRow>
@@ -284,7 +353,7 @@ export default function CreativePerformance() {
             )}
             {isEmpty && (
               <TableRow>
-                <TableCell colSpan={14} className="py-16">
+                <TableCell colSpan={15} className="py-16">
                   <div className="flex flex-col items-start gap-3 max-w-md">
                     <BarChart3 className="w-12 h-12 text-[#71717A]" />
                     <div>
@@ -304,7 +373,11 @@ export default function CreativePerformance() {
             {!isLoading && rows.map((row) => (
               <TableRow
                 key={row.creativeAssetId}
-                onClick={() => setLocation(`/analytics/ads/${row.creativeAssetId}`)}
+                onClick={() =>
+                  setLocation(
+                    `/analytics/ads/${row.creativeAssetId}?days=${lookbackDays}`,
+                  )
+                }
                 className="border-b border-[rgba(255,255,255,0.06)] hover:bg-[#1E2126] cursor-pointer"
               >
                 <TableCell className="sticky left-0 bg-[#0A0B0D] hover:bg-[#1E2126] z-[1] py-2">
@@ -328,16 +401,17 @@ export default function CreativePerformance() {
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-[#A1A1AA]">{row.adCount}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-white">{formatCents(row.spendCents)}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums text-sm text-white">{formatCents(row.revenueCents)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-white">{formatBpAsRoas(row.roasBp)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-[#A1A1AA]">{formatCents(row.aovCents)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-[#A1A1AA]">{formatCents(row.cpaCents)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-[#A1A1AA]">{formatBpAsPct(row.thumbstopBp)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-[#A1A1AA]">{formatBpAsPct(row.holdRateBp)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm text-[#A1A1AA]">{formatBpAsPct(row.ctrBp)}</TableCell>
-                <TableCell className="text-right"><ScoreCell score={row.hookScore} label="Hook" /></TableCell>
-                <TableCell className="text-right"><ScoreCell score={row.watchScore} label="Watch" /></TableCell>
-                <TableCell className="text-right"><ScoreCell score={row.clickScore} label="Click" /></TableCell>
-                <TableCell className="text-right"><ScoreCell score={row.convertScore} label="Convert" /></TableCell>
+                <TableCell className="text-right"><ScoreCell score={row.hookScore} label="Hook" metricBp={row.thumbstopBp} /></TableCell>
+                <TableCell className="text-right"><ScoreCell score={row.watchScore} label="Watch" metricBp={row.holdRateBp} /></TableCell>
+                <TableCell className="text-right"><ScoreCell score={row.clickScore} label="Click" metricBp={row.ctrBp} /></TableCell>
+                <TableCell className="text-right"><ScoreCell score={row.convertScore} label="Convert" metricBp={row.roasBp} /></TableCell>
               </TableRow>
             ))}
           </TableBody>

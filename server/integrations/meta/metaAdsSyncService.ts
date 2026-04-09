@@ -374,8 +374,10 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
   }
 
   const results: SyncResult[] = [];
+  let currentAccountId: string | null = null;
   try {
     for (const accountId of accountIds) {
+      currentAccountId = accountId;
       await db.updateSyncState("meta", accountId, {
         sourceName: "meta",
         adAccountId: accountId,
@@ -400,8 +402,41 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
         consecutiveFailures: status === "failed" ? 1 : 0,
       });
     }
+
+    // After all accounts are synced, bulk re-link any Hyros attribution rows
+    // that were previously written with adId=null because Meta hadn't seen the
+    // ad yet. This fixes the "Hyros sync writes rows but reportService drops
+    // them" sequencing bug — the repair hook existed as dead code until now.
+    try {
+      const linkedCount = await db.relinkOrphanedAttributions();
+      if (linkedCount > 0) {
+        console.log(`${TAG} relinked ${linkedCount} orphaned attribution rows`);
+      }
+    } catch (relinkErr: any) {
+      console.error(`${TAG} relinkOrphanedAttributions failed:`, relinkErr?.message ?? relinkErr);
+      // Non-fatal: sync itself succeeded, relink is best-effort. Next sync retries.
+    }
   } catch (err: any) {
+    // CRITICAL: write failed status before returning so the admin UI can see
+    // what broke. Prior bug: this catch only logged, leaving the sync stuck
+    // in "running" state on any uncaught error.
+    const errorMsg = err?.message ?? String(err);
     console.error(`${TAG} Unexpected error:`, err);
+    if (currentAccountId) {
+      try {
+        const existing = await db.getSyncState("meta", currentAccountId);
+        await db.updateSyncState("meta", currentAccountId, {
+          sourceName: "meta",
+          adAccountId: currentAccountId,
+          lastSyncCompletedAt: new Date(),
+          lastSyncStatus: "failed",
+          lastSyncError: errorMsg,
+          consecutiveFailures: (existing?.consecutiveFailures ?? 0) + 1,
+        });
+      } catch (writeErr: any) {
+        console.error(`${TAG} Failed to persist failed sync state:`, writeErr?.message ?? writeErr);
+      }
+    }
   } finally {
     _isSyncing = false;
     await releaseLock();

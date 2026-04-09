@@ -16,6 +16,7 @@ import {
   getCreativePerformance,
   getCreativePerformanceSummary,
   getCreativeTimeSeries,
+  getCreativeRow,
   type CreativePerfQuery,
 } from "../services/creativeAnalytics/reportService";
 import * as db from "../db";
@@ -83,5 +84,20 @@ export const analyticsRouter = router({
     )
     .query(async ({ input }) => {
       return getCreativeTimeSeries(input.creativeAssetId, input.dateFrom, input.dateTo);
+    }),
+
+  // Single-creative row lookup for AdDetail. Respects the caller's date range
+  // (instead of hardcoding 30 days) and avoids the previous pattern of
+  // refetching the top-500 list just to find one creative.
+  getCreativeRow: protectedProcedure
+    .input(
+      z.object({
+        creativeAssetId: z.number().int(),
+        dateFrom: z.date(),
+        dateTo: z.date(),
+      })
+    )
+    .query(async ({ input }) => {
+      return getCreativeRow(input.creativeAssetId, input.dateFrom, input.dateTo);
     }),
 });

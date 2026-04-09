@@ -10,11 +10,18 @@
  *   6. Linked pipeline asset card (if any)
  */
 import { useMemo } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useRoute, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, BarChart3, PlayCircle } from "lucide-react";
+
+const VALID_DAYS = new Set([7, 14, 30, 90]);
+function parseDaysFromSearch(search: string): number {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const raw = Number(params.get("days"));
+  return VALID_DAYS.has(raw) ? raw : 30;
+}
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -109,14 +116,18 @@ function TimeSeriesChart({ data, height = 240 }: { data: { date: Date; spendCent
 export default function AdDetail() {
   const [, params] = useRoute("/analytics/ads/:id");
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const creativeAssetId = params?.id ? Number(params.id) : NaN;
 
+  // Read the lookback from the query string so clicking from a 90-day table
+  // view lands on a 90-day detail view (not a hardcoded 30-day fallback).
+  const lookbackDays = useMemo(() => parseDaysFromSearch(search ?? ""), [search]);
   const { dateFrom, dateTo } = useMemo(() => {
     const to = new Date();
     const from = new Date();
-    from.setDate(from.getDate() - 30);
+    from.setDate(from.getDate() - lookbackDays);
     return { dateFrom: from, dateTo: to };
-  }, []);
+  }, [lookbackDays]);
 
   const detail = trpc.analytics.getCreativeDetail.useQuery(
     { creativeAssetId },
@@ -126,17 +137,18 @@ export default function AdDetail() {
     { creativeAssetId, dateFrom, dateTo },
     { enabled: !isNaN(creativeAssetId) }
   );
-  // Fetch the same perf row for the summary metrics (reuses report service)
-  const perf = trpc.analytics.getCreativePerformance.useQuery({
-    dateFrom,
-    dateTo,
-    sortBy: "spendCents",
-    sortDirection: "desc",
-    limit: 500,
-    offset: 0,
-  });
+  // Single-row lookup scoped to this creative + date range. Replaces the
+  // old "refetch top-500 and find by id" hack.
+  const perfRowQuery = trpc.analytics.getCreativeRow.useQuery(
+    { creativeAssetId, dateFrom, dateTo },
+    { enabled: !isNaN(creativeAssetId) }
+  );
+  const perfRow = perfRowQuery.data ?? null;
 
-  const perfRow = perf.data?.rows.find((r) => r.creativeAssetId === creativeAssetId);
+  // Back nav preserves the filter state the user came from. If they deep-linked
+  // directly to AdDetail with no ?days param, fall back to the current lookback.
+  const backQueryString = (search && search.length > 0) ? (search.startsWith("?") ? search : `?${search}`) : `?days=${lookbackDays}`;
+  const backHref = `/analytics${backQueryString}`;
 
   if (isNaN(creativeAssetId)) {
     return <div className="p-6 text-white">Invalid creative ID</div>;
@@ -155,7 +167,7 @@ export default function AdDetail() {
   if (!detail.data) {
     return (
       <div className="min-h-screen bg-[#0A0B0D] p-6 text-white">
-        <Button variant="ghost" onClick={() => setLocation("/analytics")} className="text-[#A1A1AA] mb-4">
+        <Button variant="ghost" onClick={() => setLocation(backHref)} className="text-[#A1A1AA] mb-4">
           <ArrowLeft className="w-4 h-4 mr-1" />
           Creative Performance
         </Button>
@@ -172,7 +184,7 @@ export default function AdDetail() {
       <div className="px-6 py-5">
         <Button
           variant="ghost"
-          onClick={() => setLocation("/analytics")}
+          onClick={() => setLocation(backHref)}
           className="text-[#A1A1AA] hover:text-white hover:bg-[#15171B] mb-4"
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
@@ -241,7 +253,7 @@ export default function AdDetail() {
 
         {/* Time series */}
         <div className="mb-8 p-6 bg-[#15171B] rounded-lg border border-[rgba(255,255,255,0.06)]">
-          <h2 className="text-sm uppercase tracking-wider text-[#71717A] font-medium mb-4">Daily Performance (Last 30 Days)</h2>
+          <h2 className="text-sm uppercase tracking-wider text-[#71717A] font-medium mb-4">Daily Performance (Last {lookbackDays} Days)</h2>
           {timeSeries.isLoading ? (
             <Skeleton className="h-[240px] w-full bg-[rgba(255,255,255,0.04)]" />
           ) : (

@@ -9,7 +9,13 @@
  * Runs on a separate advisory lock from Meta sync so both can run concurrently.
  */
 import { sql } from "drizzle-orm";
-import { HyrosClient, parseHyrosDate, bucketDateToUtcMidnight, type HyrosSale } from "./hyrosClient";
+import {
+  HyrosClient,
+  HyrosShapeError,
+  parseHyrosDate,
+  bucketDateToUtcMidnight,
+  type HyrosSale,
+} from "./hyrosClient";
 import * as db from "../../db";
 import type { InsertAdAttributionStat } from "../../../drizzle/schema";
 import { ENV } from "../../_core/env";
@@ -42,20 +48,63 @@ export interface HyrosSyncResult {
 }
 
 /**
- * Aggregate sales into daily per-ad buckets by attribution model.
- * For V1 we compute FIRST-click only. V1.5 can add last-click as a second model.
+ * Extract net revenue in cents from a Hyros sale.
+ *
+ * Hyros's `usdPrice` is an object: `{ price, discount, hardCost, refunded, currency }`.
+ * V1 uses NET revenue: `max(0, price - refunded)`, matching how Motion nets refunds
+ * in its reporting. A previous version of this code assumed `usdPrice` was a plain
+ * number, which made every sale produce NaN revenue and every upsert silently fail.
+ *
+ * Returns an object so the caller can track *why* revenue is zero (missing field
+ * vs. fully-refunded sale) via the sync result.
  */
-function aggregateSalesToBuckets(sales: HyrosSale[]): Map<string, AggregationBucket> {
+export function extractNetRevenueCents(sale: HyrosSale): { revenueCents: number; reason?: "missing" } {
+  const price = sale.usdPrice?.price;
+  if (price == null || !Number.isFinite(price)) {
+    return { revenueCents: 0, reason: "missing" };
+  }
+  const refunded = sale.usdPrice?.refunded;
+  const refundedSafe = refunded != null && Number.isFinite(refunded) ? refunded : 0;
+  const netDollars = Math.max(0, price - refundedSafe);
+  const cents = Math.round(netDollars * 100);
+  return { revenueCents: Number.isFinite(cents) ? cents : 0 };
+}
+
+/**
+ * Aggregate sales into daily per-ad buckets by attribution model.
+ *
+ * For V1 we compute FIRST-click only. V1.5 can add last-click as a second model.
+ *
+ * Single pass: skip-counting and bucketing happen together. Mutates `result`
+ * to increment `salesSkipped` for skipped sales and pushes a log line for
+ * sales where `usdPrice.price` is missing so the class of failure is visible.
+ */
+export function aggregateSalesToBuckets(
+  sales: HyrosSale[],
+  result: HyrosSyncResult,
+): Map<string, AggregationBucket> {
   const buckets = new Map<string, AggregationBucket>();
+  let missingPriceCount = 0;
 
   for (const sale of sales) {
     const source = sale.firstSource;
-    if (!source?.sourceLinkAd?.adSourceId) continue; // skip sales without ad-level attribution
-    const hyrosAdId = source.sourceLinkAd.adSourceId;
-    const externalAdId = source.adSource?.adSourceId ?? hyrosAdId;
+    const hyrosAdId = source?.sourceLinkAd?.adSourceId;
+    if (!hyrosAdId) {
+      result.salesSkipped++;
+      continue;
+    }
+    const externalAdId = source?.adSource?.adSourceId ?? hyrosAdId;
     const saleDate = parseHyrosDate(sale.creationDate);
-    if (!saleDate) continue;
+    if (!saleDate) {
+      result.salesSkipped++;
+      continue;
+    }
     const bucketDate = bucketDateToUtcMidnight(saleDate);
+
+    const { revenueCents, reason } = extractNetRevenueCents(sale);
+    if (reason === "missing") {
+      missingPriceCount++;
+    }
 
     const bucketKey = `${hyrosAdId}|${bucketDate.toISOString()}|first_click`;
     let bucket = buckets.get(bucketKey);
@@ -68,26 +117,44 @@ function aggregateSalesToBuckets(sales: HyrosSale[]): Map<string, AggregationBuc
       };
       buckets.set(bucketKey, bucket);
     }
-    bucket.conversions += sale.quantity ?? 1;
-    bucket.revenueCents += Math.round((sale.usdPrice ?? 0) * 100);
+    const quantity = sale.quantity ?? 1;
+    bucket.conversions += quantity;
+    bucket.revenueCents += revenueCents;
+  }
+
+  if (missingPriceCount > 0) {
+    console.warn(`${TAG} ${missingPriceCount} sales had no usdPrice.price — recorded as $0 revenue`);
   }
 
   return buckets;
 }
 
-/** Flush aggregated buckets to adAttributionStats. */
-async function flushBuckets(buckets: Map<string, AggregationBucket>): Promise<number> {
+/**
+ * Flush aggregated buckets to adAttributionStats.
+ *
+ * Upsert failures propagate to `result.errors[]` so the sync status ends as
+ * `partial` or `failed` and the admin UI surfaces a real error message.
+ * Per `.claude/rules/backend.md`: no silent swallows — use console.error and
+ * track the failure in the sync result.
+ */
+async function flushBuckets(
+  buckets: Map<string, AggregationBucket>,
+  result: HyrosSyncResult,
+): Promise<number> {
   let upserted = 0;
   for (const bucket of Array.from(buckets.values())) {
-    // Look up the corresponding ad in our DB if Meta sync has already synced it
+    // Look up the corresponding ad in our DB if Meta sync has already synced it.
+    // If not found, we still upsert with adId=null — the orphan will be linked
+    // on the next Meta sync via db.relinkOrphanedAttributions().
     const existingAd = await db.getAdByExternalId("meta", bucket.key.hyrosAdId);
     const localAdId = existingAd?.id ?? null;
 
     const aovCents = bucket.conversions > 0 ? Math.round(bucket.revenueCents / bucket.conversions) : 0;
 
-    // ROAS requires spend, which comes from Meta daily stats. We don't compute it here
-    // because Hyros sales don't carry spend data. The report service joins adDailyStats
-    // and adAttributionStats by (adId, date) to compute ROAS at query time.
+    // ROAS requires spend, which comes from Meta daily stats. We don't compute it
+    // here because Hyros sales don't carry spend data. reportService joins
+    // adDailyStats and adAttributionStats by (adId, date) to compute ROAS at query
+    // time.
     const row: InsertAdAttributionStat = {
       adId: localAdId,
       hyrosAdId: bucket.key.hyrosAdId,
@@ -95,19 +162,21 @@ async function flushBuckets(buckets: Map<string, AggregationBucket>): Promise<nu
       date: bucket.key.date,
       source: "hyros",
       attributionModel: bucket.key.attributionModel,
-      spendCents: 0, // Hyros doesn't track spend in /sales; spend comes from Meta
+      spendCents: 0, // Hyros doesn't track spend in /sales
       conversions: bucket.conversions,
       revenueCents: bucket.revenueCents,
       aovCents,
-      roasBp: 0, // computed at query time from SUM(revenue) / SUM(spend)
-      cpaCents: 0, // computed at query time from spend / conversions
+      roasBp: 0, // computed at query time
+      cpaCents: 0, // computed at query time
     };
 
     try {
       await db.upsertAdAttributionStat(row);
       upserted++;
     } catch (err: any) {
-      console.warn(`${TAG} Upsert failed for ${bucket.key.hyrosAdId} ${bucket.key.date.toISOString()}:`, err.message);
+      const msg = `upsertAttributionStat failed for hyrosAdId=${bucket.key.hyrosAdId} date=${bucket.key.date.toISOString()}: ${err?.message ?? err}`;
+      console.error(`${TAG} ${msg}`);
+      result.errors.push(msg);
     }
   }
   return upserted;
@@ -135,7 +204,7 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
 
   do {
     try {
-      const page: { result: HyrosSale[]; nextPageId?: string } = await client.listSales({
+      const page = await client.listSales({
         fromDate: dateFrom,
         toDate: dateTo,
         pageId,
@@ -144,14 +213,9 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
       const sales = page.result ?? [];
       result.salesProcessed += sales.length;
 
-      for (const sale of sales) {
-        if (!sale.firstSource?.sourceLinkAd?.adSourceId) {
-          result.salesSkipped++;
-        }
-      }
-
-      // Aggregate this page and merge into the master buckets map
-      const pageBuckets = aggregateSalesToBuckets(sales);
+      // Single pass: aggregateSalesToBuckets increments result.salesSkipped
+      // for sales without ad-level attribution or with invalid creationDate.
+      const pageBuckets = aggregateSalesToBuckets(sales, result);
       for (const [k, v] of Array.from(pageBuckets.entries())) {
         const existing = allBuckets.get(k);
         if (existing) {
@@ -163,9 +227,14 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
         }
       }
 
-      pageId = page.nextPageId;
+      pageId = page.nextPageId ?? undefined;
     } catch (err: any) {
-      const msg = `listSales failed: ${err.response?.data?.message?.[0] ?? err.message}`;
+      // Zod shape-drift errors get a specific prefix so the admin UI can see
+      // "Hyros response shape changed" vs. a generic HTTP error.
+      const msg =
+        err instanceof HyrosShapeError
+          ? `Hyros shape drift: ${err.message}${err.fieldPath ? ` (field: ${err.fieldPath})` : ""}`
+          : `listSales failed: ${err.response?.data?.message?.[0] ?? err.message}`;
       console.error(`${TAG} ${msg}`);
       result.errors.push(msg);
       break;
@@ -176,7 +245,10 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
     `${TAG} Processed ${result.salesProcessed} sales (${result.salesSkipped} unattributed), ${allBuckets.size} buckets to flush`
   );
 
-  result.rowsUpserted = await flushBuckets(allBuckets);
+  result.rowsUpserted = await flushBuckets(allBuckets, result);
+  console.log(
+    `${TAG} done: processed=${result.salesProcessed} skipped=${result.salesSkipped} upserted=${result.rowsUpserted} errors=${result.errors.length}`
+  );
   return result;
 }
 
@@ -240,8 +312,25 @@ export async function runHyrosSync(lookbackDays?: number): Promise<{ result: Hyr
     });
     return { result };
   } catch (err: any) {
+    // CRITICAL: write failed status to adSyncState before returning, otherwise
+    // the sync stays stuck in "running" forever and the admin UI keeps
+    // showing the old success. Prior bug: this catch only logged.
+    const errorMsg = err?.message ?? String(err);
     console.error(`${TAG} Unexpected error:`, err);
-    return { result: { ...emptyResult(), errors: [err.message] } };
+    try {
+      const existing = await db.getSyncState("hyros");
+      await db.updateSyncState("hyros", undefined, {
+        sourceName: "hyros",
+        adAccountId: null as any,
+        lastSyncCompletedAt: new Date(),
+        lastSyncStatus: "failed",
+        lastSyncError: errorMsg,
+        consecutiveFailures: (existing?.consecutiveFailures ?? 0) + 1,
+      });
+    } catch (writeErr: any) {
+      console.error(`${TAG} Failed to persist failed sync state:`, writeErr?.message ?? writeErr);
+    }
+    return { result: { ...emptyResult(), errors: [errorMsg] } };
   } finally {
     _isSyncing = false;
     await releaseLock();
