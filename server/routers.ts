@@ -24,6 +24,8 @@ import { ACTIVE_PRODUCTS } from "../drizzle/schema";
 import { canvaRouter } from "./routers/canva";
 import { organicRouter } from "./routers/organic";
 import { scriptGeneratorRouter } from "./routers/scriptGenerator";
+import { analyticsRouter } from "./routers/analytics";
+import { adminSyncRouter } from "./routers/adminSync";
 import { runFaceSwapPipeline } from "./services/faceSwapPipeline";
 import { validatePortrait } from "./services/portraitValidator";
 import { withTimeout, STEP_TIMEOUT } from "./services/_shared";
@@ -364,6 +366,8 @@ export const appRouter = router({
   faceSwap: faceSwapRouter,
   organic: organicRouter,
   scriptGenerator: scriptGeneratorRouter,
+  analytics: analyticsRouter,
+  adminSync: adminSyncRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

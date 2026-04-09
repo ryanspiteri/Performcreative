@@ -8,6 +8,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startAutoSync } from "../services/foreplaySync";
+import { startAutoMetaSync } from "../integrations/meta/metaAdsSyncService";
+import { startAutoHyrosSync } from "../integrations/hyros/hyrosSyncService";
 import { handleCanvaCallback, handleCanvaWebhook } from "../routers/canva";
 import multer from "multer";
 import * as db from "../db";
@@ -76,6 +78,9 @@ async function startServer() {
       "foreplay_creatives", "backgrounds", "ugc_uploads", "ugc_variants",
       "headline_bank", "face_swap_jobs", "organic_runs", "caption_examples",
       "scriptStructures", "scriptAudiences",
+      // Creative Analytics OS
+      "creativeAssets", "ads", "adDailyStats", "adAttributionStats",
+      "creativeScores", "adCreativeLinks", "adSyncState",
     ];
     try {
       const dbConn = await db.getDb();
@@ -311,6 +316,17 @@ async function startServer() {
     seedAdminUser();
     // Start auto-sync from Foreplay
     startAutoSync();
+    // Creative Analytics OS: start Meta + Hyros sync if configured
+    if (ENV.metaAccessToken && ENV.metaAdAccountIds) {
+      startAutoMetaSync();
+    } else {
+      console.log("[Startup] Meta sync skipped (META_ACCESS_TOKEN or META_AD_ACCOUNT_IDS not set)");
+    }
+    if (ENV.hyrosApiKey) {
+      startAutoHyrosSync();
+    } else {
+      console.log("[Startup] Hyros sync skipped (HYROS_API_KEY not set)");
+    }
   });
 }
 

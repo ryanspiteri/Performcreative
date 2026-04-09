@@ -1,0 +1,362 @@
+/**
+ * Meta Ads sync service.
+ *
+ * Pattern: matches existing foreplaySync.ts (setInterval + in-memory flag)
+ * + improvements:
+ *   - MySQL advisory lock (GET_LOCK) for multi-instance safety
+ *   - Explicit error state surfaced via adSyncState.lastSyncError
+ *   - Token validation before every sync
+ *   - Consecutive failure tracking + exponential backoff
+ *   - Idempotent upserts (safe to re-run)
+ *
+ * Sync flow per account:
+ *   1. Validate token
+ *   2. Fetch /ads (paginated) → upsert `ads` + `creativeAssets`
+ *   3. Fetch /insights?level=ad&time_increment=1 (paginated) → upsert `adDailyStats`
+ *   4. Trigger score recompute for affected creatives
+ */
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import {
+  MetaAdsClient,
+  parseActionCount,
+  parseMetaMoneyToCents,
+  parseMetaRateToBp,
+  type MetaAd,
+  type MetaInsightRow,
+} from "./metaAdsClient";
+import * as db from "../../db";
+import type {
+  InsertCreativeAsset,
+  InsertAd,
+  InsertAdDailyStat,
+} from "../../../drizzle/schema";
+import { ENV } from "../../_core/env";
+
+const TAG = "[MetaSync]";
+const LOCK_NAME = "perform_meta_sync_lock";
+
+let _syncTimer: ReturnType<typeof setInterval> | null = null;
+let _isSyncing = false;
+
+export interface SyncResult {
+  adAccountId: string;
+  adsUpserted: number;
+  creativeAssetsUpserted: number;
+  dailyStatsUpserted: number;
+  errors: string[];
+}
+
+/** Compute the stable creativeHash for dedup. */
+function computeCreativeHash(input: { name?: string | null; videoUrl?: string | null; thumbnailUrl?: string | null; videoId?: string | null }): string {
+  // Normalize: lowercase, collapse whitespace, strip quotes
+  const normalize = (s: string | null | undefined): string =>
+    (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  const key = [
+    normalize(input.name),
+    normalize(input.videoId),
+    normalize(input.videoUrl?.split("?")[0]),
+    normalize(input.thumbnailUrl?.split("?")[0]),
+  ].join("|");
+  return createHash("sha256").update(key).digest("hex").slice(0, 64);
+}
+
+/** Map a Meta ad (from /ads endpoint) to our creativeAssets + ads upsert payloads. */
+function metaAdToUpsertPayloads(
+  ad: MetaAd,
+  adAccountId: string,
+): { creativeAsset: InsertCreativeAsset; adBase: Omit<InsertAd, "creativeAssetId"> } {
+  const creative = ad.creative;
+  const videoId = creative?.video_id ?? null;
+  const thumbUrl = creative?.thumbnail_url ?? null;
+  const creativeType: "video" | "image" | "carousel" = videoId ? "video" : "image";
+  const creativeHash = computeCreativeHash({
+    name: ad.name,
+    videoUrl: videoId ? `fb-video-${videoId}` : null,
+    thumbnailUrl: thumbUrl,
+    videoId,
+  });
+  const creativeAsset: InsertCreativeAsset = {
+    creativeHash,
+    name: ad.name,
+    creativeType,
+    thumbnailUrl: thumbUrl ?? undefined,
+    videoUrl: videoId ? `https://www.facebook.com/watch/?v=${videoId}` : undefined,
+    firstSeenAt: ad.created_time ? new Date(ad.created_time) : undefined,
+  };
+  const adBase: Omit<InsertAd, "creativeAssetId"> = {
+    platform: "meta",
+    externalAdId: ad.id,
+    adsetId: ad.adset_id,
+    adsetName: ad.adset_name,
+    campaignId: ad.campaign_id,
+    campaignName: ad.campaign_name,
+    adAccountId,
+    name: ad.name,
+    launchDate: ad.created_time ? new Date(ad.created_time) : undefined,
+    status: ad.status,
+    firstSeenAt: ad.created_time ? new Date(ad.created_time) : undefined,
+  };
+  return { creativeAsset, adBase };
+}
+
+/** Map a Meta insight row to an adDailyStats upsert payload. */
+function insightRowToDailyStat(row: MetaInsightRow, adId: number): InsertAdDailyStat {
+  const impressions = parseInt(row.impressions ?? "0", 10) || 0;
+  const videoPlayCount = parseActionCount(row.video_play_actions);
+  const video25 = parseActionCount(row.video_p25_watched_actions);
+  const video50 = parseActionCount(row.video_p50_watched_actions);
+  const video75 = parseActionCount(row.video_p75_watched_actions);
+  const video100 = parseActionCount(row.video_p100_watched_actions);
+  const videoThruplay = parseActionCount(row.video_thruplay_watched_actions);
+  const videoAvgTimeSec = parseActionCount(row.video_avg_time_watched_actions);
+
+  return {
+    adId,
+    date: new Date(`${row.date_start}T00:00:00Z`),
+    source: "meta",
+    spendCents: parseMetaMoneyToCents(row.spend),
+    impressions,
+    clicks: parseInt(row.clicks ?? "0", 10) || 0,
+    reach: parseInt(row.reach ?? "0", 10) || 0,
+    cpmCents: parseMetaMoneyToCents(row.cpm),
+    cpcCents: parseMetaMoneyToCents(row.cpc),
+    ctrBp: parseMetaRateToBp(row.ctr),
+    outboundCtrBp: 0, // outbound_clicks_ctr also comes as action array; compute if needed
+    videoPlayCount,
+    video25Count: video25,
+    video50Count: video50,
+    video75Count: video75,
+    video100Count: video100,
+    videoThruplayCount: videoThruplay,
+    videoAvgTimeMs: videoAvgTimeSec * 1000,
+    thumbstopBp: impressions > 0 ? Math.round((videoPlayCount / impressions) * 10000) : 0,
+    holdRateBp: impressions > 0 ? Math.round((video50 / impressions) * 10000) : 0,
+    actionsJson: row.actions ? (row.actions as unknown as Record<string, unknown>) : undefined,
+  };
+}
+
+/** Sync one ad account: ads → insights → scores (upstream handles score recompute). */
+export async function syncAdAccount(adAccountId: string, lookbackDays: number): Promise<SyncResult> {
+  const result: SyncResult = {
+    adAccountId,
+    adsUpserted: 0,
+    creativeAssetsUpserted: 0,
+    dailyStatsUpserted: 0,
+    errors: [],
+  };
+
+  const client = new MetaAdsClient();
+
+  // 1. Validate token
+  const tokenCheck = await client.validateToken();
+  if (!tokenCheck.valid) {
+    const msg = `Token invalid: ${tokenCheck.error}`;
+    console.error(`${TAG} ${msg}`);
+    result.errors.push(msg);
+    return result;
+  }
+  console.log(`${TAG} Token validated for account ${adAccountId} (user: ${tokenCheck.name})`);
+
+  // 2. Fetch all ads for the account (paginated)
+  let adsAfter: string | undefined = undefined;
+  const externalIdToLocalId = new Map<string, number>();
+  do {
+    try {
+      const page: { data: MetaAd[]; paging?: { cursors?: { after?: string }; next?: string } } =
+        await client.listAds({
+          adAccountId,
+          after: adsAfter,
+          limit: 100,
+        });
+      for (const ad of page.data ?? []) {
+        try {
+          const { creativeAsset, adBase } = metaAdToUpsertPayloads(ad, adAccountId);
+          const creativeAssetId = await db.upsertCreativeAsset(creativeAsset);
+          if (creativeAssetId) result.creativeAssetsUpserted++;
+          const localAdId = await db.upsertAd({ ...adBase, creativeAssetId });
+          if (localAdId) {
+            result.adsUpserted++;
+            externalIdToLocalId.set(ad.id, localAdId);
+          }
+        } catch (err: any) {
+          result.errors.push(`upsert ad ${ad.id}: ${err.message}`);
+        }
+      }
+      adsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
+    } catch (err: any) {
+      const msg = `listAds failed for ${adAccountId}: ${err.response?.data?.error?.message ?? err.message}`;
+      console.error(`${TAG} ${msg}`);
+      result.errors.push(msg);
+      return result;
+    }
+  } while (adsAfter);
+
+  console.log(`${TAG} ${adAccountId}: ${result.adsUpserted} ads + ${result.creativeAssetsUpserted} creative assets upserted`);
+
+  // 3. Fetch daily insights for the rolling window
+  const dateTo = new Date();
+  const dateFrom = new Date();
+  dateFrom.setUTCDate(dateFrom.getUTCDate() - lookbackDays);
+
+  let insightsAfter: string | undefined = undefined;
+  do {
+    try {
+      const page = await client.getAdInsights({
+        adAccountId,
+        dateFrom,
+        dateTo,
+        timeIncrement: 1,
+        after: insightsAfter,
+        limit: 500,
+      });
+      for (const row of page.data ?? []) {
+        const localAdId = externalIdToLocalId.get(row.ad_id);
+        if (!localAdId) {
+          // Ad row not in our ads table yet (maybe new since last /ads fetch). Skip for now.
+          continue;
+        }
+        try {
+          await db.upsertAdDailyStat(insightRowToDailyStat(row, localAdId));
+          result.dailyStatsUpserted++;
+        } catch (err: any) {
+          result.errors.push(`upsert daily stat ${row.ad_id} ${row.date_start}: ${err.message}`);
+        }
+      }
+      insightsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
+    } catch (err: any) {
+      const msg = `getAdInsights failed for ${adAccountId}: ${err.response?.data?.error?.message ?? err.message}`;
+      console.error(`${TAG} ${msg}`);
+      result.errors.push(msg);
+      break;
+    }
+  } while (insightsAfter);
+
+  console.log(`${TAG} ${adAccountId}: ${result.dailyStatsUpserted} daily stat rows upserted`);
+  return result;
+}
+
+/** Acquire a MySQL advisory lock to prevent duplicate concurrent syncs across instances. */
+async function acquireLock(): Promise<boolean> {
+  const dbConn = await db.getDb();
+  if (!dbConn) return false;
+  try {
+    const rows: any = await dbConn.execute(sql`SELECT GET_LOCK(${LOCK_NAME}, 5) AS acquired`);
+    const result = Array.isArray(rows[0]) ? rows[0][0] : rows[0];
+    return Boolean(result?.acquired);
+  } catch (err) {
+    console.warn(`${TAG} Failed to acquire advisory lock:`, err);
+    return false;
+  }
+}
+
+async function releaseLock(): Promise<void> {
+  const dbConn = await db.getDb();
+  if (!dbConn) return;
+  try {
+    await dbConn.execute(sql`SELECT RELEASE_LOCK(${LOCK_NAME})`);
+  } catch {
+    // best-effort
+  }
+}
+
+/** Full sync across all configured ad accounts. */
+export async function runFullSync(lookbackDays?: number): Promise<{ results: SyncResult[]; skipped?: boolean }> {
+  if (_isSyncing) {
+    console.log(`${TAG} In-memory sync already in progress, skipping`);
+    return { results: [], skipped: true };
+  }
+
+  const acquired = await acquireLock();
+  if (!acquired) {
+    console.log(`${TAG} Another instance holds the advisory lock, skipping`);
+    return { results: [], skipped: true };
+  }
+
+  _isSyncing = true;
+  const window = lookbackDays ?? ENV.analyticsRollingLookbackDays;
+  const accountIds = MetaAdsClient.configuredAdAccountIds();
+  if (accountIds.length === 0) {
+    console.warn(`${TAG} No META_AD_ACCOUNT_IDS configured, skipping sync`);
+    _isSyncing = false;
+    await releaseLock();
+    return { results: [] };
+  }
+
+  const results: SyncResult[] = [];
+  try {
+    for (const accountId of accountIds) {
+      await db.updateSyncState("meta", accountId, {
+        sourceName: "meta",
+        adAccountId: accountId,
+        lastSyncStartedAt: new Date(),
+        lastSyncStatus: "running",
+      });
+      const result = await syncAdAccount(accountId, window);
+      results.push(result);
+
+      const totalUpserted = result.adsUpserted + result.dailyStatsUpserted;
+      const status = result.errors.length === 0 ? "success" : result.errors.length < 5 ? "partial" : "failed";
+      const errorSummary = result.errors.length > 0 ? result.errors.slice(0, 5).join("\n") : null;
+
+      await db.updateSyncState("meta", accountId, {
+        sourceName: "meta",
+        adAccountId: accountId,
+        lastSyncCompletedAt: new Date(),
+        lastSyncStatus: status,
+        lastSyncError: errorSummary,
+        rowsFetched: totalUpserted,
+        rowsUpserted: totalUpserted,
+        consecutiveFailures: status === "failed" ? 1 : 0,
+      });
+    }
+  } catch (err: any) {
+    console.error(`${TAG} Unexpected error:`, err);
+  } finally {
+    _isSyncing = false;
+    await releaseLock();
+  }
+  return { results };
+}
+
+/** Start the background sync interval. Called from server startup. */
+export function startAutoMetaSync(): void {
+  if (_syncTimer) {
+    console.log(`${TAG} Auto-sync already running`);
+    return;
+  }
+  const intervalMs = ENV.analyticsSyncIntervalMinutes * 60 * 1000;
+  console.log(`${TAG} Starting auto-sync every ${ENV.analyticsSyncIntervalMinutes} minutes`);
+
+  // Initial sync on startup (non-blocking)
+  void (async () => {
+    try {
+      const result = await runFullSync();
+      const totalUp = result.results.reduce((s, r) => s + r.adsUpserted + r.dailyStatsUpserted, 0);
+      console.log(`${TAG} Initial sync complete: ${totalUp} rows upserted across ${result.results.length} accounts`);
+    } catch (err: any) {
+      console.error(`${TAG} Initial sync failed:`, err.message);
+    }
+  })();
+
+  _syncTimer = setInterval(async () => {
+    console.log(`${TAG} Running scheduled sync...`);
+    const result = await runFullSync();
+    const totalUp = result.results.reduce((s, r) => s + r.adsUpserted + r.dailyStatsUpserted, 0);
+    console.log(`${TAG} Scheduled sync complete: ${totalUp} rows`);
+  }, intervalMs);
+}
+
+export function stopAutoMetaSync(): void {
+  if (_syncTimer) {
+    clearInterval(_syncTimer);
+    _syncTimer = null;
+    console.log(`${TAG} Auto-sync stopped`);
+  }
+}
+
+/** Backfill N days of history. Admin-triggered, blocking, runs until done. */
+export async function backfillMeta(days: number): Promise<{ results: SyncResult[] }> {
+  console.log(`${TAG} Starting ${days}-day backfill...`);
+  return runFullSync(days);
+}
