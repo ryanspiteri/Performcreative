@@ -136,6 +136,73 @@ function insightRowToDailyStat(row: MetaInsightRow, adId: number): InsertAdDaily
   };
 }
 
+/**
+ * Check if an error indicates Meta's "too much data" response.
+ * These are soft limits — the fix is to query a smaller window.
+ */
+function isReduceDataError(err: any): boolean {
+  const msg = (err?.response?.data?.error?.message ?? err?.message ?? "").toLowerCase();
+  return msg.includes("reduce the amount of data") || msg.includes("please reduce");
+}
+
+/**
+ * Fetch insights for a single date window with automatic retry on "reduce amount" errors.
+ * If Meta rejects the query, halve the window and recursively retry until it fits or the
+ * window is 1 day (smallest meaningful chunk).
+ */
+async function fetchInsightsWindow(
+  client: MetaAdsClient,
+  adAccountId: string,
+  windowFrom: Date,
+  windowTo: Date,
+  externalIdToLocalId: Map<string, number>,
+  result: SyncResult,
+): Promise<void> {
+  const windowDays = Math.max(1, Math.ceil((windowTo.getTime() - windowFrom.getTime()) / 86400000));
+  console.log(`${TAG} ${adAccountId}: fetching insights ${windowFrom.toISOString().slice(0, 10)} → ${windowTo.toISOString().slice(0, 10)} (${windowDays}d)`);
+
+  let insightsAfter: string | undefined = undefined;
+  do {
+    try {
+      const page = await client.getAdInsights({
+        adAccountId,
+        dateFrom: windowFrom,
+        dateTo: windowTo,
+        timeIncrement: 1,
+        after: insightsAfter,
+        limit: 100,
+      });
+      for (const row of page.data ?? []) {
+        const localAdId = externalIdToLocalId.get(row.ad_id);
+        if (!localAdId) {
+          // Ad row not in our ads table yet (maybe new since last /ads fetch, or archived)
+          continue;
+        }
+        try {
+          await db.upsertAdDailyStat(insightRowToDailyStat(row, localAdId));
+          result.dailyStatsUpserted++;
+        } catch (err: any) {
+          result.errors.push(`upsert daily stat ${row.ad_id} ${row.date_start}: ${err.message}`);
+        }
+      }
+      insightsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
+    } catch (err: any) {
+      if (isReduceDataError(err) && windowDays > 1) {
+        // Split window in half and retry both halves
+        const midpoint = new Date((windowFrom.getTime() + windowTo.getTime()) / 2);
+        console.log(`${TAG} ${adAccountId}: 'reduce amount' error, splitting window into 2 halves`);
+        await fetchInsightsWindow(client, adAccountId, windowFrom, midpoint, externalIdToLocalId, result);
+        await fetchInsightsWindow(client, adAccountId, midpoint, windowTo, externalIdToLocalId, result);
+        return;
+      }
+      const msg = `getAdInsights ${windowFrom.toISOString().slice(0, 10)}→${windowTo.toISOString().slice(0, 10)}: ${err.response?.data?.error?.message ?? err.message}`;
+      console.error(`${TAG} ${msg}`);
+      result.errors.push(msg);
+      return;
+    }
+  } while (insightsAfter);
+}
+
 /** Sync one ad account: ads → insights → scores (upstream handles score recompute). */
 export async function syncAdAccount(adAccountId: string, lookbackDays: number): Promise<SyncResult> {
   const result: SyncResult = {
@@ -158,19 +225,28 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
   }
   console.log(`${TAG} Token validated for account ${adAccountId} (user: ${tokenCheck.name})`);
 
-  // 2. Fetch all ads for the account (paginated)
+  // 2. Fetch ACTIVE ads for the account (paginated). We skip PAUSED/ARCHIVED to avoid
+  // pulling 20k+ historical ads — we only care about currently-spending creatives.
+  // Uses includeCreative=false to avoid Meta's "reduce amount of data" error on large
+  // accounts. Creative details (thumbnail, video_id) are fetched lazily per-ad below.
   let adsAfter: string | undefined = undefined;
   const externalIdToLocalId = new Map<string, number>();
+  const adsNeedingCreative: string[] = [];
+
   do {
     try {
       const page: { data: MetaAd[]; paging?: { cursors?: { after?: string }; next?: string } } =
         await client.listAds({
           adAccountId,
           after: adsAfter,
-          limit: 100,
+          limit: 50,
+          status: ["ACTIVE"],
+          includeCreative: false,
         });
       for (const ad of page.data ?? []) {
         try {
+          // Without creative nested data, the hash is weaker but still stable.
+          // We'll backfill creative details in the next step.
           const { creativeAsset, adBase } = metaAdToUpsertPayloads(ad, adAccountId);
           const creativeAssetId = await db.upsertCreativeAsset(creativeAsset);
           if (creativeAssetId) result.creativeAssetsUpserted++;
@@ -178,6 +254,7 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
           if (localAdId) {
             result.adsUpserted++;
             externalIdToLocalId.set(ad.id, localAdId);
+            adsNeedingCreative.push(ad.id);
           }
         } catch (err: any) {
           result.errors.push(`upsert ad ${ad.id}: ${err.message}`);
@@ -192,45 +269,58 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
     }
   } while (adsAfter);
 
-  console.log(`${TAG} ${adAccountId}: ${result.adsUpserted} ads + ${result.creativeAssetsUpserted} creative assets upserted`);
+  console.log(`${TAG} ${adAccountId}: ${result.adsUpserted} active ads + ${result.creativeAssetsUpserted} creative assets upserted (listing pass)`);
 
-  // 3. Fetch daily insights for the rolling window
-  const dateTo = new Date();
-  const dateFrom = new Date();
-  dateFrom.setUTCDate(dateFrom.getUTCDate() - lookbackDays);
-
-  let insightsAfter: string | undefined = undefined;
-  do {
+  // 2b. Backfill creative details per-ad. Individual ad fetches are small and never
+  // hit the "reduce amount" error. We skip ads that already have a thumbnail cached
+  // to save API calls on subsequent syncs.
+  let creativeBackfillCount = 0;
+  let creativeBackfillErrors = 0;
+  for (const externalAdId of adsNeedingCreative) {
     try {
-      const page = await client.getAdInsights({
-        adAccountId,
-        dateFrom,
-        dateTo,
-        timeIncrement: 1,
-        after: insightsAfter,
-        limit: 500,
-      });
-      for (const row of page.data ?? []) {
-        const localAdId = externalIdToLocalId.get(row.ad_id);
-        if (!localAdId) {
-          // Ad row not in our ads table yet (maybe new since last /ads fetch). Skip for now.
-          continue;
-        }
-        try {
-          await db.upsertAdDailyStat(insightRowToDailyStat(row, localAdId));
-          result.dailyStatsUpserted++;
-        } catch (err: any) {
-          result.errors.push(`upsert daily stat ${row.ad_id} ${row.date_start}: ${err.message}`);
-        }
+      // Check if we already have creative data cached
+      const existingAd = await db.getAdByExternalId("meta", externalAdId);
+      if (!existingAd) continue;
+      const existingAsset = existingAd.creativeAssetId ? await db.getCreativeAssetById(existingAd.creativeAssetId) : null;
+      if (existingAsset?.thumbnailUrl) continue; // already have creative data
+
+      const fullAd = await client.getAdById(externalAdId);
+      if (!fullAd || !fullAd.creative) continue;
+
+      const { creativeAsset } = metaAdToUpsertPayloads(fullAd, adAccountId);
+      const newAssetId = await db.upsertCreativeAsset(creativeAsset);
+      if (newAssetId && newAssetId !== existingAd.creativeAssetId) {
+        // Re-link ad to the new (properly hashed) creative asset
+        await db.upsertAd({
+          platform: "meta",
+          externalAdId,
+          adAccountId,
+          creativeAssetId: newAssetId,
+        } as any);
       }
-      insightsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
+      creativeBackfillCount++;
     } catch (err: any) {
-      const msg = `getAdInsights failed for ${adAccountId}: ${err.response?.data?.error?.message ?? err.message}`;
-      console.error(`${TAG} ${msg}`);
-      result.errors.push(msg);
-      break;
+      creativeBackfillErrors++;
+      // Log first 5 errors only to avoid spamming
+      if (creativeBackfillErrors <= 5) {
+        console.warn(`${TAG} Creative backfill failed for ${externalAdId}: ${err.message}`);
+      }
     }
-  } while (insightsAfter);
+  }
+  console.log(`${TAG} ${adAccountId}: ${creativeBackfillCount} creatives backfilled (${creativeBackfillErrors} errors)`);
+
+  // 3. Fetch daily insights in 3-day windows (prevents "reduce amount of data" errors)
+  // Meta's limit kicks in around 5000-10000 rows per response. For an account with
+  // 500+ active ads × 3 days = ~1500 rows per window, which fits comfortably.
+  const dateTo = new Date();
+  const WINDOW_DAYS = 3;
+  for (let offset = 0; offset < lookbackDays; offset += WINDOW_DAYS) {
+    const windowTo = new Date(dateTo);
+    windowTo.setUTCDate(windowTo.getUTCDate() - offset);
+    const windowFrom = new Date(windowTo);
+    windowFrom.setUTCDate(windowFrom.getUTCDate() - Math.min(WINDOW_DAYS - 1, lookbackDays - offset - 1));
+    await fetchInsightsWindow(client, adAccountId, windowFrom, windowTo, externalIdToLocalId, result);
+  }
 
   console.log(`${TAG} ${adAccountId}: ${result.dailyStatsUpserted} daily stat rows upserted`);
   return result;

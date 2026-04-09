@@ -179,17 +179,28 @@ export class MetaAdsClient {
     return res.data?.data ?? [];
   }
 
-  /** List ads for an account. Paginated — use `after` cursor to fetch next page. */
+  /**
+   * List ads for an account. Paginated, use `after` cursor to fetch next page.
+   *
+   * When `includeCreative=true` (default), fetches the nested creative object in
+   * the same request. This is convenient but can trigger Meta's "reduce amount"
+   * error on large accounts. When false, only lightweight metadata is returned
+   * and creative details must be fetched separately via getAdById.
+   */
   async listAds(params: {
     adAccountId: string;
     after?: string;
     limit?: number;
     status?: ("ACTIVE" | "PAUSED" | "ARCHIVED")[];
+    includeCreative?: boolean;
   }): Promise<MetaAdsPage> {
+    const baseFields = "id,name,status,adset_id,adset_name,campaign_id,campaign_name,created_time,updated_time";
+    const fields = params.includeCreative === false
+      ? baseFields
+      : `${baseFields},creative{id,thumbnail_url,image_url,video_id,effective_object_story_id,body,title}`;
     const query: Record<string, string | number> = {
-      fields:
-        "id,name,status,adset_id,adset_name,campaign_id,campaign_name,created_time,updated_time,creative{id,thumbnail_url,image_url,video_id,effective_object_story_id,body,title}",
-      limit: params.limit ?? 100,
+      fields,
+      limit: params.limit ?? 50,
       access_token: this.accessToken,
     };
     if (params.after) query.after = params.after;
