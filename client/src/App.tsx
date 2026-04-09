@@ -25,6 +25,9 @@ import CaptionGenerator from "./pages/CaptionGenerator";
 import ContentLibrary from "./pages/ContentLibrary";
 import VisualContent from "./pages/VisualContent";
 import PeopleLibrary from "./pages/PeopleLibrary";
+import CreativePerformance from "./pages/analytics/CreativePerformance";
+import AdDetail from "./pages/analytics/AdDetail";
+import SyncAdmin from "./pages/analytics/SyncAdmin";
 import AppLayout from "./components/AppLayout";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
@@ -56,6 +59,9 @@ function AuthenticatedRoutes() {
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />
         <Route path="/results/:id" component={Results} />
+        <Route path="/analytics" component={CreativePerformance} />
+        <Route path="/analytics/ads/:id" component={AdDetail} />
+        <Route path="/analytics/admin" component={SyncAdmin} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
