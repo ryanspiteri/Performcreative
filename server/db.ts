@@ -1,7 +1,21 @@
-import { eq, desc, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, sql, inArray, gte, lte, between, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { isNull } from "drizzle-orm";
-import { InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender, productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds, InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns, captionExamples, people, InsertPerson, scriptStructures, InsertScriptStructure, scriptAudiences, InsertScriptAudience } from "../drizzle/schema";
+import {
+  InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender,
+  productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds,
+  InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns,
+  captionExamples, people, InsertPerson, scriptStructures, InsertScriptStructure,
+  scriptAudiences, InsertScriptAudience,
+  // Creative Analytics OS
+  creativeAssets, InsertCreativeAsset, CreativeAsset,
+  ads, InsertAd, Ad,
+  adDailyStats, InsertAdDailyStat, AdDailyStat,
+  adAttributionStats, InsertAdAttributionStat, AdAttributionStat,
+  creativeScores, InsertCreativeScore, CreativeScore,
+  adCreativeLinks, InsertAdCreativeLink, AdCreativeLink,
+  adSyncState, InsertAdSyncState, AdSyncState,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -907,4 +921,285 @@ export async function deleteScriptAudience(audienceId: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(scriptAudiences).where(eq(scriptAudiences.audienceId, audienceId));
+}
+
+// ============================================================================
+// Creative Analytics OS — DB helpers (added 2026-04-09)
+// ============================================================================
+
+// --- creativeAssets ---
+
+export async function upsertCreativeAsset(data: InsertCreativeAsset): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const now = new Date();
+  await db.insert(creativeAssets).values({ ...data, lastSeenAt: now }).onDuplicateKeyUpdate({
+    set: {
+      name: data.name,
+      thumbnailUrl: data.thumbnailUrl,
+      videoUrl: data.videoUrl,
+      durationSeconds: data.durationSeconds,
+      lastSeenAt: now,
+      pipelineRunId: data.pipelineRunId,
+      foreplayCreativeId: data.foreplayCreativeId,
+      ugcVariantId: data.ugcVariantId,
+    },
+  });
+  const result = await db.select({ id: creativeAssets.id }).from(creativeAssets).where(eq(creativeAssets.creativeHash, data.creativeHash)).limit(1);
+  return result[0]?.id ?? 0;
+}
+
+export async function getCreativeAssetById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(creativeAssets).where(eq(creativeAssets.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getCreativeAssetByHash(creativeHash: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(creativeAssets).where(eq(creativeAssets.creativeHash, creativeHash)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function listCreativeAssets(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(creativeAssets).orderBy(desc(creativeAssets.lastSeenAt)).limit(limit);
+}
+
+// --- ads ---
+
+export async function upsertAd(data: InsertAd): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const now = new Date();
+  await db.insert(ads).values({ ...data, lastSeenAt: now }).onDuplicateKeyUpdate({
+    set: {
+      creativeAssetId: data.creativeAssetId,
+      adsetId: data.adsetId,
+      adsetName: data.adsetName,
+      campaignId: data.campaignId,
+      campaignName: data.campaignName,
+      adAccountId: data.adAccountId,
+      name: data.name,
+      permalink: data.permalink,
+      launchDate: data.launchDate,
+      status: data.status,
+      lastSeenAt: now,
+    },
+  });
+  const result = await db.select({ id: ads.id }).from(ads)
+    .where(and(eq(ads.platform, data.platform), eq(ads.externalAdId, data.externalAdId)))
+    .limit(1);
+  return result[0]?.id ?? 0;
+}
+
+export async function getAdByExternalId(platform: string, externalAdId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(ads)
+    .where(and(eq(ads.platform, platform), eq(ads.externalAdId, externalAdId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getAdById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(ads).where(eq(ads.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function listAdsForCreative(creativeAssetId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(ads).where(eq(ads.creativeAssetId, creativeAssetId)).orderBy(desc(ads.launchDate));
+}
+
+export async function listAdsForAccount(adAccountId: string, limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(ads).where(eq(ads.adAccountId, adAccountId)).orderBy(desc(ads.launchDate)).limit(limit);
+}
+
+// --- adDailyStats ---
+
+export async function upsertAdDailyStat(data: InsertAdDailyStat): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(adDailyStats).values(data).onDuplicateKeyUpdate({
+    set: {
+      spendCents: data.spendCents,
+      impressions: data.impressions,
+      clicks: data.clicks,
+      reach: data.reach,
+      cpmCents: data.cpmCents,
+      cpcCents: data.cpcCents,
+      ctrBp: data.ctrBp,
+      outboundCtrBp: data.outboundCtrBp,
+      videoPlayCount: data.videoPlayCount,
+      video25Count: data.video25Count,
+      video50Count: data.video50Count,
+      video75Count: data.video75Count,
+      video100Count: data.video100Count,
+      videoThruplayCount: data.videoThruplayCount,
+      videoAvgTimeMs: data.videoAvgTimeMs,
+      thumbstopBp: data.thumbstopBp,
+      holdRateBp: data.holdRateBp,
+      actionsJson: data.actionsJson,
+    },
+  });
+}
+
+export async function bulkUpsertAdDailyStats(rows: InsertAdDailyStat[]): Promise<number> {
+  let count = 0;
+  for (const row of rows) {
+    await upsertAdDailyStat(row);
+    count++;
+  }
+  return count;
+}
+
+export async function getAdDailyStatsForAd(adId: number, dateFrom: Date, dateTo: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(adDailyStats)
+    .where(and(eq(adDailyStats.adId, adId), gte(adDailyStats.date, dateFrom), lte(adDailyStats.date, dateTo)))
+    .orderBy(asc(adDailyStats.date));
+}
+
+// --- adAttributionStats ---
+
+export async function upsertAdAttributionStat(data: InsertAdAttributionStat): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(adAttributionStats).values(data).onDuplicateKeyUpdate({
+    set: {
+      adId: data.adId,
+      externalAdId: data.externalAdId,
+      source: data.source,
+      attributionModel: data.attributionModel,
+      spendCents: data.spendCents,
+      conversions: data.conversions,
+      revenueCents: data.revenueCents,
+      aovCents: data.aovCents,
+      roasBp: data.roasBp,
+      cpaCents: data.cpaCents,
+    },
+  });
+}
+
+export async function getAdAttributionStatsForAd(adId: number, dateFrom: Date, dateTo: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(adAttributionStats)
+    .where(and(eq(adAttributionStats.adId, adId), gte(adAttributionStats.date, dateFrom), lte(adAttributionStats.date, dateTo)))
+    .orderBy(asc(adAttributionStats.date));
+}
+
+/** Links unlinked adAttributionStats rows to ads rows when Meta sync catches up. */
+export async function linkAttributionStatsByHyrosAdId(hyrosAdId: string, adId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.update(adAttributionStats)
+    .set({ adId })
+    .where(and(eq(adAttributionStats.hyrosAdId, hyrosAdId), isNull(adAttributionStats.adId)));
+  return (result as any)[0]?.affectedRows ?? 0;
+}
+
+// --- creativeScores ---
+
+export async function upsertCreativeScore(data: InsertCreativeScore): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(creativeScores).values(data).onDuplicateKeyUpdate({
+    set: {
+      hookScore: data.hookScore,
+      watchScore: data.watchScore,
+      clickScore: data.clickScore,
+      convertScore: data.convertScore,
+      aggregatedImpressions: data.aggregatedImpressions,
+      aggregatedSpendCents: data.aggregatedSpendCents,
+      coverage: data.coverage,
+    },
+  });
+}
+
+export async function getLatestCreativeScore(creativeAssetId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(creativeScores)
+    .where(eq(creativeScores.creativeAssetId, creativeAssetId))
+    .orderBy(desc(creativeScores.date))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+// --- adCreativeLinks ---
+
+export async function createAdCreativeLink(data: InsertAdCreativeLink): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(adCreativeLinks).values(data);
+  return (result as any)[0]?.insertId as number;
+}
+
+export async function listAdCreativeLinksForAd(adId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(adCreativeLinks).where(eq(adCreativeLinks.adId, adId));
+}
+
+export async function listUnlinkedAds(adAccountId?: string, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  // Ads that have no entry in adCreativeLinks
+  const linkedAdIds = db.select({ adId: adCreativeLinks.adId }).from(adCreativeLinks).where(sql`${adCreativeLinks.adId} IS NOT NULL`);
+  if (adAccountId) {
+    return db.select().from(ads)
+      .where(and(eq(ads.adAccountId, adAccountId), sql`${ads.id} NOT IN ${linkedAdIds}`))
+      .limit(limit);
+  }
+  return db.select().from(ads).where(sql`${ads.id} NOT IN ${linkedAdIds}`).limit(limit);
+}
+
+// --- adSyncState ---
+
+export async function getSyncState(sourceName: string, adAccountId?: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const conditions = [eq(adSyncState.sourceName, sourceName)];
+  if (adAccountId) conditions.push(eq(adSyncState.adAccountId, adAccountId));
+  const result = await db.select().from(adSyncState).where(and(...conditions)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function listSyncStates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(adSyncState).orderBy(desc(adSyncState.lastSyncCompletedAt));
+}
+
+export async function upsertSyncState(data: InsertAdSyncState): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getSyncState(data.sourceName, data.adAccountId ?? undefined);
+  if (existing) {
+    await db.update(adSyncState).set(data).where(eq(adSyncState.id, existing.id));
+  } else {
+    await db.insert(adSyncState).values(data);
+  }
+}
+
+export async function updateSyncState(sourceName: string, adAccountId: string | undefined, patch: Partial<InsertAdSyncState>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getSyncState(sourceName, adAccountId);
+  if (existing) {
+    await db.update(adSyncState).set(patch).where(eq(adSyncState.id, existing.id));
+  } else {
+    await db.insert(adSyncState).values({ sourceName, adAccountId, ...patch } as InsertAdSyncState);
+  }
 }

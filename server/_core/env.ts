@@ -27,4 +27,16 @@ export const ENV = {
   autoEditApiUrl: process.env.AUTOEDIT_API_URL ?? "",
   /** Allowed base directory for local file paths (organic video pipeline). */
   localMediaBasePath: process.env.LOCAL_MEDIA_BASE_PATH ?? "",
+  /** Creative Analytics OS — Meta Marketing API (read-only ads + insights) */
+  metaAccessToken: process.env.META_ACCESS_TOKEN ?? "",
+  /** Comma-separated list of ad account IDs (e.g. "act_123,act_456") */
+  metaAdAccountIds: process.env.META_AD_ACCOUNT_IDS ?? "",
+  metaGraphApiVersion: process.env.META_GRAPH_API_VERSION ?? "v22.0",
+  /** Creative Analytics OS — Hyros reporting API (read-only attribution) */
+  hyrosApiKey: process.env.HYROS_API_KEY ?? "",
+  hyrosBaseUrl: process.env.HYROS_BASE_URL ?? "https://api.hyros.com/v1/api/v1.0",
+  /** Sync cadence + lookback windows */
+  analyticsSyncIntervalMinutes: parseInt(process.env.ANALYTICS_SYNC_INTERVAL_MINUTES ?? "60", 10),
+  analyticsBackfillLookbackDays: parseInt(process.env.ANALYTICS_BACKFILL_LOOKBACK_DAYS ?? "90", 10),
+  analyticsRollingLookbackDays: parseInt(process.env.ANALYTICS_ROLLING_LOOKBACK_DAYS ?? "14", 10),
 };
