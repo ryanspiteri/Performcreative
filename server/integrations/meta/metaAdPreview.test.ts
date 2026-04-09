@@ -136,3 +136,39 @@ describe("MetaAdsClient.getAdPreview", () => {
     expect(result.body).toContain("no iframe");
   });
 });
+
+describe("MetaAdsClient.getAdShareableLink", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("returns the preview_shareable_link from Meta's ad object", async () => {
+    mockGet.mockResolvedValue({
+      data: { id: "ad-1", preview_shareable_link: "https://fb.me/abc123" },
+    });
+
+    const client = new MetaAdsClient();
+    const link = await client.getAdShareableLink("ad-1");
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url, config] = mockGet.mock.calls[0];
+    expect(url).toBe("/ad-1");
+    expect(config.params.fields).toBe("preview_shareable_link");
+    expect(link).toBe("https://fb.me/abc123");
+  });
+
+  it("returns null if Meta omits the field", async () => {
+    mockGet.mockResolvedValue({ data: { id: "ad-1" } });
+    const client = new MetaAdsClient();
+    expect(await client.getAdShareableLink("ad-1")).toBeNull();
+  });
+
+  it("propagates axios errors so the tRPC layer can surface them", async () => {
+    mockGet.mockRejectedValue({
+      response: { status: 404, data: { error: { message: "Not found" } } },
+      message: "Request failed",
+    });
+    const client = new MetaAdsClient();
+    await expect(client.getAdShareableLink("ad-404")).rejects.toBeDefined();
+  });
+});

@@ -102,6 +102,22 @@ export default function SyncAdmin() {
     onError: (err) => toast.error(`Migration failed: ${err.message}`),
   });
 
+  const thumbnailStats = trpc.adminSync.getThumbnailStats.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
+  const forceBackfill = trpc.adminSync.forceCreativeBackfill.useMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Backfilled ${data.updated}/${data.candidates} creatives${data.errors > 0 ? ` (${data.errors} errors)` : ""}`,
+      );
+      thumbnailStats.refetch();
+      if (data.errorSamples.length > 0) {
+        console.warn("[Thumbnail backfill errors]", data.errorSamples);
+      }
+    },
+    onError: (err) => toast.error(`Backfill failed: ${err.message}`),
+  });
+
   const states = syncStatus.data?.states ?? [];
   const metaStates = states.filter((s) => s.sourceName === "meta");
   const hyrosStates = states.filter((s) => s.sourceName === "hyros");
@@ -374,6 +390,65 @@ export default function SyncAdmin() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Thumbnail diagnostic */}
+      <div className="px-6 mb-6">
+        <div className="p-6 rounded-lg bg-[#15171B] border border-[rgba(255,255,255,0.06)]">
+          <h2 className="text-base font-medium text-white mb-2">Creative Thumbnails</h2>
+          <p className="text-sm text-[#A1A1AA] mb-4">
+            Meta syncs creative thumbnails in a second pass per ad (the "reduce amount of data" fix only asks for thumbnails on demand). If the backfill pass errored or rate-limited, some creatives end up without thumbnails and show the fallback icon in <code className="text-[#FF3838]">/analytics</code>. Use this to retry.
+          </p>
+          {thumbnailStats.data ? (
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="flex flex-col">
+                <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-medium">Total creatives</span>
+                <span className="text-2xl font-mono tabular-nums text-white">{thumbnailStats.data.total.toLocaleString()}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-medium">With thumbnail</span>
+                <span className="text-2xl font-mono tabular-nums text-[#10B981]">{thumbnailStats.data.withThumbnail.toLocaleString()}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-medium">Missing thumbnail</span>
+                <span className={`text-2xl font-mono tabular-nums ${thumbnailStats.data.withoutThumbnail > 0 ? "text-[#F59E0B]" : "text-[#A1A1AA]"}`}>
+                  {thumbnailStats.data.withoutThumbnail.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-medium">Ads affected</span>
+                <span className={`text-2xl font-mono tabular-nums ${thumbnailStats.data.adsWithoutThumbnail > 0 ? "text-[#F59E0B]" : "text-[#A1A1AA]"}`}>
+                  {thumbnailStats.data.adsWithoutThumbnail.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-[#71717A] mb-4">Loading…</div>
+          )}
+          <Button
+            size="sm"
+            onClick={() => forceBackfill.mutate({ maxAds: 200 })}
+            disabled={forceBackfill.isPending || (thumbnailStats.data?.withoutThumbnail ?? 0) === 0}
+            className="bg-[#FF3838] hover:bg-[#FF5555] text-white rounded-sm disabled:opacity-50"
+          >
+            {forceBackfill.isPending ? (
+              <>
+                <Clock className="w-3 h-3 mr-1 animate-spin" />
+                Backfilling…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Backfill thumbnails (up to 200 ads)
+              </>
+            )}
+          </Button>
+          {forceBackfill.data && (
+            <div className="mt-3 text-xs text-[#A1A1AA] font-mono">
+              candidates={forceBackfill.data.candidates} fetched={forceBackfill.data.fetched} updated={forceBackfill.data.updated} errors={forceBackfill.data.errors}
             </div>
           )}
         </div>
