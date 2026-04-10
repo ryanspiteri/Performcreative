@@ -257,7 +257,13 @@ export class MetaAdsClient {
     status?: ("ACTIVE" | "PAUSED" | "ARCHIVED")[];
     includeCreative?: boolean;
   }): Promise<MetaAdsPage> {
-    const baseFields = "id,name,status,adset_id,adset_name,campaign_id,campaign_name,created_time,updated_time";
+    // Meta Graph API v22 rejects top-level adset_name/campaign_name on single
+    // object reads ("#100 Tried accessing nonexisting field"). The account-level
+    // /{account}/ads endpoint silently ignores them but the per-ad /{ad_id}
+    // endpoint errors out. Use nested adset{name}/campaign{name} in both places
+    // and flatten in the parse step below so the rest of the codebase can keep
+    // reading ad.adset_name / ad.campaign_name.
+    const baseFields = "id,name,status,adset_id,adset{name},campaign_id,campaign{name},created_time,updated_time";
     const fields = params.includeCreative === false
       ? baseFields
       : `${baseFields},creative{id,thumbnail_url,image_url,video_id,effective_object_story_id,body,title}`;
@@ -272,6 +278,11 @@ export class MetaAdsClient {
       query.filtering = JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: params.status }]);
     }
     const res = await this.http.get(`/${params.adAccountId}/ads`, { params: query });
+    // Flatten nested adset{name}/campaign{name} back to top-level adset_name/campaign_name
+    // so downstream code (metaAdsSyncService) keeps working without refactor.
+    if (res.data?.data) {
+      res.data.data = res.data.data.map(flattenNestedNameFields);
+    }
     return res.data;
   }
 
@@ -343,17 +354,25 @@ export class MetaAdsClient {
     return res.data;
   }
 
-  /** Get full ad details including creative. Used for one-off lookups. */
+  /**
+   * Get full ad details including creative. Used for one-off lookups
+   * (primarily the creative thumbnail/video_id backfill pass after the
+   * initial listAds listing pass).
+   *
+   * Uses nested adset{name}/campaign{name} and flattens the response back
+   * to the shape downstream code expects. See the comment on listAds for
+   * the full rationale.
+   */
   async getAdById(adId: string): Promise<MetaAd | null> {
     try {
       const res = await this.http.get(`/${adId}`, {
         params: {
           fields:
-            "id,name,status,adset_id,adset_name,campaign_id,campaign_name,created_time,updated_time,creative{id,thumbnail_url,image_url,video_id,effective_object_story_id,body,title}",
+            "id,name,status,adset_id,adset{name},campaign_id,campaign{name},created_time,updated_time,creative{id,thumbnail_url,image_url,video_id,effective_object_story_id,body,title}",
           access_token: this.accessToken,
         },
       });
-      return res.data;
+      return flattenNestedNameFields(res.data) as MetaAd;
     } catch (err: any) {
       if (err.response?.status === 404) return null;
       throw err;
@@ -492,4 +511,32 @@ export class MetaAdsClient {
 
 function toMetaDate(d: Date): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+/**
+ * Flatten Meta Graph API v22 nested name fields back to the top-level
+ * shape the rest of the codebase expects.
+ *
+ * Meta v22 rejects `adset_name` and `campaign_name` as top-level fields on
+ * per-ad reads (`/{ad_id}`) and silently drops them on account-level reads
+ * (`/{account}/ads`). The replacement is nested: `adset{name}`, `campaign{name}`.
+ *
+ * Rather than refactor every caller that reads `ad.adset_name`, we request
+ * the nested form and flatten here. Both shapes coexist on the returned
+ * object — `ad.adset` stays as `{id, name}` and `ad.adset_name` gets populated
+ * so downstream code keeps working.
+ */
+function flattenNestedNameFields<T extends Record<string, any>>(ad: T): T & {
+  adset_name?: string;
+  campaign_name?: string;
+} {
+  if (!ad || typeof ad !== "object") return ad;
+  const out: any = { ...ad };
+  if (ad.adset && typeof ad.adset === "object" && ad.adset.name) {
+    out.adset_name = ad.adset.name;
+  }
+  if (ad.campaign && typeof ad.campaign === "object" && ad.campaign.name) {
+    out.campaign_name = ad.campaign.name;
+  }
+  return out;
 }
