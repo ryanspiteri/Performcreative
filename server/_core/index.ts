@@ -11,6 +11,7 @@ import { startAutoSync } from "../services/foreplaySync";
 import { startAutoMetaSync } from "../integrations/meta/metaAdsSyncService";
 import { startAutoHyrosSync } from "../integrations/hyros/hyrosSyncService";
 import { handleCanvaCallback, handleCanvaWebhook } from "../routers/canva";
+import { handleMetaCallback } from "../routers/meta";
 import multer from "multer";
 import * as db from "../db";
 import { storagePut } from "../storage";
@@ -169,6 +170,7 @@ async function startServer() {
   
   // Canva OAuth callback
   app.get("/api/canva/callback", handleCanvaCallback);
+  app.get("/api/meta/callback", handleMetaCallback);
   
   // UGC video upload endpoint (multipart, bypasses tRPC)
   app.post("/api/ugc/upload", upload.single("video"), async (req, res) => {

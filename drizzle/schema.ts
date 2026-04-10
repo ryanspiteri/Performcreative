@@ -16,6 +16,13 @@ export const users = mysqlTable("users", {
   canvaAccessToken: text("canvaAccessToken"),
   canvaRefreshToken: text("canvaRefreshToken"),
   canvaTokenExpiresAt: timestamp("canvaTokenExpiresAt"),
+  // Meta Facebook Login user-scope token. Used to call /videos/{id}?fields=source
+  // which is denied for System User tokens. Long-lived (~60 days), refreshed via
+  // fb_exchange_token before each preview request. No separate refresh token —
+  // Facebook returns a new long-lived token in exchange for the current one.
+  metaUserAccessToken: text("metaUserAccessToken"),
+  metaUserTokenExpiresAt: timestamp("metaUserTokenExpiresAt"),
+  metaUserConnectedAt: timestamp("metaUserConnectedAt"),
   passwordHash: varchar("passwordHash", { length: 256 }),
 });
 
