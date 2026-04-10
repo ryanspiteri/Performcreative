@@ -21,6 +21,7 @@ import {
   type CreativePerfQuery,
 } from "../services/creativeAnalytics/reportService";
 import { MetaAdsClient, type MetaAdPreviewFormat } from "../integrations/meta/metaAdsClient";
+import { refreshAccessToken, computeExpiresAt } from "../services/meta";
 import * as db from "../db";
 
 const sortByEnum = z.enum(["spendCents", "roasBp", "hookScore", "watchScore", "clickScore", "convertScore", "launchDate"]);
@@ -158,8 +159,75 @@ export const analyticsRouter = router({
 
       const client = new MetaAdsClient();
 
-      // Fetch preview_shareable_link + the iframe preview in parallel.
-      // Either can fail independently; we want to return whatever works.
+      // Fetch the creative asset so we can extract a video_id for the native
+      // player path below.
+      const creativeAsset = await db.getCreativeAssetById(input.creativeAssetId);
+      const metaVideoId = extractVideoIdFromUrl(creativeAsset?.videoUrl ?? null);
+
+      // --- Path 1: user-token native video source (preferred when connected) ---
+      //
+      // If an admin has connected their Facebook account via /settings AND the
+      // creative is a video AND we can resolve its Meta video_id, try to fetch
+      // the signed MP4 source URL. This is the "play inline" path.
+      //
+      // Token refresh runs here too: if the stored token is expired, exchange
+      // it for a fresh long-lived token before calling. On refresh failure,
+      // clear the token silently and fall through to the shareable-link path —
+      // the user will see the fallback UI until they reconnect.
+      let videoSourceUrl: string | null = null;
+      let videoLength: number | null = null;
+      let userTokenUsed = false;
+      let userTokenRefreshAttempted = false;
+      let userTokenError: string | null = null;
+
+      if (metaVideoId && creativeAsset?.creativeType === "video") {
+        try {
+          const adminTokens = await db.getAdminMetaTokens();
+          if (adminTokens?.accessToken) {
+            let token = adminTokens.accessToken;
+            const now = new Date();
+            const expiresAt = adminTokens.expiresAt ? new Date(adminTokens.expiresAt) : null;
+            if (expiresAt && expiresAt.getTime() < now.getTime()) {
+              // Expired — attempt refresh.
+              userTokenRefreshAttempted = true;
+              try {
+                const refreshed = await refreshAccessToken(token);
+                token = refreshed.access_token;
+                const newExpiresAt = computeExpiresAt(refreshed);
+                await db.updateUserMetaTokens(adminTokens.openId!, token, newExpiresAt);
+              } catch (refreshErr: any) {
+                // Refresh failed — clear token and fall through.
+                console.warn(
+                  `[meta.getAdPreview] Token refresh failed, clearing:`,
+                  refreshErr?.message ?? refreshErr,
+                );
+                await db.updateUserMetaTokens(adminTokens.openId!, null, null);
+                throw refreshErr;
+              }
+            }
+
+            const videoSource = await client.getVideoSource(metaVideoId, token);
+            if (videoSource.source) {
+              videoSourceUrl = videoSource.source;
+              videoLength = videoSource.length;
+              userTokenUsed = true;
+            }
+          }
+        } catch (err: any) {
+          userTokenError =
+            err?.response?.data?.error?.message ??
+            err?.message ??
+            "Unknown error fetching video source";
+          console.warn(`[meta.getAdPreview] user-token video source failed: ${userTokenError}`);
+          // Fall through to the shareable-link path — not a fatal error.
+        }
+      }
+
+      // --- Path 2: fallback shareable link + iframe (PR #5 behavior) ---
+      //
+      // Always fetch these in parallel. They're used as a fallback if the
+      // user token path didn't produce a sourceUrl (creative isn't a video,
+      // no token connected, token refresh failed, Meta permission denied).
       const [shareableRes, previewRes] = await Promise.allSettled([
         client.getAdShareableLink(externalAdId),
         client.getAdPreview(externalAdId, input.format as MetaAdPreviewFormat),
@@ -170,9 +238,9 @@ export const analyticsRouter = router({
       const preview =
         previewRes.status === "fulfilled" ? previewRes.value : null;
 
-      // If BOTH calls failed, surface the clearer error (shareable link
-      // tends to have the cleaner failure message).
-      if (!previewShareableLink && !preview) {
+      // If BOTH calls failed AND we don't have a video source URL, there's
+      // nothing to return. Surface the clearest error.
+      if (!videoSourceUrl && !previewShareableLink && !preview) {
         const err: any =
           shareableRes.status === "rejected"
             ? shareableRes.reason
@@ -193,9 +261,34 @@ export const analyticsRouter = router({
         adId: externalAdId,
         adName: representativeAd.name,
         format: input.format,
+        // Native video path (preferred) — null if user token path didn't work
+        sourceUrl: videoSourceUrl,
+        videoLength,
+        // Fallback paths (always populated when available)
         previewShareableLink,
         iframeSrc: preview?.iframeSrc ?? null,
         adPermalinkUrl: representativeAd.permalink ?? null,
+        thumbnailUrl: creativeAsset?.thumbnailUrl ?? null,
+        creativeType: creativeAsset?.creativeType ?? null,
+        // Diagnostics — surfaced in the dialog for error states
+        providerUsed: userTokenUsed
+          ? ("user-video-source" as const)
+          : previewShareableLink
+            ? ("shareable-link" as const)
+            : ("iframe-fallback" as const),
+        userTokenRefreshAttempted,
+        userTokenError,
       };
     }),
 });
+
+/**
+ * Extract the Meta video_id from a `videoUrl` stored on a creativeAsset.
+ * The Meta sync writes these as `https://www.facebook.com/watch/?v={videoId}`.
+ * Returns null if the URL is empty or doesn't match the expected shape.
+ */
+function extractVideoIdFromUrl(videoUrl: string | null | undefined): string | null {
+  if (!videoUrl) return null;
+  const match = videoUrl.match(/[?&]v=(\d+)/);
+  return match?.[1] ?? null;
+}

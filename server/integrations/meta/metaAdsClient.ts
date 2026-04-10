@@ -47,6 +47,28 @@ export interface MetaAdPreview {
 const AD_PREVIEW_CACHE_TTL_MS = 15 * 60 * 1000;
 const adPreviewCache = new Map<string, { value: MetaAdPreview; expiresAt: number }>();
 
+/**
+ * Response from the `/videos/{id}?fields=source,permalink_url,length` Graph
+ * API call. Only accessible with a user-scope access token — System User
+ * tokens return `#10 permission denied`.
+ */
+export interface MetaVideoSource {
+  source: string | null;
+  permalinkUrl: string | null;
+  length: number | null;
+  picture: string | null;
+}
+
+/**
+ * Module-level cache for video sources. 5-minute TTL. Keyed on videoId only
+ * (not the token) because we only have one admin token at a time and the
+ * source URLs expire within hours anyway — if the cached value is stale,
+ * the signed URL will 403 at the video element and the onError handler
+ * triggers a refetch.
+ */
+const VIDEO_SOURCE_CACHE_TTL_MS = 5 * 60 * 1000;
+const videoSourceCache = new Map<string, { value: MetaVideoSource; expiresAt: number }>();
+
 /** Extract the `src="..."` URL out of a Meta-returned iframe body. */
 export function extractIframeSrc(body: string): string | null {
   if (!body) return null;
@@ -379,6 +401,58 @@ export class MetaAdsClient {
     const value: MetaAdPreview = { body, iframeSrc };
     adPreviewCache.set(cacheKey, { value, expiresAt: Date.now() + AD_PREVIEW_CACHE_TTL_MS });
     return value;
+  }
+
+  /**
+   * Fetch the source MP4 URL for a Meta video. This endpoint is DENIED for
+   * System User tokens (returns `#10 Application does not have permission`)
+   * but works for user-scope tokens held by app admins in Dev Mode. The
+   * caller passes a user access token obtained via the Facebook Login OAuth
+   * flow (see server/routers/meta.ts).
+   *
+   * Returns `{ source, permalinkUrl, length, width, height }` if successful.
+   * Caller handles permission errors by falling back to the "Open on Meta"
+   * link flow.
+   *
+   * Cached in-memory with a 5-minute TTL keyed on `videoId`. Meta's source
+   * URLs are signed and expire within hours, so 5 minutes is well within
+   * the valid window and saves redundant API calls when the user clicks the
+   * same creative multiple times.
+   */
+  async getVideoSource(
+    videoId: string,
+    userAccessToken: string,
+  ): Promise<MetaVideoSource> {
+    const cacheKey = videoId;
+    const cached = videoSourceCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const res = await this.http.get(`/${videoId}`, {
+      params: {
+        fields: "source,permalink_url,length,picture",
+        access_token: userAccessToken,
+      },
+    });
+
+    const value: MetaVideoSource = {
+      source: (res.data?.source as string | undefined) ?? null,
+      permalinkUrl: (res.data?.permalink_url as string | undefined) ?? null,
+      length: res.data?.length != null ? Number(res.data.length) : null,
+      picture: (res.data?.picture as string | undefined) ?? null,
+    };
+
+    videoSourceCache.set(cacheKey, {
+      value,
+      expiresAt: Date.now() + VIDEO_SOURCE_CACHE_TTL_MS,
+    });
+    return value;
+  }
+
+  /** Test-only: clear the module-level video source cache. */
+  static __clearVideoSourceCache(): void {
+    videoSourceCache.clear();
   }
 
   /**
