@@ -8,11 +8,15 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("../_core/env", () => ({
-  ENV: {
+// Mutable ENV mock — tests can flip metaOAuthConfigId between classic and
+// Facebook Login for Business modes to exercise both auth URL branches.
+// Must use vi.hoisted because vi.mock is hoisted above top-level declarations.
+const { mockEnv } = vi.hoisted(() => ({
+  mockEnv: {
     metaAppId: "test_app_id",
     metaAppSecret: "test_app_secret",
     metaOAuthRedirectUri: "https://www.performcreative.io/api/meta/callback",
+    metaOAuthConfigId: "",
     metaGraphApiVersion: "v22.0",
     // keep sibling ENV keys happy for any other module that might import this
     foreplayApiKey: "test",
@@ -29,6 +33,7 @@ vi.mock("../_core/env", () => ({
     databaseUrl: "",
   },
 }));
+vi.mock("../_core/env", () => ({ ENV: mockEnv }));
 
 import {
   generatePKCE,
@@ -78,7 +83,12 @@ describe("generatePKCE", () => {
 });
 
 describe("getMetaAuthUrl", () => {
-  it("builds a Facebook OAuth dialog URL with PKCE, state, and scopes", () => {
+  afterEach(() => {
+    mockEnv.metaOAuthConfigId = "";
+  });
+
+  it("classic Facebook Login: uses scope string when metaOAuthConfigId is empty", () => {
+    mockEnv.metaOAuthConfigId = "";
     const url = getMetaAuthUrl("https://example.com/cb", "state-123", "challenge-abc");
     expect(url).toContain("facebook.com/v22.0/dialog/oauth");
     expect(url).toContain("client_id=test_app_id");
@@ -88,6 +98,20 @@ describe("getMetaAuthUrl", () => {
     expect(url).toContain("code_challenge_method=S256");
     expect(url).toContain("scope=ads_read%2Cads_management%2Cbusiness_management");
     expect(url).toContain("response_type=code");
+    expect(url).not.toContain("config_id=");
+  });
+
+  it("Facebook Login for Business: uses config_id and omits scope when metaOAuthConfigId is set", () => {
+    mockEnv.metaOAuthConfigId = "2027948111462170";
+    const url = getMetaAuthUrl("https://example.com/cb", "state-456", "challenge-def");
+    expect(url).toContain("facebook.com/v22.0/dialog/oauth");
+    expect(url).toContain("client_id=test_app_id");
+    expect(url).toContain("config_id=2027948111462170");
+    expect(url).toContain("state=state-456");
+    expect(url).toContain("code_challenge=challenge-def");
+    // scope MUST be absent when config_id is present — Meta rejects requests
+    // that pass both.
+    expect(url).not.toContain("scope=");
   });
 });
 
