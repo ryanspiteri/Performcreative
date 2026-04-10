@@ -71,10 +71,13 @@ export function CreativePreviewDialog({
   }, [previewQuery.error]);
 
   // Decide which render branch to show. Video path wins if available AND the
-  // video element hasn't failed. Image path wins for image creatives. Otherwise
-  // fall through to the "Open on Meta" fallback from PR #5.
+  // video element hasn't failed. Image path wins for image creatives WITH a
+  // thumbnail URL. If the creative is labeled "image" but has no thumbnail
+  // (e.g. Meta creative backfill errored for this ad), fall through to the
+  // "Open on Meta" fallback which renders a placeholder + link rather than
+  // rendering literally nothing.
   const canPlayInline = !!sourceUrl && !videoFailed;
-  const isImageCreative = creativeType === "image";
+  const canRenderImage = creativeType === "image" && !!thumbnailUrl;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,17 +133,21 @@ export function CreativePreviewDialog({
             </div>
           )}
 
-          {/* Path 2: image creative rendered full-size */}
-          {!previewQuery.isLoading && !canPlayInline && isImageCreative && thumbnailUrl && (
+          {/* Path 2: image creative rendered full-size (requires thumbnailUrl) */}
+          {!previewQuery.isLoading && !canPlayInline && canRenderImage && (
             <img
-              src={thumbnailUrl}
+              src={thumbnailUrl!}
               alt={creativeName}
               className="max-w-full max-h-[540px] rounded-md object-contain bg-[#15171B]"
             />
           )}
 
-          {/* Path 3: fallback thumbnail + Open on Meta button (unconnected state or video failed) */}
-          {!previewQuery.isLoading && !canPlayInline && !isImageCreative && (
+          {/* Path 3: fallback thumbnail + Open on Meta button.
+              Fires when: not playing a video, not rendering a full-size image
+              (either not an image creative, or an image creative whose thumbnail
+              didn't get backfilled by Meta). Shows a thumbnail placeholder + a
+              permalink so the user still has SOMETHING to interact with. */}
+          {!previewQuery.isLoading && !canPlayInline && !canRenderImage && (
             <>
               <div className="w-full flex justify-center">
                 {thumbnailUrl ? (
