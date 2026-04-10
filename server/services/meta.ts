@@ -55,28 +55,39 @@ export function generatePKCE() {
 }
 
 /**
- * Build the Facebook Login authorization URL. Uses the classic Facebook
- * Login dialog (not Facebook Login for Business), which works for any app
- * that has `ads_read` in its Standard Access permissions.
+ * Build the Facebook Login authorization URL.
  *
- * The classic dialog accepts a plain redirect_uri + scope string and does
- * not require a `config_id`. If the app is set up with Facebook Login for
- * Business, this URL still works as long as the redirect URI is whitelisted
- * in BOTH the legacy "Valid OAuth Redirect URIs" AND the FBL4B Configurations.
+ * Two modes:
+ *  1. Facebook Login for Business (FBL4B) — when ENV.metaOAuthConfigId is set,
+ *     we pass `config_id` and omit `scope`. The configuration defines the
+ *     permissions bundle server-side so the scope string is redundant (and
+ *     in fact Meta rejects requests that pass both).
+ *  2. Classic Facebook Login — fallback for apps without FBL4B. Passes the
+ *     scope string directly.
+ *
+ * PKCE is included in both modes defensively: a CSRF attacker who steals the
+ * state cookie still can't exchange the code without also stealing the
+ * verifier from server memory.
  */
 export function getMetaAuthUrl(redirectUri: string, state: string, codeChallenge: string): string {
-  const params = new URLSearchParams({
+  const base: Record<string, string> = {
     client_id: ENV.metaAppId,
     redirect_uri: redirectUri,
     response_type: "code",
     state,
-    scope: "ads_read,ads_management,business_management",
-    // PKCE is supported by Facebook Login but optional. Include it defensively
-    // so a CSRF attacker who steals the state cookie still can't exchange the
-    // code without also stealing the verifier from server memory.
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
-  });
+  };
+
+  if (ENV.metaOAuthConfigId) {
+    // Facebook Login for Business path
+    base.config_id = ENV.metaOAuthConfigId;
+  } else {
+    // Classic Facebook Login path
+    base.scope = "ads_read,ads_management,business_management";
+  }
+
+  const params = new URLSearchParams(base);
   return `${META_OAUTH_DIALOG_URL}/${ENV.metaGraphApiVersion}/dialog/oauth?${params.toString()}`;
 }
 

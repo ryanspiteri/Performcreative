@@ -33,6 +33,16 @@ export const ENV = {
   metaAppSecret: process.env.META_APP_SECRET ?? "",
   metaOAuthRedirectUri:
     process.env.META_OAUTH_REDIRECT_URI ?? "https://www.performcreative.io/api/meta/callback",
+  /**
+   * Facebook Login for Business Configuration ID. Required when the app is
+   * set up with the newer "Facebook Login for Business" product (as opposed
+   * to the classic Facebook Login). Each configuration bundles a set of
+   * permissions + a login variation and gets its own numeric ID.
+   *
+   * Create at: https://developers.facebook.com/apps/{app}/fb-login-for-business/configurations/
+   * Leave empty if using the classic Facebook Login product.
+   */
+  metaOAuthConfigId: process.env.META_OAUTH_CONFIG_ID ?? "",
   /** AutoEdit Python service URL (organic video pipeline). Phase 1: local, Phase 3: Docker. */
   autoEditApiUrl: process.env.AUTOEDIT_API_URL ?? "",
   /** Allowed base directory for local file paths (organic video pipeline). */
