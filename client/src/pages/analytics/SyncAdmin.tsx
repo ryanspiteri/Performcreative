@@ -57,6 +57,18 @@ export default function SyncAdmin() {
   const syncStatus = trpc.adminSync.getSyncStatus.useQuery(undefined, { refetchInterval: 10000 });
   const metaToken = trpc.adminSync.validateMetaToken.useQuery();
   const hyrosKey = trpc.adminSync.validateHyrosKey.useQuery();
+  const metaUserStatus = trpc.meta.isConnected.useQuery();
+  const addMetaColumns = trpc.adminSync.addMetaUserTokenColumns.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`Meta user columns ready: ${data.summary}`);
+        metaUserStatus.refetch();
+      } else {
+        toast.error(`Migration incomplete: ${data.summary}`);
+      }
+    },
+    onError: (err) => toast.error(`Column migration failed: ${err.message}`),
+  });
 
   const triggerMetaSync = trpc.adminSync.triggerMetaSync.useMutation({
     onSuccess: () => {
@@ -488,10 +500,54 @@ export default function SyncAdmin() {
               <span className="text-[#A1A1AA]">Hyros key valid:</span>
               <span className="font-mono text-white">{hyrosKey.data?.valid ? "yes" : "no"}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-[#A1A1AA]">Meta user login (inline video playback):</span>
+              <span className="font-mono text-white">
+                {metaUserStatus.data?.connected ? (
+                  <>
+                    connected
+                    {metaUserStatus.data.name ? ` as ${metaUserStatus.data.name}` : ""}
+                  </>
+                ) : (
+                  <>
+                    not connected —{" "}
+                    <a
+                      href="/settings"
+                      className="text-[#FF3838] hover:text-[#FF5555] underline"
+                    >
+                      connect in Settings
+                    </a>
+                  </>
+                )}
+              </span>
+            </div>
           </div>
           <p className="text-xs text-[#71717A] mt-4">
-            Env vars: META_ACCESS_TOKEN, META_AD_ACCOUNT_IDS, HYROS_API_KEY — edit on DigitalOcean App Platform.
+            Env vars: META_ACCESS_TOKEN, META_AD_ACCOUNT_IDS, HYROS_API_KEY, META_APP_ID, META_APP_SECRET, META_OAUTH_REDIRECT_URI — edit on DigitalOcean App Platform.
           </p>
+          <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)]">
+            <p className="text-xs text-[#A1A1AA] mb-2">
+              One-time: add the Meta user-token columns to the <code className="text-[#FF3838]">users</code> table before connecting Facebook in Settings.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => addMetaColumns.mutate()}
+              disabled={addMetaColumns.isPending}
+              className="border-[rgba(255,255,255,0.10)] text-[#A1A1AA]"
+            >
+              {addMetaColumns.isPending ? (
+                <><Clock className="w-3 h-3 mr-1 animate-spin" />Adding…</>
+              ) : (
+                "Add Meta user token columns"
+              )}
+            </Button>
+            {addMetaColumns.data && (
+              <div className="mt-2 text-xs font-mono text-[#A1A1AA]">
+                {addMetaColumns.data.summary}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
