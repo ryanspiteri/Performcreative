@@ -171,6 +171,92 @@ async function startServer() {
   // Canva OAuth callback
   app.get("/api/canva/callback", handleCanvaCallback);
   app.get("/api/meta/callback", handleMetaCallback);
+
+  /**
+   * EMERGENCY MIGRATION ENDPOINT — ADDED AS A HOTFIX
+   *
+   * PR #6 added metaUserAccessToken/ExpiresAt/ConnectedAt columns to the
+   * users table via a tRPC-gated migration procedure, but the Drizzle
+   * schema queries include those columns in every `users` SELECT. This
+   * means login is broken until the columns exist, but the admin UI that
+   * triggers the migration requires login. Chicken-and-egg.
+   *
+   * This endpoint runs the same idempotent ALTER TABLE outside the auth
+   * flow, gated by a simple token derived from META_APP_SECRET so only
+   * someone with DO env access can trigger it.
+   *
+   * After running this once successfully, remove this endpoint in a
+   * follow-up commit. It is NOT intended to be permanent.
+   *
+   * Usage:
+   *   curl -X POST "https://www.performcreative.io/api/_emergency/add-meta-columns?token=<sha256 of META_APP_SECRET>"
+   */
+  app.post("/api/_emergency/add-meta-columns", async (req, res) => {
+    try {
+      // Token gate — prevents random strangers from poking the endpoint.
+      // Uses SHA-256 of the app secret so we don't have to expose the raw
+      // secret in curl history. Compute locally with:
+      //   echo -n "$META_APP_SECRET" | shasum -a 256 | cut -d' ' -f1
+      const crypto = await import("crypto");
+      if (!ENV.metaAppSecret) {
+        return res.status(503).json({ error: "META_APP_SECRET not set — cannot gate endpoint" });
+      }
+      const expected = crypto.createHash("sha256").update(ENV.metaAppSecret).digest("hex");
+      const provided = (req.query.token as string | undefined) ?? "";
+      if (provided !== expected) {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+
+      const dbConn = await db.getDb();
+      if (!dbConn) {
+        return res.status(500).json({ error: "Database not available" });
+      }
+
+      const { sql } = await import("drizzle-orm");
+      const requiredColumns = [
+        { name: "metaUserAccessToken", ddl: "TEXT NULL" },
+        { name: "metaUserTokenExpiresAt", ddl: "TIMESTAMP NULL" },
+        { name: "metaUserConnectedAt", ddl: "TIMESTAMP NULL" },
+      ];
+
+      const results: { column: string; status: "exists" | "added" | "failed"; error?: string }[] = [];
+
+      for (const col of requiredColumns) {
+        try {
+          const existing: any = await dbConn.execute(sql`
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'users'
+              AND COLUMN_NAME = ${col.name}
+            LIMIT 1
+          `);
+          const rows = Array.isArray(existing[0]) ? existing[0] : existing;
+          if (rows.length > 0) {
+            results.push({ column: col.name, status: "exists" });
+            continue;
+          }
+          await dbConn.execute(sql.raw(`ALTER TABLE \`users\` ADD COLUMN \`${col.name}\` ${col.ddl}`));
+          results.push({ column: col.name, status: "added" });
+        } catch (err: any) {
+          results.push({ column: col.name, status: "failed", error: err?.message ?? String(err) });
+        }
+      }
+
+      const addedCount = results.filter((r) => r.status === "added").length;
+      const existedCount = results.filter((r) => r.status === "exists").length;
+      const failedCount = results.filter((r) => r.status === "failed").length;
+
+      return res.json({
+        success: failedCount === 0,
+        summary: `${addedCount} added, ${existedCount} already existed, ${failedCount} failed`,
+        results,
+        note: "Remove this endpoint in a follow-up commit once login is working.",
+      });
+    } catch (err: any) {
+      console.error("[EmergencyMigration] failed:", err);
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
   
   // UGC video upload endpoint (multipart, bypasses tRPC)
   app.post("/api/ugc/upload", upload.single("video"), async (req, res) => {
