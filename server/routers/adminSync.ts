@@ -415,6 +415,61 @@ export const adminSyncRouter = router({
    * Stops early if `maxAds` is reached to avoid burning the whole Meta
    * rate limit on one click. Defaults to 200.
    */
+  /**
+   * Additive migration: add three columns to the users table for storing
+   * Meta Facebook Login user tokens. Idempotent — checks INFORMATION_SCHEMA
+   * for each column and only ALTERs if it's missing. Safe to re-run.
+   *
+   * Required once before the Meta Connect flow on /settings can be used.
+   * Exposed as an admin procedure so it runs over the same self-serve path
+   * as runMigration, with no local DB access needed.
+   */
+  addMetaUserTokenColumns: adminProcedure.mutation(async () => {
+    const dbConn = await db.getDb();
+    if (!dbConn) {
+      throw new Error("Database not available");
+    }
+
+    const requiredColumns = [
+      { name: "metaUserAccessToken", ddl: "TEXT NULL" },
+      { name: "metaUserTokenExpiresAt", ddl: "TIMESTAMP NULL" },
+      { name: "metaUserConnectedAt", ddl: "TIMESTAMP NULL" },
+    ];
+
+    const results: { column: string; status: "exists" | "added" | "failed"; error?: string }[] = [];
+
+    for (const col of requiredColumns) {
+      try {
+        const existing: any = await dbConn.execute(sql`
+          SELECT COLUMN_NAME FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'users'
+            AND COLUMN_NAME = ${col.name}
+          LIMIT 1
+        `);
+        const rows = Array.isArray(existing[0]) ? existing[0] : existing;
+        if (rows.length > 0) {
+          results.push({ column: col.name, status: "exists" });
+          continue;
+        }
+        await dbConn.execute(sql.raw(`ALTER TABLE \`users\` ADD COLUMN \`${col.name}\` ${col.ddl}`));
+        results.push({ column: col.name, status: "added" });
+      } catch (err: any) {
+        results.push({ column: col.name, status: "failed", error: err?.message ?? String(err) });
+      }
+    }
+
+    const addedCount = results.filter((r) => r.status === "added").length;
+    const existedCount = results.filter((r) => r.status === "exists").length;
+    const failedCount = results.filter((r) => r.status === "failed").length;
+
+    return {
+      success: failedCount === 0,
+      summary: `${addedCount} added, ${existedCount} already existed, ${failedCount} failed`,
+      results,
+    };
+  }),
+
   forceCreativeBackfill: adminProcedure
     .input(
       z.object({

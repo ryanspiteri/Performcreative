@@ -22,6 +22,7 @@ import { SignJWT } from "jose";
 import { storagePut } from "./storage";
 import { ACTIVE_PRODUCTS } from "../drizzle/schema";
 import { canvaRouter } from "./routers/canva";
+import { metaRouter } from "./routers/meta";
 import { organicRouter } from "./routers/organic";
 import { scriptGeneratorRouter } from "./routers/scriptGenerator";
 import { analyticsRouter } from "./routers/analytics";
@@ -363,6 +364,7 @@ Generate exactly ONE script variant matching these persona settings exactly. Pre
 export const appRouter = router({
   system: systemRouter,
   canva: canvaRouter,
+  meta: metaRouter,
   faceSwap: faceSwapRouter,
   organic: organicRouter,
   scriptGenerator: scriptGeneratorRouter,

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { MetaConnectionCard } from "@/components/settings/MetaConnectionCard";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -30,6 +31,13 @@ export default function Settings() {
       window.history.replaceState({}, "", "/settings");
     } else if (params.get("canva") === "error") {
       toast.error("Canva connection failed");
+      window.history.replaceState({}, "", "/settings");
+    } else if (params.get("meta") === "connected") {
+      toast.success("Facebook connected — inline ad previews enabled");
+      window.history.replaceState({}, "", "/settings");
+    } else if (params.get("meta") === "error") {
+      const message = params.get("message") ?? "Unknown error";
+      toast.error(`Facebook connection failed: ${message}`);
       window.history.replaceState({}, "", "/settings");
     }
   }, [refetch]);
@@ -95,6 +103,8 @@ export default function Settings() {
             </div>
           </div>
         </div>
+
+        {isAdmin && <MetaConnectionCard />}
 
         <div className="bg-[#191B1F] border border-white/5 rounded-xl p-6">
           <h3 className="text-white font-semibold mb-4 flex items-center gap-2">

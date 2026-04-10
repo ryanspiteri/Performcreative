@@ -23,6 +23,16 @@ export const ENV = {
   CANVA_CLIENT_SECRET: process.env.CANVA_CLIENT_SECRET ?? "",
   CANVA_WEBHOOK_SECRET: process.env.CANVA_WEBHOOK_SECRET ?? "",
   APP_URL: process.env.APP_URL ?? "https://www.performcreative.io",
+  /**
+   * Meta Facebook Login OAuth — user-scope token for reading ad video sources
+   * and other fields denied to the System User token used by the sync pipeline.
+   * Obtained once via the "Connect Facebook" button on /settings, stored per-
+   * user in users.metaUserAccessToken. See server/routers/meta.ts for the flow.
+   */
+  metaAppId: process.env.META_APP_ID ?? "",
+  metaAppSecret: process.env.META_APP_SECRET ?? "",
+  metaOAuthRedirectUri:
+    process.env.META_OAUTH_REDIRECT_URI ?? "https://www.performcreative.io/api/meta/callback",
   /** AutoEdit Python service URL (organic video pipeline). Phase 1: local, Phase 3: Docker. */
   autoEditApiUrl: process.env.AUTOEDIT_API_URL ?? "",
   /** Allowed base directory for local file paths (organic video pipeline). */

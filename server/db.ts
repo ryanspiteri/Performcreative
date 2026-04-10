@@ -1,6 +1,6 @@
 import { eq, desc, and, sql, inArray, gte, lte, between, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { isNull } from "drizzle-orm";
+import { isNull, isNotNull } from "drizzle-orm";
 import {
   InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender,
   productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds,
@@ -852,6 +852,73 @@ export async function getUserCanvaTokens(openId: string) {
   .where(eq(users.openId, openId))
   .limit(1);
 
+  return result.length > 0 ? result[0] : null;
+}
+
+// ─── Meta user-scope token management ────────────────────────────────────────
+
+/**
+ * Update a user's Meta Facebook Login token. Passing `null` for both fields
+ * disconnects the account.
+ */
+export async function updateUserMetaTokens(
+  openId: string,
+  accessToken: string | null,
+  expiresAt: Date | null,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users)
+    .set({
+      metaUserAccessToken: accessToken,
+      metaUserTokenExpiresAt: expiresAt,
+      metaUserConnectedAt: accessToken ? new Date() : null,
+    })
+    .where(eq(users.openId, openId));
+}
+
+/** Fetch a specific user's Meta token + expiry + connectedAt. */
+export async function getUserMetaTokens(openId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select({
+    accessToken: users.metaUserAccessToken,
+    expiresAt: users.metaUserTokenExpiresAt,
+    connectedAt: users.metaUserConnectedAt,
+    name: users.name,
+  })
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Find the admin user's Meta token. Used by the preview flow which needs one
+ * token to serve all analytics viewers (single-admin shop). Looks for the
+ * OWNER_OPEN_ID first, then falls back to any user with role='admin' that has
+ * a non-null token, ordered by most recently connected.
+ */
+export async function getAdminMetaTokens() {
+  const db = await getDb();
+  if (!db) return null;
+  // Try owner first if configured.
+  if (ENV.ownerOpenId) {
+    const owner = await getUserMetaTokens(ENV.ownerOpenId);
+    if (owner?.accessToken) return { ...owner, openId: ENV.ownerOpenId };
+  }
+  // Fallback: any admin with a token, newest connection first.
+  const result = await db.select({
+    openId: users.openId,
+    accessToken: users.metaUserAccessToken,
+    expiresAt: users.metaUserTokenExpiresAt,
+    connectedAt: users.metaUserConnectedAt,
+    name: users.name,
+  })
+    .from(users)
+    .where(and(eq(users.role, "admin"), isNotNull(users.metaUserAccessToken)))
+    .orderBy(desc(users.metaUserConnectedAt))
+    .limit(1);
   return result.length > 0 ? result[0] : null;
 }
 

@@ -137,6 +137,73 @@ describe("MetaAdsClient.getAdPreview", () => {
   });
 });
 
+describe("MetaAdsClient.getVideoSource", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    MetaAdsClient.__clearVideoSourceCache();
+  });
+
+  it("calls /{videoId}?fields=source,permalink_url,length,picture with the user token", async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        source: "https://fbcdn.net/video/signed/abc.mp4",
+        permalink_url: "https://facebook.com/video/xyz",
+        length: 30.5,
+        picture: "https://fbcdn.net/thumb.jpg",
+      },
+    });
+
+    const client = new MetaAdsClient();
+    const result = await client.getVideoSource("3060837970771937", "user_token_xyz");
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url, config] = mockGet.mock.calls[0];
+    expect(url).toBe("/3060837970771937");
+    expect(config.params.fields).toBe("source,permalink_url,length,picture");
+    expect(config.params.access_token).toBe("user_token_xyz");
+
+    expect(result.source).toBe("https://fbcdn.net/video/signed/abc.mp4");
+    expect(result.permalinkUrl).toBe("https://facebook.com/video/xyz");
+    expect(result.length).toBe(30.5);
+    expect(result.picture).toBe("https://fbcdn.net/thumb.jpg");
+  });
+
+  it("caches the response — two rapid calls hit the API once", async () => {
+    mockGet.mockResolvedValue({
+      data: { source: "https://fbcdn.net/video/cached.mp4", permalink_url: null, length: null, picture: null },
+    });
+
+    const client = new MetaAdsClient();
+    const a = await client.getVideoSource("vid-1", "tok");
+    const b = await client.getVideoSource("vid-1", "tok");
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(a.source).toBe(b.source);
+  });
+
+  it("returns null fields gracefully when Meta omits them", async () => {
+    mockGet.mockResolvedValue({ data: {} });
+    const client = new MetaAdsClient();
+    const result = await client.getVideoSource("vid-2", "tok");
+    expect(result.source).toBeNull();
+    expect(result.permalinkUrl).toBeNull();
+    expect(result.length).toBeNull();
+    expect(result.picture).toBeNull();
+  });
+
+  it("propagates axios permission errors (this is how System User fails)", async () => {
+    mockGet.mockRejectedValue({
+      response: {
+        status: 400,
+        data: { error: { message: "(#10) Application does not have permission for this action" } },
+      },
+      message: "Request failed with status code 400",
+    });
+    const client = new MetaAdsClient();
+    await expect(client.getVideoSource("vid-denied", "system_user_token")).rejects.toBeDefined();
+  });
+});
+
 describe("MetaAdsClient.getAdShareableLink", () => {
   beforeEach(() => {
     mockGet.mockReset();
