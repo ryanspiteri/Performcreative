@@ -603,7 +603,8 @@ export const appRouter = router({
     syncForeplayNow: protectedProcedure.mutation(async () => {
       // Clean up existing content duplicates before syncing
       const deleted = await db.deduplicateExistingCreatives();
-      const result = await syncFromForeplay();
+      // User-initiated: force past the 23h auto-sync guard
+      const result = await syncFromForeplay({ force: true });
       if (result.error) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
       }

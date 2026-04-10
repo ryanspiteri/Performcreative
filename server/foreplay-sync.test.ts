@@ -136,8 +136,8 @@ describe("Foreplay Sync", () => {
   });
 
   describe("Sync status", () => {
-    it("should return sync status", () => {
-      const status = getSyncStatus();
+    it("should return sync status", async () => {
+      const status = await getSyncStatus();
       expect(status).toHaveProperty("lastSyncAt");
       expect(status).toHaveProperty("isSyncing");
       expect(status).toHaveProperty("autoSyncActive");
