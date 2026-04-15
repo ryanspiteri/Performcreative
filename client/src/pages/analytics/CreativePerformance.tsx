@@ -31,17 +31,27 @@ import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings, PlayCircle } from "
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CreativePreviewDialog } from "@/components/analytics/CreativePreviewDialog";
 
-type SortBy = "spendCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
+type SortBy = "spendCents" | "revenueCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
 type CreativeType = "all" | "video" | "image";
 type SortDir = "asc" | "desc";
 
 // Allowlist for URL query-string validation. Invalid values fall back to defaults.
 const VALID_DAYS = new Set([7, 14, 30, 90]);
 const VALID_TYPES: CreativeType[] = ["all", "video", "image"];
-const VALID_SORTS: SortBy[] = ["spendCents", "roasBp", "hookScore", "watchScore", "clickScore", "convertScore", "launchDate"];
+const VALID_SORTS: SortBy[] = ["spendCents", "revenueCents", "roasBp", "hookScore", "watchScore", "clickScore", "convertScore", "launchDate"];
 const VALID_DIRS: SortDir[] = ["asc", "desc"];
 
-function parseFilters(search: string): { days: number; type: CreativeType; sort: SortBy; dir: SortDir } {
+interface FilterState {
+  days: number;
+  type: CreativeType;
+  sort: SortBy;
+  dir: SortDir;
+  campaign: string; // "" = all
+  account: string;  // "" = all
+  minSpend: number; // 0 = no minimum
+}
+
+function parseFilters(search: string): FilterState {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const daysRaw = Number(params.get("days"));
   const days = VALID_DAYS.has(daysRaw) ? daysRaw : 30;
@@ -51,15 +61,22 @@ function parseFilters(search: string): { days: number; type: CreativeType; sort:
   const sort = sortRaw && VALID_SORTS.includes(sortRaw) ? sortRaw : "spendCents";
   const dirRaw = params.get("dir") as SortDir | null;
   const dir = dirRaw && VALID_DIRS.includes(dirRaw) ? dirRaw : "desc";
-  return { days, type, sort, dir };
+  const campaign = params.get("campaign") ?? "";
+  const account = params.get("account") ?? "";
+  const minSpendRaw = Number(params.get("minSpend"));
+  const minSpend = Number.isFinite(minSpendRaw) && minSpendRaw > 0 ? minSpendRaw : 0;
+  return { days, type, sort, dir, campaign, account, minSpend };
 }
 
-function serializeFilters(f: { days: number; type: CreativeType; sort: SortBy; dir: SortDir }): string {
+function serializeFilters(f: FilterState): string {
   const params = new URLSearchParams();
   params.set("days", String(f.days));
   if (f.type !== "all") params.set("type", f.type);
   params.set("sort", f.sort);
   params.set("dir", f.dir);
+  if (f.campaign) params.set("campaign", f.campaign);
+  if (f.account) params.set("account", f.account);
+  if (f.minSpend > 0) params.set("minSpend", String(f.minSpend));
   return params.toString();
 }
 
@@ -155,6 +172,9 @@ export default function CreativePerformance() {
   const [creativeType, setCreativeType] = useState<CreativeType>(initial.type);
   const [sortBy, setSortBy] = useState<SortBy>(initial.sort);
   const [sortDir, setSortDir] = useState<SortDir>(initial.dir);
+  const [campaignFilter, setCampaignFilter] = useState(initial.campaign);
+  const [accountFilter, setAccountFilter] = useState(initial.account);
+  const [minSpend, setMinSpend] = useState(initial.minSpend);
 
   // Preview dialog state: which creative (if any) is being previewed.
   const [previewTarget, setPreviewTarget] = useState<{
@@ -163,15 +183,21 @@ export default function CreativePerformance() {
     thumbnailUrl: string | null;
   } | null>(null);
 
+  // Fetch filter options (campaigns + accounts) for the dropdowns.
+  const filterOptions = trpc.analytics.getFilterOptions.useQuery();
+
   // Sync filter state to URL via replaceState so back button doesn't pile up.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const qs = serializeFilters({ days: lookbackDays, type: creativeType, sort: sortBy, dir: sortDir });
+    const qs = serializeFilters({
+      days: lookbackDays, type: creativeType, sort: sortBy, dir: sortDir,
+      campaign: campaignFilter, account: accountFilter, minSpend,
+    });
     const next = `${window.location.pathname}?${qs}`;
     if (window.location.pathname + window.location.search !== next) {
       window.history.replaceState(null, "", next);
     }
-  }, [lookbackDays, creativeType, sortBy, sortDir]);
+  }, [lookbackDays, creativeType, sortBy, sortDir, campaignFilter, accountFilter, minSpend]);
 
   const { dateFrom, dateTo } = useMemo(() => {
     const to = new Date();
@@ -184,6 +210,9 @@ export default function CreativePerformance() {
     dateFrom,
     dateTo,
     creativeType: creativeType === "all" ? undefined : creativeType,
+    campaignId: campaignFilter || undefined,
+    adAccountId: accountFilter || undefined,
+    minSpendCents: minSpend > 0 ? minSpend * 100 : undefined,
     sortBy,
     sortDirection: sortDir,
     limit: 100,
@@ -194,6 +223,8 @@ export default function CreativePerformance() {
     dateFrom,
     dateTo,
     creativeType: creativeType === "all" ? undefined : creativeType,
+    campaignId: campaignFilter || undefined,
+    adAccountId: accountFilter || undefined,
   });
 
   const perfQuery = trpc.analytics.getCreativePerformance.useQuery(queryInput);
@@ -286,6 +317,54 @@ export default function CreativePerformance() {
             <SelectItem value="image">Image</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Campaign filter */}
+        {filterOptions.data && filterOptions.data.campaigns.length > 0 && (
+          <Select value={campaignFilter || "_all"} onValueChange={(v) => setCampaignFilter(v === "_all" ? "" : v)}>
+            <SelectTrigger className="w-[200px] h-8 text-sm bg-[#0A0B0D] border-[rgba(255,255,255,0.10)] truncate">
+              <SelectValue placeholder="All campaigns" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#15171B] border-[rgba(255,255,255,0.10)] max-h-[300px]">
+              <SelectItem value="_all">All campaigns</SelectItem>
+              {filterOptions.data.campaigns.map((c: { id: string; name: string }) => (
+                <SelectItem key={c.id} value={c.id}>
+                  <span className="truncate max-w-[220px] inline-block">{c.name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Ad account filter */}
+        {filterOptions.data && filterOptions.data.adAccounts.length > 1 && (
+          <Select value={accountFilter || "_all"} onValueChange={(v) => setAccountFilter(v === "_all" ? "" : v)}>
+            <SelectTrigger className="w-[160px] h-8 text-sm bg-[#0A0B0D] border-[rgba(255,255,255,0.10)]">
+              <SelectValue placeholder="All accounts" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#15171B] border-[rgba(255,255,255,0.10)]">
+              <SelectItem value="_all">All accounts</SelectItem>
+              {filterOptions.data.adAccounts.map((acc: string) => (
+                <SelectItem key={acc} value={acc}>
+                  {acc.replace("act_", "")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Min spend filter */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-medium whitespace-nowrap">Min spend</span>
+          <input
+            type="number"
+            min={0}
+            step={50}
+            value={minSpend || ""}
+            onChange={(e) => setMinSpend(Number(e.target.value) || 0)}
+            placeholder="$0"
+            className="w-[80px] h-8 text-sm bg-[#0A0B0D] border border-[rgba(255,255,255,0.10)] rounded-md px-2 text-white font-mono tabular-nums placeholder:text-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FF3838]"
+          />
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -322,9 +401,7 @@ export default function CreativePerformance() {
                 <span className="uppercase text-[11px] tracking-wider font-medium text-[#71717A]">Ads</span>
               </TableHead>
               <TableHead className="text-right"><SortHeader field="spendCents" label="Spend" /></TableHead>
-              <TableHead className="text-right">
-                <span className="uppercase text-[11px] tracking-wider font-medium text-[#71717A]">Revenue</span>
-              </TableHead>
+              <TableHead className="text-right"><SortHeader field="revenueCents" label="Revenue" /></TableHead>
               <TableHead className="text-right"><SortHeader field="roasBp" label="ROAS" /></TableHead>
               <TableHead className="text-right">
                 <span className="uppercase text-[11px] tracking-wider font-medium text-[#71717A]">AOV</span>

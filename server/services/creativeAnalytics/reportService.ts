@@ -17,7 +17,7 @@
 import { sql } from "drizzle-orm";
 import * as db from "../../db";
 
-export type SortByField = "spendCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
+export type SortByField = "spendCents" | "revenueCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
 export type SortDirection = "asc" | "desc";
 
 export interface CreativePerfQuery {
@@ -26,6 +26,7 @@ export interface CreativePerfQuery {
   creativeType?: "video" | "image" | "carousel";
   campaignId?: string;
   adAccountId?: string;
+  minSpendCents?: number;
   sortBy: SortByField;
   sortDirection: SortDirection;
   limit: number;
@@ -77,6 +78,7 @@ export interface CreativePerfSummary {
 /** Validate sort field against an allowlist. Prevents SQL injection. */
 const ALLOWED_SORT_FIELDS: Readonly<Record<SortByField, string>> = {
   spendCents: "spendCents",
+  revenueCents: "revenueCents",
   roasBp: "roasBp",
   hookScore: "hookScore",
   watchScore: "watchScore",
@@ -170,7 +172,8 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
     GROUP BY ca.id, ca.name, ca.thumbnailUrl, ca.creativeType, ca.pipelineRunId,
              attr.revenueCents, attr.conversions,
              cs.hookScore, cs.watchScore, cs.clickScore, cs.convertScore
-    HAVING spendCents > 0 OR revenueCents > 0
+    HAVING (spendCents > 0 OR revenueCents > 0)
+      ${query.minSpendCents ? sql`AND spendCents >= ${query.minSpendCents}` : sql``}
     ORDER BY ${sql.raw(sortColumn)} ${sortDir}
     LIMIT ${query.limit}
     OFFSET ${query.offset}

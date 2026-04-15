@@ -32,6 +32,7 @@ import type {
   InsertAdDailyStat,
 } from "../../../drizzle/schema";
 import { ENV } from "../../_core/env";
+import { recomputeForDateRange } from "../../services/creativeAnalytics/scoreRecompute";
 
 const TAG = "[MetaSync]";
 const LOCK_NAME = "perform_meta_sync_lock";
@@ -415,6 +416,20 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
     } catch (relinkErr: any) {
       console.error(`${TAG} relinkOrphanedAttributions failed:`, relinkErr?.message ?? relinkErr);
       // Non-fatal: sync itself succeeded, relink is best-effort. Next sync retries.
+    }
+
+    // Auto-recompute creative scores after sync completes. This was previously
+    // only triggered via manual admin button click, leaving the creativeScores
+    // table empty and all Hook/Watch/Click/Convert scores showing 0 on /analytics.
+    try {
+      const scoreFrom = new Date();
+      scoreFrom.setUTCDate(scoreFrom.getUTCDate() - window);
+      const { rowsUpserted } = await recomputeForDateRange(scoreFrom, new Date());
+      console.log(`${TAG} score recompute: ${rowsUpserted} creative scores updated`);
+    } catch (scoreErr: any) {
+      // Non-fatal: sync data landed fine; scores are derived and can be
+      // recomputed later via the admin UI button.
+      console.error(`${TAG} score recompute failed (non-fatal):`, scoreErr?.message ?? scoreErr);
     }
   } catch (err: any) {
     // CRITICAL: write failed status before returning so the admin UI can see
