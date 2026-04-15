@@ -471,6 +471,10 @@ export const creativeAssets = mysqlTable("creativeAssets", {
   creativeType: mysqlEnum("creativeType", ["video", "image", "carousel"]).notNull(),
   thumbnailUrl: varchar("thumbnailUrl", { length: 1024 }),
   videoUrl: varchar("videoUrl", { length: 1024 }),
+  // Ad copy from Meta creative.body and creative.title. Stored so the AI tag
+  // engine can analyze winning hooks/angles without re-fetching from Meta.
+  adCopyBody: text("adCopyBody"),
+  adCopyTitle: text("adCopyTitle"),
   durationSeconds: int("durationSeconds"),
   firstSeenAt: timestamp("firstSeenAt"),
   lastSeenAt: timestamp("lastSeenAt"),
@@ -487,6 +491,36 @@ export const creativeAssets = mysqlTable("creativeAssets", {
 
 export type CreativeAsset = typeof creativeAssets.$inferSelect;
 export type InsertCreativeAsset = typeof creativeAssets.$inferInsert;
+
+/**
+ * AI-generated tags for creative assets. Produced by the tag engine
+ * (Claude Vision + ad copy analysis) and used by the pattern miner to
+ * identify winning hooks/angles/formats across creatives.
+ *
+ * Controlled vocabulary — values are constrained to allowlists so the
+ * pattern miner can aggregate without string-matching fragmentation.
+ */
+export const creativeAiTags = mysqlTable("creativeAiTags", {
+  id: int("id").autoincrement().primaryKey(),
+  creativeAssetId: int("creativeAssetId").notNull(),
+  messagingAngle: varchar("messagingAngle", { length: 64 }),
+  hookTactic: varchar("hookTactic", { length: 64 }),
+  visualFormat: varchar("visualFormat", { length: 64 }),
+  hookText: text("hookText"),
+  confidence: int("confidence").default(0),
+  taggedAt: timestamp("taggedAt"),
+  tagVersion: int("tagVersion").default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  assetVersionIdx: index("ai_tags_asset_version_idx").on(t.creativeAssetId, t.tagVersion),
+  angleIdx: index("ai_tags_angle_idx").on(t.messagingAngle),
+  tacticIdx: index("ai_tags_tactic_idx").on(t.hookTactic),
+  formatIdx: index("ai_tags_format_idx").on(t.visualFormat),
+}));
+
+export type CreativeAiTag = typeof creativeAiTags.$inferSelect;
+export type InsertCreativeAiTag = typeof creativeAiTags.$inferInsert;
 
 /** Individual Meta ad instances. Multiple ads can reference the same creativeAsset. */
 export const ads = mysqlTable("ads", {

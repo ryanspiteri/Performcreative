@@ -33,6 +33,7 @@ import type {
 } from "../../../drizzle/schema";
 import { ENV } from "../../_core/env";
 import { recomputeForDateRange } from "../../services/creativeAnalytics/scoreRecompute";
+import { runTaggingPass } from "../../services/creativeAnalytics/tagEngine";
 
 const TAG = "[MetaSync]";
 const LOCK_NAME = "perform_meta_sync_lock";
@@ -83,6 +84,11 @@ function metaAdToUpsertPayloads(
     creativeType,
     thumbnailUrl: thumbUrl ?? undefined,
     videoUrl: videoId ? `https://www.facebook.com/watch/?v=${videoId}` : undefined,
+    // Store Meta ad copy so the AI tag engine can analyze hooks/angles
+    // without re-fetching. body = primary text above the creative in feed,
+    // title = headline below the creative.
+    adCopyBody: creative?.body ?? undefined,
+    adCopyTitle: creative?.title ?? undefined,
     firstSeenAt: ad.created_time ? new Date(ad.created_time) : undefined,
   };
   const adBase: Omit<InsertAd, "creativeAssetId"> = {
@@ -431,6 +437,21 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
       // recomputed later via the admin UI button.
       console.error(`${TAG} score recompute failed (non-fatal):`, scoreErr?.message ?? scoreErr);
     }
+
+    // Async tagging pass: tag any creatives that now have ad copy but no AI
+    // tags yet. Fire-and-forget (non-blocking, non-fatal). Per codex #9: this
+    // runs as a separate step after sync, not inline, so LLM latency doesn't
+    // affect data freshness.
+    void (async () => {
+      try {
+        const tagResult = await runTaggingPass();
+        if (tagResult.tagged > 0) {
+          console.log(`${TAG} tagging pass: ${tagResult.tagged} creatives tagged, ${tagResult.errors} errors`);
+        }
+      } catch (tagErr: any) {
+        console.error(`${TAG} tagging pass failed (non-fatal):`, tagErr?.message ?? tagErr);
+      }
+    })();
   } catch (err: any) {
     // CRITICAL: write failed status before returning so the admin UI can see
     // what broke. Prior bug: this catch only logged, leaving the sync stuck

@@ -15,6 +15,7 @@ import * as db from "../db";
 import { runFullSync, backfillMeta } from "../integrations/meta/metaAdsSyncService";
 import { runHyrosSync, backfillHyros } from "../integrations/hyros/hyrosSyncService";
 import { recomputeForDateRange, computeAccountBenchmarks } from "../services/creativeAnalytics/scoreRecompute";
+import { runTaggingPass } from "../services/creativeAnalytics/tagEngine";
 import { MetaAdsClient } from "../integrations/meta/metaAdsClient";
 import { HyrosClient } from "../integrations/hyros/hyrosClient";
 
@@ -334,6 +335,16 @@ export const adminSyncRouter = router({
 
   getBenchmarks: adminProcedure.query(async () => {
     return computeAccountBenchmarks();
+  }),
+
+  /**
+   * Run the AI creative tagging pass. Tags untagged creatives via Claude
+   * with messaging angle, hook tactic, and visual format. Used for pattern
+   * mining and tag-based filtering on /analytics. Processes up to 100
+   * creatives per run in batches of 10.
+   */
+  triggerTagging: adminProcedure.mutation(async () => {
+    return runTaggingPass();
   }),
 
   listUnlinkedAds: adminProcedure

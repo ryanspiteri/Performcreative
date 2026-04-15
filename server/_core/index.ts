@@ -94,7 +94,57 @@ async function runStartupColumnMigrations() {
       { table: "users", column: "metaUserAccessToken", ddl: "TEXT NULL" },
       { table: "users", column: "metaUserTokenExpiresAt", ddl: "TIMESTAMP NULL" },
       { table: "users", column: "metaUserConnectedAt", ddl: "TIMESTAMP NULL" },
+      // Wave 1 — Store Meta ad copy (body/title) for the AI tag engine
+      { table: "creativeAssets", column: "adCopyBody", ddl: "TEXT NULL" },
+      { table: "creativeAssets", column: "adCopyTitle", ddl: "TEXT NULL" },
     ];
+
+    // Also create new tables if they don't exist (separate from column adds).
+    const requiredTables: Array<{ name: string; ddl: string }> = [
+      {
+        name: "creativeAiTags",
+        ddl: `CREATE TABLE IF NOT EXISTS \`creativeAiTags\` (
+          \`id\` int NOT NULL AUTO_INCREMENT,
+          \`creativeAssetId\` int NOT NULL,
+          \`messagingAngle\` varchar(64) DEFAULT NULL,
+          \`hookTactic\` varchar(64) DEFAULT NULL,
+          \`visualFormat\` varchar(64) DEFAULT NULL,
+          \`hookText\` text DEFAULT NULL,
+          \`confidence\` int NOT NULL DEFAULT 0,
+          \`taggedAt\` timestamp NULL DEFAULT NULL,
+          \`tagVersion\` int NOT NULL DEFAULT 1,
+          \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          UNIQUE KEY \`ai_tags_asset_version_unique\` (\`creativeAssetId\`, \`tagVersion\`),
+          KEY \`ai_tags_angle_idx\` (\`messagingAngle\`),
+          KEY \`ai_tags_tactic_idx\` (\`hookTactic\`),
+          KEY \`ai_tags_format_idx\` (\`visualFormat\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      },
+    ];
+
+    for (const tbl of requiredTables) {
+      try {
+        const existing: any = await dbConn.execute(sql`
+          SELECT TABLE_NAME FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ${tbl.name}
+          LIMIT 1
+        `);
+        const rows = Array.isArray(existing[0]) ? existing[0] : existing;
+        if (rows.length > 0) {
+          existed++;
+          continue;
+        }
+        await dbConn.execute(sql.raw(tbl.ddl));
+        console.log(`${TAG} created table ${tbl.name}`);
+        added++;
+      } catch (err: any) {
+        failed++;
+        console.error(`${TAG} failed to create table ${tbl.name}: ${err?.message ?? err}`);
+      }
+    }
 
     let added = 0;
     let existed = 0;
