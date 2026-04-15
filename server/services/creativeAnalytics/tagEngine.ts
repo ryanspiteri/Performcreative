@@ -28,8 +28,7 @@
  * Called as an async pass AFTER Meta sync (not inline, per codex #9), via
  * the admin UI or as a scheduled step after scoreRecompute.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { ENV } from "../../_core/env";
+import { callClaude } from "../_shared";
 import * as db from "../../db";
 import type { InsertCreativeAiTag } from "../../../drizzle/schema";
 
@@ -85,8 +84,6 @@ interface TagResult {
 export async function tagBatch(creatives: CreativeForTagging[]): Promise<TagResult[]> {
   if (creatives.length === 0) return [];
 
-  const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
-
   const creativeSummaries = creatives.map((c, i) => {
     const parts = [`Creative #${i + 1} (id=${c.id}, type=${c.creativeType}):`];
     if (c.name) parts.push(`Name: "${c.name}"`);
@@ -132,19 +129,11 @@ Confidence guidance:
 - Below 40: Skip and use "other" for all dimensions`;
 
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: `Classify these ${creatives.length} ONEST Health ad creatives:\n\n${creativeSummaries}`,
-        },
-      ],
-    });
-
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const text = await callClaude(
+      [{ role: "user", content: `Classify these ${creatives.length} ONEST Health ad creatives:\n\n${creativeSummaries}` }],
+      systemPrompt,
+      2000,
+    );
     // Extract JSON from the response (Claude sometimes wraps in markdown code blocks)
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
