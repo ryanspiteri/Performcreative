@@ -99,6 +99,10 @@ async function runStartupColumnMigrations() {
       { table: "creativeAssets", column: "adCopyTitle", ddl: "TEXT NULL" },
     ];
 
+    let added = 0;
+    let existed = 0;
+    let failed = 0;
+
     // Also create new tables if they don't exist (separate from column adds).
     const requiredTables: Array<{ name: string; ddl: string }> = [
       {
@@ -145,10 +149,6 @@ async function runStartupColumnMigrations() {
         console.error(`${TAG} failed to create table ${tbl.name}: ${err?.message ?? err}`);
       }
     }
-
-    let added = 0;
-    let existed = 0;
-    let failed = 0;
 
     for (const col of requiredColumns) {
       try {
