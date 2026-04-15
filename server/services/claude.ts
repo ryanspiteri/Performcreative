@@ -1,5 +1,76 @@
 import axios from "axios";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { exec } from "child_process";
+import { promisify } from "util";
 import { callClaude } from "./_shared";
+
+const execAsync = promisify(exec);
+
+// Get ffmpeg path (reuse same logic as whisper.ts)
+function getFfmpegPath(): string {
+  try {
+    const ffmpegStatic = require("ffmpeg-static");
+    if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
+      return ffmpegStatic;
+    }
+  } catch {}
+  return "ffmpeg";
+}
+
+/**
+ * Download a video, extract key frames with ffmpeg, return as base64 JPEG images.
+ * Extracts frames at 0s, 1s, 3s, 5s, 10s, 15s, 20s, 30s (skipping any beyond video duration).
+ */
+async function extractFrames(videoUrl: string): Promise<Array<{ base64: string; timestamp: number }>> {
+  const tmpDir = path.join(os.tmpdir(), `frames_${Date.now()}`);
+  const videoPath = path.join(os.tmpdir(), `vid_${Date.now()}.mp4`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  try {
+    // Download video
+    console.log("[VisualAnalysis] Downloading video from:", videoUrl);
+    const response = await axios.get(videoUrl, {
+      responseType: "arraybuffer",
+      timeout: 120000,
+      maxContentLength: 100 * 1024 * 1024,
+    });
+    fs.writeFileSync(videoPath, Buffer.from(response.data));
+    console.log("[VisualAnalysis] Video downloaded, size:", fs.statSync(videoPath).size, "bytes");
+
+    // Extract frames at key timestamps
+    const ffmpeg = getFfmpegPath();
+    const timestamps = [0, 1, 3, 5, 10, 15, 20, 30];
+    const frames: Array<{ base64: string; timestamp: number }> = [];
+
+    for (const ts of timestamps) {
+      const outPath = path.join(tmpDir, `frame_${ts}.jpg`);
+      try {
+        await execAsync(
+          `"${ffmpeg}" -ss ${ts} -i "${videoPath}" -frames:v 1 -q:v 3 -y "${outPath}"`,
+          { timeout: 30000 }
+        );
+        if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) {
+          frames.push({
+            base64: fs.readFileSync(outPath).toString("base64"),
+            timestamp: ts,
+          });
+        }
+      } catch {
+        // Timestamp beyond video duration — stop extracting
+        break;
+      }
+    }
+
+    console.log(`[VisualAnalysis] Extracted ${frames.length} frames`);
+    return frames;
+  } finally {
+    // Cleanup
+    try { fs.unlinkSync(videoPath); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+  }
+}
 
 // Visual analysis of video frames
 export async function analyzeVideoFrames(videoUrl: string, transcript: string, brandName: string): Promise<string> {
@@ -7,12 +78,43 @@ export async function analyzeVideoFrames(videoUrl: string, transcript: string, b
 
   const userContent: any[] = [];
 
-  // Try to include video as image reference
+  // Extract frames from video and include as images
   if (videoUrl) {
-    userContent.push({
-      type: "text",
-      text: `Analyze this competitor video advertisement. The video URL is: ${videoUrl}\nBrand: ${brandName}\n\nTranscript:\n${transcript}`
-    });
+    try {
+      const frames = await extractFrames(videoUrl);
+      if (frames.length > 0) {
+        userContent.push({
+          type: "text",
+          text: `Analyze this competitor video advertisement from ${brandName}. I've extracted ${frames.length} key frames from the video at different timestamps.\n\nTranscript:\n${transcript}`,
+        });
+        for (const frame of frames) {
+          userContent.push({
+            type: "text",
+            text: `Frame at ${frame.timestamp}s:`,
+          });
+          userContent.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/jpeg",
+              data: frame.base64,
+            },
+          });
+        }
+      } else {
+        // Fallback: no frames extracted, analyse transcript only
+        userContent.push({
+          type: "text",
+          text: `Analyze this competitor video advertisement from ${brandName}. No video frames could be extracted, so base your analysis on the transcript and general video ad patterns.\n\nTranscript:\n${transcript}`,
+        });
+      }
+    } catch (err: any) {
+      console.error("[VisualAnalysis] Frame extraction failed:", err.message);
+      userContent.push({
+        type: "text",
+        text: `Analyze this competitor video advertisement from ${brandName}. Frame extraction failed, so base your analysis on the transcript.\n\nTranscript:\n${transcript}`,
+      });
+    }
   }
 
   userContent.push({
