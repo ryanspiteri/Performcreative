@@ -24,7 +24,7 @@ import { MetaAdsClient, type MetaAdPreviewFormat } from "../integrations/meta/me
 import { refreshAccessToken, computeExpiresAt } from "../services/meta";
 import * as db from "../db";
 
-const sortByEnum = z.enum(["spendCents", "roasBp", "hookScore", "watchScore", "clickScore", "convertScore", "launchDate"]);
+const sortByEnum = z.enum(["spendCents", "revenueCents", "roasBp", "hookScore", "watchScore", "clickScore", "convertScore", "launchDate"]);
 const sortDirEnum = z.enum(["asc", "desc"]);
 const creativeTypeEnum = z.enum(["video", "image", "carousel"]).optional();
 
@@ -34,6 +34,7 @@ const creativePerfQuerySchema = z.object({
   creativeType: creativeTypeEnum,
   campaignId: z.string().optional(),
   adAccountId: z.string().optional(),
+  minSpendCents: z.number().int().min(0).optional(),
   sortBy: sortByEnum.default("spendCents"),
   sortDirection: sortDirEnum.default("desc"),
   limit: z.number().int().min(1).max(500).default(50),
@@ -62,6 +63,40 @@ export const analyticsRouter = router({
     .query(async ({ input }) => {
       return getCreativePerformanceSummary(input);
     }),
+
+  /**
+   * Return distinct campaigns + ad accounts for the filter dropdowns.
+   * Auto-updates as new campaigns sync — no hardcoding.
+   */
+  getFilterOptions: protectedProcedure.query(async () => {
+    const dbConn = await db.getDb();
+    if (!dbConn) return { campaigns: [], adAccounts: [] };
+
+    const { sql: sqlTag } = await import("drizzle-orm");
+
+    const campaignRows: any = await dbConn.execute(sqlTag`
+      SELECT DISTINCT a.campaignId, a.campaignName
+      FROM ads a
+      WHERE a.campaignId IS NOT NULL AND a.campaignName IS NOT NULL
+      ORDER BY a.campaignName ASC
+      LIMIT 200
+    `);
+    const campaigns = (Array.isArray(campaignRows[0]) ? campaignRows[0] : campaignRows).map(
+      (r: any) => ({ id: r.campaignId as string, name: r.campaignName as string }),
+    );
+
+    const accountRows: any = await dbConn.execute(sqlTag`
+      SELECT DISTINCT a.adAccountId
+      FROM ads a
+      WHERE a.adAccountId IS NOT NULL
+      ORDER BY a.adAccountId ASC
+    `);
+    const adAccounts = (Array.isArray(accountRows[0]) ? accountRows[0] : accountRows).map(
+      (r: any) => r.adAccountId as string,
+    );
+
+    return { campaigns, adAccounts };
+  }),
 
   getCreativeDetail: protectedProcedure
     .input(z.object({ creativeAssetId: z.number().int() }))

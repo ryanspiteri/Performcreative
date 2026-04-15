@@ -19,6 +19,7 @@ import {
 import * as db from "../../db";
 import type { InsertAdAttributionStat } from "../../../drizzle/schema";
 import { ENV } from "../../_core/env";
+import { recomputeForDateRange } from "../../services/creativeAnalytics/scoreRecompute";
 
 const TAG = "[HyrosSync]";
 const LOCK_NAME = "perform_hyros_sync_lock";
@@ -310,6 +311,19 @@ export async function runHyrosSync(lookbackDays?: number): Promise<{ result: Hyr
       rowsUpserted: result.rowsUpserted,
       consecutiveFailures: status === "failed" ? 1 : 0,
     });
+
+    // Auto-recompute creative scores after Hyros attribution data lands.
+    // Revenue/ROAS from Hyros affects the Convert score; without this the
+    // score stays stale until the next Meta sync or manual recompute.
+    if (result.rowsUpserted > 0) {
+      try {
+        const { rowsUpserted: scoresUpdated } = await recomputeForDateRange(dateFrom, dateTo);
+        console.log(`${TAG} score recompute: ${scoresUpdated} creative scores updated`);
+      } catch (scoreErr: any) {
+        console.error(`${TAG} score recompute failed (non-fatal):`, scoreErr?.message ?? scoreErr);
+      }
+    }
+
     return { result };
   } catch (err: any) {
     // CRITICAL: write failed status to adSyncState before returning, otherwise
