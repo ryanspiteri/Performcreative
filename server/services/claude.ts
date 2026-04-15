@@ -8,7 +8,7 @@ import { ENV } from "../_core/env";
 // ─── Gemini Files API helpers (upload video for native video understanding) ───
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com";
-const GEMINI_MODEL = "gemini-2.5-pro";
+const GEMINI_MODEL = "gemini-3.1-pro";
 
 /**
  * Upload a video to the Gemini Files API and poll until ACTIVE.
