@@ -2,166 +2,231 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { callClaude } from "./_shared";
+import { ENV } from "../_core/env";
 
-const execAsync = promisify(exec);
+// ─── Gemini Files API helpers (upload video for native video understanding) ───
 
-// Get ffmpeg path (reuse same logic as whisper.ts)
-function getFfmpegPath(): string {
-  try {
-    const ffmpegStatic = require("ffmpeg-static");
-    if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
-      return ffmpegStatic;
-    }
-  } catch {}
-  return "ffmpeg";
-}
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com";
+const GEMINI_MODEL = "gemini-2.5-pro";
 
 /**
- * Download a video, extract key frames with ffmpeg, return as base64 JPEG images.
- * Extracts frames at 0s, 1s, 3s, 5s, 10s, 15s, 20s, 30s (skipping any beyond video duration).
+ * Upload a video to the Gemini Files API and poll until ACTIVE.
+ * Returns the file URI to reference in generateContent.
  */
-async function extractFrames(videoUrl: string): Promise<Array<{ base64: string; timestamp: number }>> {
-  const tmpDir = path.join(os.tmpdir(), `frames_${Date.now()}`);
-  const videoPath = path.join(os.tmpdir(), `vid_${Date.now()}.mp4`);
-  fs.mkdirSync(tmpDir, { recursive: true });
-
+async function uploadVideoToGemini(videoUrl: string): Promise<{ fileUri: string; mimeType: string }> {
+  // 1. Download video to a temp file
+  const videoPath = path.join(os.tmpdir(), `gemini_vid_${Date.now()}.mp4`);
   try {
-    // Download video
     console.log("[VisualAnalysis] Downloading video from:", videoUrl);
     const response = await axios.get(videoUrl, {
       responseType: "arraybuffer",
       timeout: 120000,
-      maxContentLength: 100 * 1024 * 1024,
+      maxContentLength: 200 * 1024 * 1024,
     });
     fs.writeFileSync(videoPath, Buffer.from(response.data));
-    console.log("[VisualAnalysis] Video downloaded, size:", fs.statSync(videoPath).size, "bytes");
+    const fileSize = fs.statSync(videoPath).size;
+    console.log("[VisualAnalysis] Video downloaded, size:", fileSize, "bytes");
 
-    // Extract frames at key timestamps
-    const ffmpeg = getFfmpegPath();
-    const timestamps = [0, 1, 3, 5, 10, 15, 20, 30];
-    const frames: Array<{ base64: string; timestamp: number }> = [];
-
-    for (const ts of timestamps) {
-      const outPath = path.join(tmpDir, `frame_${ts}.jpg`);
-      try {
-        await execAsync(
-          `"${ffmpeg}" -ss ${ts} -i "${videoPath}" -frames:v 1 -q:v 3 -y "${outPath}"`,
-          { timeout: 30000 }
-        );
-        if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) {
-          frames.push({
-            base64: fs.readFileSync(outPath).toString("base64"),
-            timestamp: ts,
-          });
-        }
-      } catch {
-        // Timestamp beyond video duration — stop extracting
-        break;
+    // 2. Initiate resumable upload
+    const mimeType = "video/mp4";
+    const initRes = await axios.post(
+      `${GEMINI_API_BASE}/upload/v1beta/files?key=${ENV.googleAiApiKey}`,
+      { file: { display_name: `video_analysis_${Date.now()}` } },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": String(fileSize),
+          "X-Goog-Upload-Header-Content-Type": mimeType,
+        },
+        timeout: 30000,
       }
+    );
+
+    const uploadUrl = initRes.headers["x-goog-upload-url"];
+    if (!uploadUrl) throw new Error("Gemini Files API did not return an upload URL");
+
+    // 3. Upload the bytes
+    console.log("[VisualAnalysis] Uploading video to Gemini Files API...");
+    const uploadRes = await axios.put(uploadUrl, fs.readFileSync(videoPath), {
+      headers: {
+        "Content-Type": mimeType,
+        "X-Goog-Upload-Command": "upload, finalize",
+        "X-Goog-Upload-Offset": "0",
+      },
+      timeout: 300000,
+    });
+
+    const fileUri = uploadRes.data?.file?.uri;
+    const fileName = uploadRes.data?.file?.name;
+    if (!fileUri) throw new Error("Gemini Files API did not return a file URI");
+    console.log("[VisualAnalysis] File uploaded:", fileName, "→", fileUri);
+
+    // 4. Poll until the file state is ACTIVE
+    let state = uploadRes.data?.file?.state || "PROCESSING";
+    let attempts = 0;
+    while (state === "PROCESSING" && attempts < 60) {
+      await new Promise(r => setTimeout(r, 5000));
+      const statusRes = await axios.get(
+        `${GEMINI_API_BASE}/v1beta/${fileName}?key=${ENV.googleAiApiKey}`,
+        { timeout: 15000 }
+      );
+      state = statusRes.data?.state || "PROCESSING";
+      attempts++;
+      console.log(`[VisualAnalysis] File state: ${state} (poll ${attempts})`);
     }
 
-    console.log(`[VisualAnalysis] Extracted ${frames.length} frames`);
-    return frames;
+    if (state !== "ACTIVE") {
+      throw new Error(`Gemini file stuck in ${state} after ${attempts} polls`);
+    }
+
+    return { fileUri, mimeType };
   } finally {
-    // Cleanup
     try { fs.unlinkSync(videoPath); } catch {}
-    try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
   }
 }
 
-// Visual analysis of video frames
-export async function analyzeVideoFrames(videoUrl: string, transcript: string, brandName: string): Promise<string> {
-  const system = `You are an expert creative strategist and competitor ad analyst for ONEST Health, an Australian health supplement brand. Analyze competitor video advertisements in detail to inform ONEST Health's creative briefs.`;
+// ─── Visual analysis prompt ────────────────────────────────────────────────
 
-  const userContent: any[] = [];
+const VISUAL_ANALYSIS_PROMPT = `Use a frame rate of 8 FPS for this analysis. These are short ad videos (30-120 seconds) with frequent internal cuts. Higher frame rate ensures no cuts are missed.
 
-  // Extract frames from video and include as images
-  if (videoUrl) {
-    try {
-      const frames = await extractFrames(videoUrl);
-      if (frames.length > 0) {
-        userContent.push({
-          type: "text",
-          text: `Analyze this competitor video advertisement from ${brandName}. I've extracted ${frames.length} key frames from the video at different timestamps.\n\nTranscript:\n${transcript}`,
-        });
-        for (const frame of frames) {
-          userContent.push({
-            type: "text",
-            text: `Frame at ${frame.timestamp}s:`,
-          });
-          userContent.push({
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: "image/jpeg",
-              data: frame.base64,
-            },
-          });
-        }
-      } else {
-        // Fallback: no frames extracted, analyse transcript only
-        userContent.push({
-          type: "text",
-          text: `Analyze this competitor video advertisement from ${brandName}. No video frames could be extracted, so base your analysis on the transcript and general video ad patterns.\n\nTranscript:\n${transcript}`,
-        });
-      }
-    } catch (err: any) {
-      console.error("[VisualAnalysis] Frame extraction failed:", err.message);
-      userContent.push({
-        type: "text",
-        text: `Analyze this competitor video advertisement from ${brandName}. Frame extraction failed, so base your analysis on the transcript.\n\nTranscript:\n${transcript}`,
-      });
-    }
+You are analysing a source video for use in a video mashup pipeline. Watch the entire video carefully - both the visuals AND the audio - and produce a JSON analysis.
+
+Output Format
+
+Return ONLY valid JSON matching this structure:
+
+{
+"videoName": "filename without extension",
+"duration": 0.0,
+"segments": [
+{
+"segmentType": "hook|problem|solution|product_demo|social_proof|testimonial|cta|branding|transition|b_roll|ingredient_breakdown",
+"startTime": 0.0,
+"endTime": 0.0,
+"spokenText": "exact words spoken during this segment - transcribe from the audio, do not paraphrase",
+"visualDescription": "what is visually on screen - presenter appearance, setting, props, graphics, text overlays",
+"presenter": "description of who is speaking - gender, appearance, clothing",
+"setting": "location/environment - warehouse, kitchen, beach, green screen, etc",
+"visualQuality": 8,
+"audioQuality": 8,
+"energyLevel": 7,
+"notes": "anything notable - props, graphics overlays, text on screen, brand risk, audio-visual mismatches"
+}
+],
+"transcript": [
+{
+"text": "one to three words only",
+"startTime": 0.0,
+"endTime": 0.0
+}
+],
+"internalCuts": [
+{
+"timestamp": 0.0,
+"description": "what changes - e.g. 'cuts from presenter to b-roll product shot' or 'green screen background changes from desert to jungle'",
+"cutType": "hard_cut|b_roll_intercut|background_change|graphic_overlay|text_card",
+"confidence": "high|medium|low"
+}
+],
+"audioVisualMismatches": [
+{
+"startTime": 0.0,
+"endTime": 0.0,
+"description": "what the audio says vs what the visual shows - e.g. 'presenter talks about metabolism but screen shows Happy Meal prop'"
+}
+],
+"isPreEdited": true,
+"editStyle": "description of editing style - raw camera, lightly edited, heavily edited with rapid cuts, compilation, etc",
+"presenters": [
+{
+"id": "presenter_1",
+"description": "detailed appearance - gender, hair, clothing, approximate age",
+"timeRanges": [[0.0, 15.0], [30.0, 45.0]]
+}
+]
+}
+
+Instructions
+
+Segments: Break the video into logical narrative segments. Each segment should be one continuous thought or section. Tag each with the most appropriate segmentType. Only use the segment types listed above - do not invent new ones.
+
+Transcript: Transcribe ALL spoken words from the audio track. Each entry MUST be 1-3 words maximum, not full sentences or phrases. We need precise word-level timestamps for finding clean cut points at sentence boundaries. For example, transcribe "I love this product" as four separate entries: "I", "love", "this", "product" - each with their own startTime and endTime. Listen carefully to the audio, not just what text overlays say. Note any words you're uncertain about with [unclear] markers.
+
+Internal cuts: Log EVERY visual transition - every time the camera angle changes, a new person appears, b-roll is intercut, a graphic appears, or the background changes. Timestamp each to the nearest 0.25 second (since you're sampling at 4 FPS). Add a confidence level: "high" if you clearly see the cut, "medium" if you infer it from a discontinuity between frames, "low" if you suspect rapid cuts but can't pinpoint exact timestamps.
+
+Audio-visual mismatches: Flag any moment where what's being said doesn't match what's on screen. These are traps for editors who rely on transcript timestamps alone to select clips.
+
+Pre-edited detection: Set isPreEdited to true if the video has been edited with b-roll intercuts, multiple camera angles, graphics overlays, or rapid cuts between scenes. Raw single-camera footage should be false.
+
+Presenters: Identify every distinct person who appears on screen, even briefly. Note appearance details so they can be identified across multiple source videos.
+
+Quality scores (1-10): visualQuality = production value and framing. audioQuality = clarity and recording quality. energyLevel = pacing and engagement level.
+
+Be precise with timestamps. Use seconds with one decimal place (e.g. 3.2, not 00:03).
+
+Watch the ENTIRE video before responding. Do not skip or summarise sections.`;
+
+// ─── Main export ───────────────────────────────────────────────────────────
+
+/**
+ * Analyse a video ad using Gemini 2.5 Pro with native video understanding.
+ * Uploads the full video via the Gemini Files API (no frame extraction needed).
+ * Settings: thinking HIGH, quality MAX, FPS 4.
+ */
+export async function analyzeVideoFrames(videoUrl: string, _transcript: string, _brandName: string): Promise<string> {
+  if (!ENV.googleAiApiKey) {
+    throw new Error("GOOGLE_AI_API_KEY is required for video visual analysis");
   }
 
-  userContent.push({
-    type: "text",
-    text: `Provide a detailed analysis of this competitor video advertisement, tailored to inform ONEST Health's creative briefs.
+  // Upload video to Gemini Files API
+  const { fileUri, mimeType } = await uploadVideoToGemini(videoUrl);
 
-Structure your analysis with these 8 sections:
+  // Build request with video file reference + prompt
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          { file_data: { file_uri: fileUri, mime_type: mimeType } },
+          { text: VISUAL_ANALYSIS_PROMPT },
+        ],
+      },
+    ],
+    generation_config: {
+      response_mime_type: "application/json",
+      temperature: 0.2,
+      max_output_tokens: 65536,
+      thinking_config: { thinking_budget: 16384 },
+      media_resolution: "MEDIA_RESOLUTION_HIGH",
+    },
+  };
 
-**Competitor Analysis: ${brandName} Video Ad Frames**
+  console.log(`[VisualAnalysis] Calling Gemini ${GEMINI_MODEL} with video file...`);
 
-**1. Visual Style and Production Quality:**
-- **Observation:** Detailed observations about the visual style, production quality, frame types
-- **Production Quality:** Assessment of overall production approach
-- **Actionable for ONEST Health:** Specific recommendations
+  const response = await axios.post(
+    `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${ENV.googleAiApiKey}`,
+    requestBody,
+    {
+      headers: { "Content-Type": "application/json" },
+      timeout: 600000, // 10 min — video analysis with thinking can be slow
+    }
+  );
 
-**2. Color Palette and Branding Elements:**
-- **Observation:** Dominant colors, product colors, contrast, branding
-- **Actionable for ONEST Health:** Specific recommendations
+  // Extract text from response
+  const candidates = response.data?.candidates;
+  if (!candidates || candidates.length === 0) {
+    const blockReason = response.data?.promptFeedback?.blockReason;
+    throw new Error(`Gemini returned no candidates${blockReason ? ` (blocked: ${blockReason})` : ""}`);
+  }
 
-**3. Shot Composition and Transitions:**
-- **Observation:** Shot types, format, transitions
-- **Actionable for ONEST Health:** Specific recommendations
+  const parts = candidates[0]?.content?.parts || [];
+  const textParts = parts.filter((p: any) => p.text).map((p: any) => p.text);
+  const result = textParts.join("\n");
 
-**4. On-Screen Text/Graphics Usage:**
-- **Observation:** Text style, placement, purpose
-- **Actionable for ONEST Health:** Specific recommendations
-
-**5. Talent/Presenter Style:**
-- **Observation:** Presenter approach, authenticity, focus
-- **Actionable for ONEST Health:** Specific recommendations
-
-**6. Product Presentation Approach:**
-- **Observation:** Product introduction, reveal, aesthetic appeal, integration
-- **Actionable for ONEST Health:** Specific recommendations
-
-**7. Overall Mood and Energy:**
-- **Observation:** Energy level, humor, problem/solution focus, confidence
-- **Actionable for ONEST Health:** Specific recommendations
-
-**8. Key Visual Hooks and Attention-Grabbing Elements:**
-- **Observation:** Key frames, visual hooks, narrative arc
-- **Actionable for ONEST Health:** Specific recommendations
-
-End with a summary paragraph about how ONEST Health can draw inspiration from these techniques.`
-  });
-
-  return callClaude([{ role: "user", content: userContent }], system, 8000);
+  console.log(`[VisualAnalysis] Gemini analysis complete, response length: ${result.length} chars`);
+  return result;
 }
 
 // Generate scripts (DR and UGC)
