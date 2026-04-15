@@ -15,6 +15,7 @@ import {
   creativeScores, InsertCreativeScore, CreativeScore,
   adCreativeLinks, InsertAdCreativeLink, AdCreativeLink,
   adSyncState, InsertAdSyncState, AdSyncState,
+  creativeAiTags, InsertCreativeAiTag, CreativeAiTag,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1005,6 +1006,8 @@ export async function upsertCreativeAsset(data: InsertCreativeAsset): Promise<nu
       name: data.name,
       thumbnailUrl: data.thumbnailUrl,
       videoUrl: data.videoUrl,
+      adCopyBody: data.adCopyBody,
+      adCopyTitle: data.adCopyTitle,
       durationSeconds: data.durationSeconds,
       lastSeenAt: now,
       pipelineRunId: data.pipelineRunId,
@@ -1261,6 +1264,32 @@ export async function listUnlinkedAds(adAccountId?: string, limit = 100) {
       .limit(limit);
   }
   return db.select().from(ads).where(sql`${ads.id} NOT IN ${linkedAdIds}`).limit(limit);
+}
+
+// --- creativeAiTags ---
+
+export async function upsertCreativeAiTag(data: InsertCreativeAiTag): Promise<void> {
+  const dbInst = await getDb();
+  if (!dbInst) throw new Error("Database not available");
+  await dbInst.insert(creativeAiTags).values(data).onDuplicateKeyUpdate({
+    set: {
+      messagingAngle: data.messagingAngle,
+      hookTactic: data.hookTactic,
+      visualFormat: data.visualFormat,
+      hookText: data.hookText,
+      confidence: data.confidence,
+      taggedAt: data.taggedAt,
+    },
+  });
+}
+
+export async function getCreativeAiTag(creativeAssetId: number, tagVersion = 1) {
+  const dbInst = await getDb();
+  if (!dbInst) return null;
+  const result = await dbInst.select().from(creativeAiTags)
+    .where(and(eq(creativeAiTags.creativeAssetId, creativeAssetId), eq(creativeAiTags.tagVersion, tagVersion)))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
 }
 
 // --- adSyncState ---
