@@ -97,6 +97,9 @@ async function runStartupColumnMigrations() {
       // Wave 1 — Store Meta ad copy (body/title) for the AI tag engine
       { table: "creativeAssets", column: "adCopyBody", ddl: "TEXT NULL" },
       { table: "creativeAssets", column: "adCopyTitle", ddl: "TEXT NULL" },
+      // Wave 1d — Traceability: creative source stamping
+      { table: "pipeline_runs", column: "creativeSource", ddl: "ENUM('human','ai-winner','ai-playbook') DEFAULT 'human'" },
+      { table: "pipeline_runs", column: "sourceCreativeAssetId", ddl: "INT NULL" },
     ];
 
     let added = 0;
@@ -124,6 +127,24 @@ async function runStartupColumnMigrations() {
           KEY \`ai_tags_angle_idx\` (\`messagingAngle\`),
           KEY \`ai_tags_tactic_idx\` (\`hookTactic\`),
           KEY \`ai_tags_format_idx\` (\`visualFormat\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      },
+      {
+        name: "patternInsights",
+        ddl: `CREATE TABLE IF NOT EXISTS \`patternInsights\` (
+          \`id\` int NOT NULL AUTO_INCREMENT,
+          \`creativeAssetId\` int NOT NULL,
+          \`insightType\` enum('pattern_breaker','confirmed_pattern') NOT NULL,
+          \`dimension\` varchar(64) NOT NULL,
+          \`combination\` varchar(128) NOT NULL,
+          \`expectedScore\` int NOT NULL DEFAULT 0,
+          \`actualScore\` int NOT NULL DEFAULT 0,
+          \`deviation\` int NOT NULL DEFAULT 0,
+          \`insight\` text DEFAULT NULL,
+          \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          KEY \`pi_creative_idx\` (\`creativeAssetId\`),
+          KEY \`pi_type_idx\` (\`insightType\`, \`createdAt\`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
       },
     ];

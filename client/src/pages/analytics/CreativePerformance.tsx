@@ -608,6 +608,7 @@ function GenerateFromWinnerDialog({
     if (messagingAngle) params.set("winnerAngle", messagingAngle);
     if (hookTactic) params.set("winnerTactic", hookTactic);
     params.set("winnerName", target.name);
+    params.set("sourceCreativeAssetId", String(target.id));
     setLocation(`/scripts?${params.toString()}`);
     onClose();
   };

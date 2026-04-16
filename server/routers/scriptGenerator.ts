@@ -147,6 +147,9 @@ export const scriptGeneratorRouter = router({
       angle: z.string().min(1),
       concept: z.string().min(10, "Concept must be at least 10 characters"),
       scriptCount: z.number().int().min(1).max(5).default(3),
+      // Wave 1d — traceability fields
+      creativeSource: z.enum(["human", "ai-winner", "ai-playbook"]).optional(),
+      sourceCreativeAssetId: z.number().int().positive().optional(),
     }))
     .mutation(async ({ input }) => {
       const runId = await db.createPipelineRun({
@@ -154,7 +157,7 @@ export const scriptGeneratorRouter = router({
         status: "pending",
         product: input.product,
         priority: "Medium",
-        triggerSource: "script_generator",
+        triggerSource: input.creativeSource === "ai-winner" ? "generate_from_winner" : "script_generator",
         scriptStyle: input.scriptStyle,
         scriptSubStructure: input.subStructureId,
         scriptFunnelStage: input.funnelStage as FunnelStage,
@@ -163,6 +166,8 @@ export const scriptGeneratorRouter = router({
         scriptConcept: input.concept,
         scriptCount: input.scriptCount,
         scriptStage: "pending",
+        creativeSource: input.creativeSource || "human",
+        sourceCreativeAssetId: input.sourceCreativeAssetId || null,
       });
 
       runScriptPipeline(runId, {

@@ -188,7 +188,7 @@ export default function ScriptGenerator() {
 
   // Hydrate form from winner-mode URL params (Generate from Winner button)
   // Only applies on first mount when there is NO runId — winner mode starts a fresh config.
-  const [winnerSource, setWinnerSource] = useState<{ name: string; hook: string } | null>(null);
+  const [winnerSource, setWinnerSource] = useState<{ name: string; hook: string; creativeAssetId?: number } | null>(null);
   useEffect(() => {
     if (runId) return; // Don't override runId-hydrated state
     if (typeof window === "undefined") return;
@@ -198,6 +198,7 @@ export default function ScriptGenerator() {
     const winnerAngle = params.get("winnerAngle");
     const winnerFunnel = params.get("funnelStage");
     const winnerName = params.get("winnerName");
+    const winnerCreativeId = params.get("sourceCreativeAssetId");
 
     if (winnerProduct) setProduct(winnerProduct);
     if (winnerFunnel && ["cold", "warm", "retargeting", "retention"].includes(winnerFunnel)) {
@@ -211,7 +212,12 @@ export default function ScriptGenerator() {
       setConcept(`Inspired by winning ad hook: "${winnerHook}". Build a fresh script that captures the same engagement mechanism but stays distinct from the original.`);
     }
     if (winnerName || winnerHook) {
-      setWinnerSource({ name: winnerName || "Unknown winner", hook: winnerHook || "" });
+      const parsedId = winnerCreativeId ? parseInt(winnerCreativeId, 10) : undefined;
+      setWinnerSource({
+        name: winnerName || "Unknown winner",
+        hook: winnerHook || "",
+        creativeAssetId: Number.isFinite(parsedId) ? parsedId : undefined,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -287,6 +293,10 @@ export default function ScriptGenerator() {
       angle: effectiveAngle,
       concept,
       scriptCount: parseInt(scriptCount, 10),
+      ...(winnerSource ? {
+        creativeSource: "ai-winner" as const,
+        sourceCreativeAssetId: winnerSource.creativeAssetId,
+      } : {}),
     });
   };
 

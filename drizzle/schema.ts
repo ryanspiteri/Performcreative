@@ -109,6 +109,10 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   scriptStage: varchar("scriptStage", { length: 64 }),
   /** Edits saved by the user — preserved separately so original scripts + review scores stay intact */
   editedScriptsJson: json("editedScriptsJson"),
+  /** Traceability: where this run came from. 'human' (manual), 'ai-winner' (Generate from Winner), 'ai-playbook' (Wave 2 auto-gen) */
+  creativeSource: mysqlEnum("creativeSource", ["human", "ai-winner", "ai-playbook"]).default("human"),
+  /** When creativeSource='ai-winner', the creativeAssetId of the source winning creative */
+  sourceCreativeAssetId: int("sourceCreativeAssetId"),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
