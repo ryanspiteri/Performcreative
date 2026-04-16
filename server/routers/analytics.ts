@@ -11,7 +11,7 @@
  * in the separate adminSync router.
  */
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, adminProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
   getCreativePerformance,
@@ -146,6 +146,23 @@ export const analyticsRouter = router({
     .query(async ({ input }) => {
       const { getFatigueMap } = await import("../services/creativeAnalytics/fatigueDetector");
       return getFatigueMap(input.creativeAssetIds);
+    }),
+
+  /**
+   * Wave 2 — Auto-generate scripts from winning patterns. Admin-only.
+   * Queries the intelligence system, creates pipeline runs stamped as
+   * ai-playbook, and fires script generation in the background.
+   */
+  autoGenerateFromPatterns: adminProcedure
+    .input(z.object({
+      product: z.string().min(1),
+      funnelStage: z.enum(["cold", "warm", "retargeting", "retention"]).default("cold"),
+      scriptsPerPattern: z.number().int().min(1).max(5).default(2),
+      maxPatterns: z.number().int().min(1).max(5).default(3),
+    }))
+    .mutation(async ({ input }) => {
+      const { autoGenerateFromPatterns } = await import("../services/creativeAnalytics/autoGenerator");
+      return autoGenerateFromPatterns(input);
     }),
 
   getCreativeDetail: protectedProcedure
