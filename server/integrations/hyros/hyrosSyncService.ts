@@ -44,8 +44,33 @@ interface AggregationBucket {
 export interface HyrosSyncResult {
   salesProcessed: number;
   salesSkipped: number;
+  /** Sales skipped because their currency wasn't in the allowlist (e.g. USD store dropped for V1). */
+  salesSkippedCurrency: number;
   rowsUpserted: number;
   errors: string[];
+}
+
+/**
+ * Currency allowlist. V1 only reports on the AUD (AU) store — the USD (USA) store
+ * is dropped to avoid mixing two stores' numbers with different FX conversions. When
+ * both stores are re-enabled, flip this to e.g. `["AUD", "USD"]` and add per-store
+ * reporting filters.
+ *
+ * Check order: `sale.usdPrice.currency` (Hyros's primary), then `sale.price.currency`
+ * (some responses put it here). If neither matches, the sale is skipped and counted
+ * in `salesSkippedCurrency` so the admin UI can surface it.
+ */
+const ALLOWED_CURRENCIES = new Set(["AUD"]);
+
+/** Returns true if the sale's currency is in the allowlist (or null/missing, which we keep by default to be safe). */
+export function isSaleCurrencyAllowed(sale: HyrosSale): boolean {
+  const usdCur = sale.usdPrice?.currency;
+  const priceCur = (sale as any).price?.currency as string | undefined | null;
+  // If neither field is populated, we keep the sale — matches pre-filter behavior.
+  if (!usdCur && !priceCur) return true;
+  if (usdCur && ALLOWED_CURRENCIES.has(usdCur)) return true;
+  if (priceCur && ALLOWED_CURRENCIES.has(priceCur)) return true;
+  return false;
 }
 
 /**
@@ -88,6 +113,14 @@ export function aggregateSalesToBuckets(
   let missingPriceCount = 0;
 
   for (const sale of sales) {
+    // Currency filter — V1 is AUD-only. Other-currency sales are tracked separately
+    // from the ad-attribution skip count so we can see "how much are we dropping
+    // because of the store filter" vs "how much are we dropping because Hyros didn't
+    // attribute to an ad".
+    if (!isSaleCurrencyAllowed(sale)) {
+      result.salesSkippedCurrency++;
+      continue;
+    }
     const source = sale.firstSource;
     const hyrosAdId = source?.sourceLinkAd?.adSourceId;
     if (!hyrosAdId) {
@@ -188,6 +221,7 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
   const result: HyrosSyncResult = {
     salesProcessed: 0,
     salesSkipped: 0,
+    salesSkippedCurrency: 0,
     rowsUpserted: 0,
     errors: [],
   };
@@ -243,12 +277,12 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
   } while (pageId);
 
   console.log(
-    `${TAG} Processed ${result.salesProcessed} sales (${result.salesSkipped} unattributed), ${allBuckets.size} buckets to flush`
+    `${TAG} Processed ${result.salesProcessed} sales (${result.salesSkipped} unattributed, ${result.salesSkippedCurrency} non-AUD), ${allBuckets.size} buckets to flush`
   );
 
   result.rowsUpserted = await flushBuckets(allBuckets, result);
   console.log(
-    `${TAG} done: processed=${result.salesProcessed} skipped=${result.salesSkipped} upserted=${result.rowsUpserted} errors=${result.errors.length}`
+    `${TAG} done: processed=${result.salesProcessed} skipped=${result.salesSkipped} nonAud=${result.salesSkippedCurrency} upserted=${result.rowsUpserted} errors=${result.errors.length}`
   );
   return result;
 }
@@ -352,7 +386,7 @@ export async function runHyrosSync(lookbackDays?: number): Promise<{ result: Hyr
 }
 
 function emptyResult(): HyrosSyncResult {
-  return { salesProcessed: 0, salesSkipped: 0, rowsUpserted: 0, errors: [] };
+  return { salesProcessed: 0, salesSkipped: 0, salesSkippedCurrency: 0, rowsUpserted: 0, errors: [] };
 }
 
 export function startAutoHyrosSync(): void {

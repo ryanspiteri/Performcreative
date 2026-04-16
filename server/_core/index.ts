@@ -100,6 +100,10 @@ async function runStartupColumnMigrations() {
       // Wave 1d — Traceability: creative source stamping
       { table: "pipeline_runs", column: "creativeSource", ddl: "ENUM('human','ai-winner','ai-playbook') DEFAULT 'human'" },
       { table: "pipeline_runs", column: "sourceCreativeAssetId", ddl: "INT NULL" },
+      // Meta purchase metrics — cross-check Hyros revenue against Meta's own pixel/CAPI data
+      { table: "adDailyStats", column: "metaPurchaseCount", ddl: "INT NOT NULL DEFAULT 0" },
+      { table: "adDailyStats", column: "metaPurchaseValueCents", ddl: "INT NOT NULL DEFAULT 0" },
+      { table: "adDailyStats", column: "metaRoasBp", ddl: "INT NOT NULL DEFAULT 0" },
     ];
 
     let added = 0;

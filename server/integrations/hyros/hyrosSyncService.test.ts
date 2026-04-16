@@ -45,7 +45,7 @@ import {
 import type { HyrosSale } from "./hyrosClient";
 
 function emptyResult(): HyrosSyncResult {
-  return { salesProcessed: 0, salesSkipped: 0, rowsUpserted: 0, errors: [] };
+  return { salesProcessed: 0, salesSkipped: 0, salesSkippedCurrency: 0, rowsUpserted: 0, errors: [] };
 }
 
 function loadRealFixture(): HyrosSale[] {
@@ -68,7 +68,7 @@ function makeSale(overrides: Partial<HyrosSale> = {}): HyrosSale {
       discount: 0,
       hardCost: 0,
       refunded: 0,
-      currency: "USD",
+      currency: "AUD",
     },
     firstSource: {
       adSource: { adSourceId: "120248392781030538" },
@@ -81,7 +81,7 @@ function makeSale(overrides: Partial<HyrosSale> = {}): HyrosSale {
 describe("extractNetRevenueCents", () => {
   it("returns net revenue in cents when price and refunded are present", () => {
     const { revenueCents, reason } = extractNetRevenueCents(
-      makeSale({ usdPrice: { price: 99.99, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } }),
+      makeSale({ usdPrice: { price: 99.99, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } }),
     );
     expect(revenueCents).toBe(9999);
     expect(reason).toBeUndefined();
@@ -89,14 +89,14 @@ describe("extractNetRevenueCents", () => {
 
   it("subtracts refunded from price", () => {
     const { revenueCents } = extractNetRevenueCents(
-      makeSale({ usdPrice: { price: 100, discount: 0, hardCost: 0, refunded: 25, currency: "USD" } }),
+      makeSale({ usdPrice: { price: 100, discount: 0, hardCost: 0, refunded: 25, currency: "AUD" } }),
     );
     expect(revenueCents).toBe(7500);
   });
 
   it("clamps refund-greater-than-price to 0 (never returns negative revenue)", () => {
     const { revenueCents } = extractNetRevenueCents(
-      makeSale({ usdPrice: { price: 50, discount: 0, hardCost: 0, refunded: 99, currency: "USD" } }),
+      makeSale({ usdPrice: { price: 50, discount: 0, hardCost: 0, refunded: 99, currency: "AUD" } }),
     );
     expect(revenueCents).toBe(0);
   });
@@ -129,7 +129,7 @@ describe("extractNetRevenueCents", () => {
 
   it("returns 0 + reason='missing' when usdPrice.price is null", () => {
     const { revenueCents, reason } = extractNetRevenueCents(
-      makeSale({ usdPrice: { price: null as any, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } }),
+      makeSale({ usdPrice: { price: null as any, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } }),
     );
     expect(revenueCents).toBe(0);
     expect(reason).toBe("missing");
@@ -137,7 +137,7 @@ describe("extractNetRevenueCents", () => {
 
   it("returns 0 for non-finite input without exploding", () => {
     const { revenueCents } = extractNetRevenueCents(
-      makeSale({ usdPrice: { price: NaN as any, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } }),
+      makeSale({ usdPrice: { price: NaN as any, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } }),
     );
     expect(revenueCents).toBe(0);
   });
@@ -173,8 +173,8 @@ describe("aggregateSalesToBuckets", () => {
 
   it("aggregates multiple sales on the same day + same ad into one bucket", () => {
     const day = "Thu Apr 09 10:00:00 UTC 2026";
-    const sale1 = makeSale({ id: "s1", creationDate: day, quantity: 1, usdPrice: { price: 50, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } });
-    const sale2 = makeSale({ id: "s2", creationDate: day, quantity: 2, usdPrice: { price: 75, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } });
+    const sale1 = makeSale({ id: "s1", creationDate: day, quantity: 1, usdPrice: { price: 50, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } });
+    const sale2 = makeSale({ id: "s2", creationDate: day, quantity: 2, usdPrice: { price: 75, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } });
 
     const buckets = aggregateSalesToBuckets([sale1, sale2], result);
     expect(buckets.size).toBe(1);
@@ -216,11 +216,28 @@ describe("aggregateSalesToBuckets", () => {
     expect(result.salesSkipped).toBe(0);
   });
 
+  it("skips non-AUD sales (USD store filter) and increments salesSkippedCurrency", () => {
+    const usdSale = makeSale({
+      id: "us-sale",
+      usdPrice: { price: 120, discount: 0, hardCost: 0, refunded: 0, currency: "USD" },
+    });
+    const audSale = makeSale({
+      id: "au-sale",
+      usdPrice: { price: 150, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" },
+    });
+    const buckets = aggregateSalesToBuckets([usdSale, audSale], result);
+    expect(buckets.size).toBe(1);
+    expect(result.salesSkippedCurrency).toBe(1);
+    expect(result.salesSkipped).toBe(0);
+    const bucket = Array.from(buckets.values())[0];
+    expect(bucket.revenueCents).toBe(15000); // only the AUD sale made it through
+  });
+
   it("chaos test: hostile QA dump doesn't crash the aggregator", () => {
     const hostileSales: HyrosSale[] = [
       makeSale({ id: "h1", usdPrice: null as any }),
-      makeSale({ id: "h2", usdPrice: { price: undefined as any, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } }),
-      makeSale({ id: "h3", usdPrice: { price: Infinity, discount: 0, hardCost: 0, refunded: 0, currency: "USD" } }),
+      makeSale({ id: "h2", usdPrice: { price: undefined as any, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } }),
+      makeSale({ id: "h3", usdPrice: { price: Infinity, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } }),
       makeSale({ id: "h4", creationDate: "garbage" }),
       makeSale({ id: "h5", quantity: undefined as any }),
       makeSale({ id: "h6", firstSource: undefined }),

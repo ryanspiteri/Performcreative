@@ -30,7 +30,15 @@ vi.mock("../../_core/env", () => ({
   },
 }));
 
-import { parseActionCount, parseMetaMoneyToCents, parseMetaRateToBp, extractIframeSrc } from "./metaAdsClient";
+import {
+  parseActionCount,
+  parseMetaMoneyToCents,
+  parseMetaRateToBp,
+  parsePurchaseCount,
+  parsePurchaseValueCents,
+  parsePurchaseRoasBp,
+  extractIframeSrc,
+} from "./metaAdsClient";
 
 describe("parseActionCount", () => {
   it("extracts the matching action_type value from an array", () => {
@@ -108,6 +116,73 @@ describe("parseMetaRateToBp", () => {
 
   it("rounds half-up", () => {
     expect(parseMetaRateToBp("0.00005")).toBe(1); // 0.00005 * 10000 = 0.5 → round → 1
+  });
+});
+
+describe("parsePurchaseCount", () => {
+  it("prefers omni_purchase (the Ads Manager 'Purchases' column)", () => {
+    const actions = [
+      { action_type: "offsite_conversion.fb_pixel_purchase", value: "8" },
+      { action_type: "omni_purchase", value: "12" },
+      { action_type: "purchase", value: "5" },
+    ];
+    expect(parsePurchaseCount(actions)).toBe(12);
+  });
+
+  it("falls back to fb_pixel_purchase if omni_purchase is absent", () => {
+    const actions = [
+      { action_type: "offsite_conversion.fb_pixel_purchase", value: "7" },
+      { action_type: "landing_page_view", value: "200" },
+    ];
+    expect(parsePurchaseCount(actions)).toBe(7);
+  });
+
+  it("returns 0 when no purchase-type action exists", () => {
+    const actions = [{ action_type: "landing_page_view", value: "123" }];
+    expect(parsePurchaseCount(actions)).toBe(0);
+  });
+
+  it("returns 0 for undefined / null / empty", () => {
+    expect(parsePurchaseCount(undefined)).toBe(0);
+    expect(parsePurchaseCount(null as any)).toBe(0);
+    expect(parsePurchaseCount([])).toBe(0);
+  });
+});
+
+describe("parsePurchaseValueCents", () => {
+  it("converts revenue string to integer cents", () => {
+    const actions = [{ action_type: "omni_purchase", value: "124.50" }];
+    expect(parsePurchaseValueCents(actions)).toBe(12450);
+  });
+
+  it("prefers omni_purchase over pixel-only variants", () => {
+    const actions = [
+      { action_type: "offsite_conversion.fb_pixel_purchase", value: "90.00" },
+      { action_type: "omni_purchase", value: "150.00" },
+    ];
+    expect(parsePurchaseValueCents(actions)).toBe(15000);
+  });
+
+  it("returns 0 for missing / invalid input", () => {
+    expect(parsePurchaseValueCents(undefined)).toBe(0);
+    expect(parsePurchaseValueCents([{ action_type: "omni_purchase", value: "garbage" }])).toBe(0);
+  });
+});
+
+describe("parsePurchaseRoasBp", () => {
+  it("converts a ROAS ratio string to basis points (3.25x = 32500)", () => {
+    const actions = [{ action_type: "omni_purchase", value: "3.25" }];
+    expect(parsePurchaseRoasBp(actions)).toBe(32500);
+  });
+
+  it("falls back to the first entry when no preferred action_type matches", () => {
+    const actions = [{ action_type: "some_future_action_type", value: "2.00" }];
+    expect(parsePurchaseRoasBp(actions)).toBe(20000);
+  });
+
+  it("returns 0 for empty / undefined", () => {
+    expect(parsePurchaseRoasBp(undefined)).toBe(0);
+    expect(parsePurchaseRoasBp([])).toBe(0);
   });
 });
 

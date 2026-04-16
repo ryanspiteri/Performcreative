@@ -121,6 +121,10 @@ export interface MetaInsightRow {
   ctr?: string;
   outbound_clicks_ctr?: MetaAction[];
   actions?: MetaAction[];
+  /** Purchase revenue per action_type. Requested alongside `actions`. */
+  action_values?: MetaAction[];
+  /** Meta's own blended purchase ROAS per action_type. */
+  purchase_roas?: MetaAction[];
   video_play_actions?: MetaAction[];
   video_thruplay_watched_actions?: MetaAction[];
   video_p25_watched_actions?: MetaAction[];
@@ -161,6 +165,67 @@ export function parseActionCount(actions: MetaAction[] | undefined, actionType =
   if (!actions || !Array.isArray(actions)) return 0;
   const match = actions.find((a) => a.action_type === actionType);
   return match ? parseInt(match.value, 10) || 0 : 0;
+}
+
+/**
+ * Action-type preferences for "purchase". Meta returns the same conversion under
+ * multiple action_types depending on how the pixel / CAPI is set up. Prefer
+ * `omni_purchase` (the blended cross-device number shown in Ads Manager's
+ * "Purchases" column), then fall back to pixel-only variants. We take the FIRST
+ * match in this list — not a sum — to avoid double-counting.
+ */
+const PURCHASE_ACTION_TYPES = [
+  "omni_purchase",
+  "offsite_conversion.fb_pixel_purchase",
+  "purchase",
+  "web_in_store_purchase",
+] as const;
+
+/** Extract the first matching purchase count from a Meta actions array. Handles integer + decimal. */
+export function parsePurchaseCount(actions: MetaAction[] | undefined): number {
+  if (!actions || !Array.isArray(actions)) return 0;
+  for (const type of PURCHASE_ACTION_TYPES) {
+    const match = actions.find((a) => a.action_type === type);
+    if (match) {
+      const n = parseFloat(match.value);
+      return Number.isFinite(n) ? Math.round(n) : 0;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Extract the first matching purchase value (revenue) from a Meta action_values array.
+ * Values are in the ad account's currency. Returns integer cents.
+ */
+export function parsePurchaseValueCents(actions: MetaAction[] | undefined): number {
+  if (!actions || !Array.isArray(actions)) return 0;
+  for (const type of PURCHASE_ACTION_TYPES) {
+    const match = actions.find((a) => a.action_type === type);
+    if (match) {
+      const n = parseFloat(match.value);
+      return Number.isFinite(n) ? Math.round(n * 100) : 0;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Extract Meta's purchase ROAS. Meta returns it as `[{ action_type, value }]`
+ * where value is the ratio (e.g. "3.25" = 3.25x). Convert to basis points (3.25x = 32500).
+ */
+export function parsePurchaseRoasBp(actions: MetaAction[] | undefined): number {
+  if (!actions || !Array.isArray(actions) || actions.length === 0) return 0;
+  for (const type of PURCHASE_ACTION_TYPES) {
+    const match = actions.find((a) => a.action_type === type);
+    if (match) {
+      const n = parseFloat(match.value);
+      return Number.isFinite(n) ? Math.round(n * 10000) : 0;
+    }
+  }
+  // Fallback: take the first entry if no known action_type matched
+  const n = parseFloat(actions[0].value);
+  return Number.isFinite(n) ? Math.round(n * 10000) : 0;
 }
 
 /** Parse a Meta string-dollar value like "12.34" into integer cents. */
@@ -328,6 +393,8 @@ export class MetaAdsClient {
       "cpc",
       "ctr",
       "actions",
+      "action_values",
+      "purchase_roas",
       "video_play_actions",
       "video_thruplay_watched_actions",
       "video_p25_watched_actions",

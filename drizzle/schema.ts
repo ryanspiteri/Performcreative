@@ -587,6 +587,12 @@ export const adDailyStats = mysqlTable("adDailyStats", {
   thumbstopBp: int("thumbstopBp").notNull().default(0),
   /** Hold rate = video50Count / impressions in basis points */
   holdRateBp: int("holdRateBp").notNull().default(0),
+  /** Meta's reported purchases (omni_purchase preferred, pixel fallbacks). Cross-check vs Hyros conversions. */
+  metaPurchaseCount: int("metaPurchaseCount").notNull().default(0),
+  /** Meta's reported purchase revenue in integer cents (account currency). Cross-check vs Hyros revenue. */
+  metaPurchaseValueCents: int("metaPurchaseValueCents").notNull().default(0),
+  /** Meta's own purchase ROAS in basis points (3.25x = 32500). For comparing against our Hyros-derived ROAS. */
+  metaRoasBp: int("metaRoasBp").notNull().default(0),
   /** Raw actions array from Meta (purchases, leads, etc.) — for future use. */
   actionsJson: json("actionsJson"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

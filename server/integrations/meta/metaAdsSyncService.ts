@@ -22,6 +22,9 @@ import {
   parseActionCount,
   parseMetaMoneyToCents,
   parseMetaRateToBp,
+  parsePurchaseCount,
+  parsePurchaseValueCents,
+  parsePurchaseRoasBp,
   type MetaAd,
   type MetaInsightRow,
 } from "./metaAdsClient";
@@ -118,6 +121,13 @@ function insightRowToDailyStat(row: MetaInsightRow, adId: number): InsertAdDaily
   const videoThruplay = parseActionCount(row.video_thruplay_watched_actions);
   const videoAvgTimeSec = parseActionCount(row.video_avg_time_watched_actions);
 
+  // Meta's own purchase metrics — used as a cross-check against Hyros attribution.
+  // Meta uses its attribution window (7d click, 1d view by default), Hyros uses
+  // first-click across all time. Divergence here is expected but quantifiable.
+  const metaPurchaseCount = parsePurchaseCount(row.actions);
+  const metaPurchaseValueCents = parsePurchaseValueCents(row.action_values);
+  const metaRoasBp = parsePurchaseRoasBp(row.purchase_roas);
+
   return {
     adId,
     date: new Date(`${row.date_start}T00:00:00Z`),
@@ -139,6 +149,9 @@ function insightRowToDailyStat(row: MetaInsightRow, adId: number): InsertAdDaily
     videoAvgTimeMs: videoAvgTimeSec * 1000,
     thumbstopBp: impressions > 0 ? Math.round((videoPlayCount / impressions) * 10000) : 0,
     holdRateBp: impressions > 0 ? Math.round((video50 / impressions) * 10000) : 0,
+    metaPurchaseCount,
+    metaPurchaseValueCents,
+    metaRoasBp,
     actionsJson: row.actions ? (row.actions as unknown as Record<string, unknown>) : undefined,
   };
 }

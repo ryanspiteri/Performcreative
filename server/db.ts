@@ -1139,6 +1139,9 @@ export async function upsertAdDailyStat(data: InsertAdDailyStat): Promise<void> 
       videoAvgTimeMs: data.videoAvgTimeMs,
       thumbstopBp: data.thumbstopBp,
       holdRateBp: data.holdRateBp,
+      metaPurchaseCount: data.metaPurchaseCount,
+      metaPurchaseValueCents: data.metaPurchaseValueCents,
+      metaRoasBp: data.metaRoasBp,
       actionsJson: data.actionsJson,
     },
   });
