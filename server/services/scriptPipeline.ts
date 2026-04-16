@@ -29,6 +29,7 @@ import {
   getStyleSystemPrompt,
   getSubStructurePromptBlock,
   reviewScriptWithPanel,
+  fetchWinningExamples,
   type ScriptStyleId,
   type FunnelStage,
   type ActorArchetype,
@@ -152,6 +153,12 @@ PRIMARY SELLING ANGLE (emphasize this above all others):
 ${angle}
 === END SELLING ANGLE ===`;
 
+    // Fetch winning examples for few-shot injection (non-blocking — empty string on failure)
+    const winningExamplesBlock = await fetchWinningExamples(product, funnelStage, scriptStyle);
+    if (winningExamplesBlock) {
+      console.log(`[ScriptPipeline] Run #${runId} — Winning examples loaded (${winningExamplesBlock.length} chars)`);
+    }
+
     await db.updatePipelineRun(runId, { scriptStage: "stage_2_generation" });
 
     // ── Stage 2: Generate scripts ─────────────────────────────────────────
@@ -245,7 +252,7 @@ ${COMPLIANCE_RULES}
 ${productInfoContext || `Product: ONEST ${product}. Brand: ONEST Health. Website: onest.com.au.`}
 ${productIntelBlock}
 === END PRODUCT INFORMATION ===
-
+${winningExamplesBlock}
 Return your response in this EXACT JSON format:
 {
   "title": "Short descriptive title for this script",

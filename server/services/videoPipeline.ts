@@ -3,6 +3,55 @@ import { transcribeVideo } from "./whisper";
 import { createMultipleScriptTasks } from "./clickup";
 import { withTimeout, callClaude, STEP_TIMEOUT, STAGE_4_TIMEOUT, buildProductInfoContext } from "./_shared";
 
+// ─── Winning Examples (few-shot injection, shared with scriptPipeline) ──────
+
+const MAX_WINNING_EXAMPLES_TOKENS = 4000;
+
+/**
+ * Fetch top-performing scripts and format as few-shot examples for prompt injection.
+ * Returns empty string on failure or no data — never blocks pipeline.
+ */
+export async function fetchWinningExamples(
+  product: string,
+  funnelStage?: string,
+  scriptStyle?: string
+): Promise<string> {
+  try {
+    const winners = await db.getWinningScriptsByContext(product, funnelStage, scriptStyle, 3);
+    if (!winners.length) return "";
+
+    const examples: string[] = [];
+    for (const w of winners) {
+      const scripts = Array.isArray(w.scriptsJson) ? w.scriptsJson : [w.scriptsJson];
+      const script = scripts[0];
+      if (!script?.hook || !script?.script) continue;
+
+      const segments = (script.script as any[]).slice(0, 3).map(
+        (s: any) => `  ${s.timestamp}: "${s.dialogue}"`
+      ).join("\n");
+
+      examples.push(
+        `--- Example (hookScore: ${w.hookScore}, convertScore: ${w.convertScore}, style: ${w.scriptStyle || "unknown"}, funnel: ${w.scriptFunnelStage || "unknown"}) ---\n` +
+        `Hook: "${script.hook}"\n` +
+        `Opening segments:\n${segments}\n` +
+        (script.strategicThesis ? `Strategic thesis: ${(script.strategicThesis as string).slice(0, 200)}...\n` : "")
+      );
+    }
+
+    if (!examples.length) return "";
+
+    let block = examples.join("\n");
+    if (block.length > MAX_WINNING_EXAMPLES_TOKENS * 4) {
+      block = block.slice(0, MAX_WINNING_EXAMPLES_TOKENS * 4) + "\n[truncated]";
+    }
+
+    return `\n=== WINNING EXAMPLES (from real ad performance data — learn from these) ===\nThese scripts were deployed as ads and achieved top performance scores. Study their hooks, structures, and angles.\n\n${block}\n=== END WINNING EXAMPLES ===\n`;
+  } catch (err: any) {
+    console.error("[VideoPipeline] fetchWinningExamples failed:", err.message);
+    return "";
+  }
+}
+
 // ============================================================
 // SCRIPT STYLE DEFINITIONS — COPY FRAMEWORK v3.0
 // ============================================================
@@ -1406,7 +1455,8 @@ async function generateConceptMatchedScript(
   productInfoContext: string,
   duration: number,
   funnelStage: FunnelStage,
-  archetype?: ActorArchetype
+  archetype?: ActorArchetype,
+  winningExamplesBlock?: string
 ): Promise<{
   title: string;
   hook: string;
@@ -1507,7 +1557,7 @@ ${transcript}
 ${fullProductInfo}
 ${productIntelBlock}
 === END PRODUCT INFORMATION ===
-
+${winningExamplesBlock || ""}
 Return your response in this EXACT JSON format:
 {
   "title": "${concept.title}",
@@ -2054,6 +2104,12 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
   const defaultArchetype = archetypes.length > 0 ? archetypes[0] : undefined;
   const productInfoContext = await loadProductInfoContext(run.product);
 
+  // Fetch winning examples for few-shot injection
+  const winningExamplesBlock = await fetchWinningExamples(run.product, funnelStage);
+  if (winningExamplesBlock) {
+    console.log(`[VideoPipeline] Run #${runId} — Winning examples loaded (${winningExamplesBlock.length} chars)`);
+  }
+
   await db.updatePipelineRun(runId, { videoStage: "stage_4_scripts" });
   const concepts = brief.concepts || [
     ...(brief.drConcepts || []).map((c: any) => ({ ...c, styleId: "DR" as ScriptStyleId })),
@@ -2079,7 +2135,8 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
           run.transcript || "", run.visualAnalysis || "",
           run.product, concept, brief, productInfoContext,
           duration, funnelStage,
-          concept.styleId === "UGC" ? defaultArchetype : undefined
+          concept.styleId === "UGC" ? defaultArchetype : undefined,
+          winningExamplesBlock
         ),
         STEP_TIMEOUT, `Script ${label}`
       );

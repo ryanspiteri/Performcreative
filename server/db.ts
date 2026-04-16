@@ -1330,3 +1330,78 @@ export async function updateSyncState(sourceName: string, adAccountId: string | 
     await db.insert(adSyncState).values({ sourceName, adAccountId, ...patch } as InsertAdSyncState);
   }
 }
+
+// ─── Script Intelligence: Winning Scripts by Context ───────────────────────
+
+export interface WinningScript {
+  runId: number;
+  scriptsJson: any;
+  scriptStyle: string | null;
+  scriptFunnelStage: string | null;
+  scriptAngle: string | null;
+  product: string | null;
+  hookScore: number;
+  convertScore: number;
+}
+
+/**
+ * Fetch the top-performing scripts by composite score (hookScore + convertScore).
+ * Joins pipeline_runs → creativeAssets → creativeScores to find scripts whose
+ * deployed ads actually performed well. Returns up to `limit` results.
+ */
+export async function getWinningScriptsByContext(
+  product: string,
+  funnelStage?: string,
+  scriptStyle?: string,
+  limit = 3
+): Promise<WinningScript[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    const funnelFilter = funnelStage
+      ? sql`AND pr.scriptFunnelStage = ${funnelStage}`
+      : sql``;
+    const styleFilter = scriptStyle
+      ? sql`AND pr.scriptStyle = ${scriptStyle}`
+      : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT
+        pr.id AS runId,
+        pr.scriptsJson,
+        pr.scriptStyle,
+        pr.scriptFunnelStage,
+        pr.scriptAngle,
+        pr.product,
+        MAX(cs.hookScore) AS hookScore,
+        MAX(cs.convertScore) AS convertScore
+      FROM ${pipelineRuns} pr
+      JOIN ${creativeAssets} ca ON ca.pipelineRunId = pr.id
+      JOIN ${creativeScores} cs ON cs.creativeAssetId = ca.id
+      WHERE pr.product = ${product}
+        AND pr.pipelineType IN ('script', 'video')
+        AND pr.status = 'completed'
+        AND cs.aggregatedImpressions >= 100
+        ${funnelFilter}
+        ${styleFilter}
+      GROUP BY pr.id
+      ORDER BY (MAX(cs.hookScore) + MAX(cs.convertScore)) DESC
+      LIMIT ${limit}
+    `);
+
+    return (rows as any)[0]?.map((r: any) => ({
+      runId: r.runId,
+      scriptsJson: typeof r.scriptsJson === "string" ? JSON.parse(r.scriptsJson) : r.scriptsJson,
+      scriptStyle: r.scriptStyle,
+      scriptFunnelStage: r.scriptFunnelStage,
+      scriptAngle: r.scriptAngle,
+      product: r.product,
+      hookScore: Number(r.hookScore) || 0,
+      convertScore: Number(r.convertScore) || 0,
+    })) || [];
+  } catch (err: any) {
+    console.error("[DB] getWinningScriptsByContext failed:", err.message);
+    return [];
+  }
+}
