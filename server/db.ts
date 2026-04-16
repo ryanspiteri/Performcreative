@@ -199,21 +199,41 @@ export async function getPipelineStatusByAdIds(adIds: string[]): Promise<Record<
   const rows = await db.select({
     foreplayAdId: pipelineRuns.foreplayAdId,
     status: pipelineRuns.status,
+    completedAt: pipelineRuns.completedAt,
     createdAt: pipelineRuns.createdAt,
   }).from(pipelineRuns)
     .where(inArray(pipelineRuns.foreplayAdId, adIds))
     .orderBy(desc(pipelineRuns.createdAt));
 
-  const result: Record<string, { status: string; count: number }> = {};
+  // Aggregate per-ad: prefer the "best" status across runs (completed > failed > running > pending).
+  // A run with completedAt set or status="completed" always wins. Runs stuck in "running" for
+  // >30 min are treated as stale (effectively not running) — they'd otherwise hide a successful
+  // earlier run from the badge.
+  const STALE_MS = 30 * 60 * 1000;
+  const STATUS_PRIORITY: Record<string, number> = { completed: 4, failed: 3, running: 2, pending: 1 };
+  const now = Date.now();
+
+  const perAd: Record<string, { status: string; count: number }> = {};
   for (const row of rows) {
     if (!row.foreplayAdId) continue;
-    if (!result[row.foreplayAdId]) {
-      result[row.foreplayAdId] = { status: row.status, count: 1 };
+    let effectiveStatus = row.status;
+    if (row.completedAt) {
+      effectiveStatus = "completed";
+    } else if ((row.status === "running" || row.status === "pending") && row.createdAt) {
+      const ageMs = now - new Date(row.createdAt).getTime();
+      if (ageMs > STALE_MS) effectiveStatus = "failed"; // stale → show as failed rather than perpetually running
+    }
+    const existing = perAd[row.foreplayAdId];
+    if (!existing) {
+      perAd[row.foreplayAdId] = { status: effectiveStatus, count: 1 };
     } else {
-      result[row.foreplayAdId].count++;
+      existing.count++;
+      if ((STATUS_PRIORITY[effectiveStatus] ?? 0) > (STATUS_PRIORITY[existing.status] ?? 0)) {
+        existing.status = effectiveStatus;
+      }
     }
   }
-  return result;
+  return perAd;
 }
 
 // ============================================================
