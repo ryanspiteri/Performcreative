@@ -35,6 +35,7 @@ import {
   type ActorArchetype,
   type VideoBriefOptions,
 } from "./videoPipeline";
+import { buildDynamicHookBank, buildRankedCopyLevers, buildDynamicCTABank } from "./creativeAnalytics/performanceBanks";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -153,11 +154,26 @@ PRIMARY SELLING ANGLE (emphasize this above all others):
 ${angle}
 === END SELLING ANGLE ===`;
 
-    // Fetch winning examples for few-shot injection (non-blocking — empty string on failure)
-    const winningExamplesBlock = await fetchWinningExamples(product, funnelStage, scriptStyle);
-    if (winningExamplesBlock) {
-      console.log(`[ScriptPipeline] Run #${runId} — Winning examples loaded (${winningExamplesBlock.length} chars)`);
-    }
+    // Fetch performance intelligence (non-blocking — all fall back gracefully)
+    const [winningExamplesBlock, dynamicHookBank, dynamicCTABank, rankedLevers] = await Promise.all([
+      fetchWinningExamples(product, funnelStage, scriptStyle),
+      buildDynamicHookBank(product, funnelStage),
+      buildDynamicCTABank(funnelStage),
+      productIntel
+        ? buildRankedCopyLevers(product, productIntel.copyLevers)
+        : Promise.resolve({ levers: [] as string[], ranked: false, data: [] }),
+    ]);
+    if (winningExamplesBlock) console.log(`[ScriptPipeline] Run #${runId} — Winning examples loaded`);
+    if (dynamicHookBank) console.log(`[ScriptPipeline] Run #${runId} — Dynamic hook bank loaded`);
+    if (dynamicCTABank) console.log(`[ScriptPipeline] Run #${runId} — Dynamic CTA bank loaded`);
+    if (rankedLevers.ranked) console.log(`[ScriptPipeline] Run #${runId} — Copy levers ranked by ROAS`);
+
+    // Use dynamic banks with static fallback
+    const hookBankBlock = dynamicHookBank || HOOK_BANK;
+    const ctaBankBlock = dynamicCTABank || CTA_BANK;
+    const leverRankingBlock = rankedLevers.ranked
+      ? `\n=== LEVER PERFORMANCE (ranked by real ROAS — prioritize higher-ranked levers) ===\n${rankedLevers.data.map((d, i) => `${i + 1}. "${d.scriptAngle}" — ${(d.avgRoasBp / 10000).toFixed(1)}x ROAS (${d.sampleSize} creatives)`).join("\n")}\n=== END LEVER PERFORMANCE ===\n`
+      : "";
 
     await db.updatePipelineRun(runId, { scriptStage: "stage_2_generation" });
 
@@ -236,9 +252,9 @@ ${funnelRules}
 
 ${audienceBlock}
 
-${HOOK_BANK}
+${hookBankBlock}
 
-${CTA_BANK}
+${ctaBankBlock}
 
 ${TRANSITION_LOGIC}
 
@@ -252,7 +268,7 @@ ${COMPLIANCE_RULES}
 ${productInfoContext || `Product: ONEST ${product}. Brand: ONEST Health. Website: onest.com.au.`}
 ${productIntelBlock}
 === END PRODUCT INFORMATION ===
-${winningExamplesBlock}
+${leverRankingBlock}${winningExamplesBlock}
 Return your response in this EXACT JSON format:
 {
   "title": "Short descriptive title for this script",
