@@ -1,7 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { IterationResults } from "@/components/IterationResults";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronUp, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -293,16 +293,7 @@ function VideoResults({ run }: { run: any }) {
       )}
 
       {/* Stage 2: Visual Analysis */}
-      {run.visualAnalysis && (
-        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-            <Eye className="w-4 h-4 text-[#FF3838]" /> Stage 2: Visual Analysis
-          </h2>
-          <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-            <MarkdownContent content={run.visualAnalysis} />
-          </div>
-        </div>
-      )}
+      {run.visualAnalysis && <VisualAnalysisSection content={run.visualAnalysis} />}
 
       {/* Stage 3: Video Creative Brief */}
       {run.videoBrief && (
@@ -841,6 +832,53 @@ function TeamApprovalSection({ run }: { run: any }) {
 // ============================================================
 // SHARED COMPONENTS
 // ============================================================
+function VisualAnalysisSection({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // Build a lightweight summary: first 2-3 meaningful lines or first paragraph
+  const summary = useMemo(() => {
+    const stripped = content
+      .replace(/^#+\s+/gm, "")           // drop markdown headings
+      .replace(/\*\*|__/g, "")            // drop bold markers
+      .replace(/^\s*[-*]\s+/gm, "")       // drop list bullets
+      .split(/\n+/)
+      .map(l => l.trim())
+      .filter(Boolean);
+    const joined = stripped.slice(0, 3).join(" · ");
+    return joined.length > 280 ? joined.slice(0, 280).replace(/\s\S*$/, "") + "…" : joined;
+  }, [content]);
+
+  return (
+    <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <h2 className="text-white font-semibold flex items-center gap-2">
+          <Eye className="w-4 h-4 text-[#FF3838]" /> Stage 2: Visual Analysis
+        </h2>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => { navigator.clipboard.writeText(content); toast.success("Analysis copied!"); }}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+          >
+            <Copy className="w-3.5 h-3.5" /> Copy
+          </button>
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+          >
+            {expanded ? <><ChevronUp className="w-3.5 h-3.5" /> Collapse</> : <><ChevronDown className="w-3.5 h-3.5" /> Show full analysis</>}
+          </button>
+        </div>
+      </div>
+      {expanded ? (
+        <div className="text-gray-300 text-sm leading-relaxed max-h-[500px] overflow-y-auto pr-2 border-t border-white/5 pt-3">
+          <MarkdownContent content={content} />
+        </div>
+      ) : (
+        <p className="text-gray-400 text-sm leading-relaxed italic">{summary}</p>
+      )}
+    </div>
+  );
+}
+
 function StepStatus({ label, done }: { label: string; done: boolean }) {
   return (
     <div className="flex items-center gap-2">
