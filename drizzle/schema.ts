@@ -697,3 +697,31 @@ export const adSyncState = mysqlTable("adSyncState", {
 
 export type AdSyncState = typeof adSyncState.$inferSelect;
 export type InsertAdSyncState = typeof adSyncState.$inferInsert;
+
+/**
+ * Pattern insights — mined from creative performance data.
+ * "pattern_breaker": creative outperformed its expected category.
+ * "confirmed_pattern": creative matched the winning pattern.
+ */
+export const patternInsights = mysqlTable("patternInsights", {
+  id: int("id").autoincrement().primaryKey(),
+  creativeAssetId: int("creativeAssetId").notNull(),
+  insightType: mysqlEnum("insightType", ["pattern_breaker", "confirmed_pattern"]).notNull(),
+  /** Dimension being analyzed, e.g. "hookTactic", "messagingAngle" */
+  dimension: varchar("dimension", { length: 64 }).notNull(),
+  /** The specific combination, e.g. "bold_claim + cold" */
+  combination: varchar("combination", { length: 128 }).notNull(),
+  expectedScore: int("expectedScore").notNull().default(0),
+  actualScore: int("actualScore").notNull().default(0),
+  /** Standard deviations above/below expected */
+  deviation: int("deviation").notNull().default(0),
+  /** Human-readable insight */
+  insight: text("insight"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  creativeIdx: index("pi_creative_idx").on(t.creativeAssetId),
+  typeIdx: index("pi_type_idx").on(t.insightType, t.createdAt),
+}));
+
+export type PatternInsight = typeof patternInsights.$inferSelect;
+export type InsertPatternInsight = typeof patternInsights.$inferInsert;

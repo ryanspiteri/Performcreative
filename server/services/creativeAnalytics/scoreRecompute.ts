@@ -18,6 +18,7 @@
 import { sql } from "drizzle-orm";
 import * as db from "../../db";
 import { computeScores, computePercentiles, determineCoverage, type AccountBenchmarks, type ScoreInputs } from "./scoreEngine";
+import { detectPatternBreakers } from "./patternMiner";
 
 const TAG = "[ScoreRecompute]";
 
@@ -214,5 +215,16 @@ export async function recomputeForDateRange(dateFrom: Date, dateTo: Date): Promi
   }
 
   console.log(`${TAG} Recomputed ${rowsUpserted} creative score rows for ${dateFrom.toISOString().slice(0, 10)} → ${dateTo.toISOString().slice(0, 10)}`);
+
+  // Run pattern breaker detection after scores are fresh
+  try {
+    const patternBreakers = await detectPatternBreakers();
+    if (patternBreakers > 0) {
+      console.log(`${TAG} Pattern breaker detection found ${patternBreakers} insights`);
+    }
+  } catch (err: any) {
+    console.warn(`${TAG} Pattern breaker detection failed (non-blocking):`, err.message);
+  }
+
   return { rowsUpserted };
 }

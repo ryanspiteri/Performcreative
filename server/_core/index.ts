@@ -211,6 +211,7 @@ async function startServer() {
       // Creative Analytics OS
       "creativeAssets", "ads", "adDailyStats", "adAttributionStats",
       "creativeScores", "adCreativeLinks", "adSyncState",
+      "patternInsights",
     ];
     try {
       const dbConn = await db.getDb();

@@ -16,6 +16,7 @@ import {
   adCreativeLinks, InsertAdCreativeLink, AdCreativeLink,
   adSyncState, InsertAdSyncState, AdSyncState,
   creativeAiTags, InsertCreativeAiTag, CreativeAiTag,
+  patternInsights, InsertPatternInsight, PatternInsight,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1476,4 +1477,27 @@ export async function getWinningScriptsByContext(
     console.error("[DB] getWinningScriptsByContext failed:", err.message);
     return [];
   }
+}
+
+// ─── Script Intelligence: Pattern Insights ─────────────────────────────────
+
+export async function insertPatternInsight(data: InsertPatternInsight): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(patternInsights).values(data);
+}
+
+export async function getPatternInsights(limit = 20): Promise<PatternInsight[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(patternInsights).orderBy(desc(patternInsights.createdAt)).limit(limit);
+}
+
+export async function getPatternBreakers(limit = 10): Promise<PatternInsight[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(patternInsights)
+    .where(eq(patternInsights.insightType, "pattern_breaker"))
+    .orderBy(desc(patternInsights.createdAt))
+    .limit(limit);
 }
