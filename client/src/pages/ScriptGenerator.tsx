@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   PenTool, Loader2, CheckCircle, Circle, AlertCircle,
-  Copy, ChevronDown, ChevronUp, Sparkles, Play, X, Save,
+  Copy, ChevronDown, ChevronUp, Sparkles, Play, X, Save, TrendingUp,
 } from "lucide-react";
 
 const PRODUCTS = [
@@ -100,6 +100,11 @@ export default function ScriptGenerator() {
   const [editHintDismissed, setEditHintDismissed] = useState(false);
 
   const optionsQuery = trpc.scriptGenerator.options.useQuery();
+  const briefQuery = trpc.scriptGenerator.getIntelligenceBrief.useQuery(
+    { product },
+    { enabled: !!product, staleTime: 5 * 60 * 1000 }
+  );
+  const brief = briefQuery.data;
 
   const runQuery = trpc.scriptGenerator.get.useQuery(
     { id: runId! },
@@ -350,6 +355,41 @@ export default function ScriptGenerator() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Intelligence Brief */}
+            {brief && (
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Performance Intelligence</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Based on {brief.creativeCount} creatives{brief.totalSpendCents > 0 ? ` and $${(brief.totalSpendCents / 100).toLocaleString()} spend` : ""} over 90 days:
+                </p>
+                <div className="space-y-1">
+                  {brief.topHookTactic && (
+                    <p className="text-xs text-gray-300">
+                      <span className="text-emerald-400">Top hook tactic:</span> {brief.topHookTactic.tactic.replace(/_/g, " ")} (avg score {brief.topHookTactic.avgScore})
+                    </p>
+                  )}
+                  {brief.topMessagingAngle && (
+                    <p className="text-xs text-gray-300">
+                      <span className="text-emerald-400">Top angle:</span> {brief.topMessagingAngle.angle.replace(/_/g, " ")} (avg score {brief.topMessagingAngle.avgScore})
+                    </p>
+                  )}
+                  {brief.topHooks.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-white/5">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Top performing hooks</p>
+                      {brief.topHooks.slice(0, 3).map((h, i) => (
+                        <p key={i} className="text-xs text-gray-400 truncate" title={h.hookText}>
+                          <span className="text-emerald-400/70">{h.hookScore}</span> — "{h.hookText.slice(0, 80)}{h.hookText.length > 80 ? "..." : ""}"
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* 2. Script Style */}
             <div>

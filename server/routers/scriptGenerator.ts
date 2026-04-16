@@ -14,6 +14,7 @@ import {
   type FunnelStage,
   type ActorArchetype,
 } from "../services/videoPipeline";
+import { buildIntelligenceBrief } from "../services/creativeAnalytics/performanceBanks";
 
 // ─── ClickUp formatter ───────────────────────────────────────────────────────
 
@@ -125,6 +126,14 @@ export const scriptGeneratorRouter = router({
       angles,
     };
   }),
+
+  // ── Intelligence Brief ───────────────────────────────────────────────────
+
+  getIntelligenceBrief: protectedProcedure
+    .input(z.object({ product: z.string().min(1) }))
+    .query(async ({ input }) => {
+      return buildIntelligenceBrief(input.product);
+    }),
 
   // ── Generate scripts ──────────────────────────────────────────────────────
 
