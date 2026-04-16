@@ -4,6 +4,7 @@ import * as db from "../db";
 import { TRPCError } from "@trpc/server";
 import { runScriptPipeline } from "../services/scriptPipeline";
 import { createMultipleScriptTasks } from "../services/clickup";
+import { callClaude, buildProductInfoContext } from "../services/_shared";
 import {
   SCRIPT_STYLES,
   SCRIPT_SUB_STRUCTURES,
@@ -169,6 +170,96 @@ export const scriptGeneratorRouter = router({
       );
 
       return { runId };
+    }),
+
+  // ── Generate AI concepts ─────────────────────────────────────────────────
+
+  generateConcepts: protectedProcedure
+    .input(z.object({
+      product: z.string().min(1),
+      scriptStyle: z.string().min(1),
+      subStructureId: z.string().optional(),
+      funnelStage: z.enum(["cold", "warm", "retargeting", "retention"]),
+      archetype: z.string().min(1),
+      angle: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      // Resolve sub-structure
+      let subStructure: any = SCRIPT_SUB_STRUCTURES.find(s => s.id === input.subStructureId);
+      if (!subStructure && input.subStructureId) {
+        const dbStruct = await db.getScriptStructure(input.subStructureId).catch(() => null);
+        if (dbStruct) subStructure = { name: dbStruct.name, ...(dbStruct.data as any) };
+      }
+
+      // Resolve archetype
+      let archetypeProfile: any = ARCHETYPE_PROFILES[input.archetype as ActorArchetype];
+      if (!archetypeProfile) {
+        const dbAud = await db.getScriptAudience(input.archetype).catch(() => null);
+        if (dbAud) archetypeProfile = { label: dbAud.label, ...(dbAud.data as any) };
+      }
+
+      const styleLabel = SCRIPT_STYLES.find(s => s.id === input.scriptStyle)?.label || input.scriptStyle;
+      const productIntel = PRODUCT_INTELLIGENCE[input.product];
+      const productInfo = await buildProductInfoContext(input.product).catch(() => "");
+
+      const structureBlock = subStructure ? `
+SUB-STRUCTURE: ${subStructure.name}
+Psychological Lever: ${subStructure.psychologicalLever || "N/A"}
+Awareness Level: ${subStructure.awarenessLevel || "N/A"}
+Why It Converts: ${subStructure.whyItConverts || "N/A"}
+Stages: ${subStructure.stages?.map((s: any) => s.stage).join(" → ") || "N/A"}` : "";
+
+      const audienceBlock = archetypeProfile ? `
+TARGET AUDIENCE: ${archetypeProfile.label || input.archetype}
+Life Context: ${archetypeProfile.lifeContext || "N/A"}
+Language Register: ${archetypeProfile.languageRegister || "N/A"}
+Pre-Product Objection: ${archetypeProfile.preProductObjection || "N/A"}` : `TARGET AUDIENCE: ${input.archetype}`;
+
+      const intelBlock = productIntel ? `
+PRODUCT INTELLIGENCE:
+Primary Benefit: ${productIntel.primaryBenefit}
+Differentiator: ${productIntel.differentiator}
+Key Ingredients: ${productIntel.keyIngredients.join(", ")}` : "";
+
+      const prompt = `Generate 5 distinct creative concepts for an ONEST Health ${input.product} video ad script.
+
+SCRIPT STYLE: ${styleLabel}
+${structureBlock}
+FUNNEL STAGE: ${input.funnelStage}
+${audienceBlock}
+SELLING ANGLE: ${input.angle}
+${productInfo ? `\nPRODUCT INFO:\n${productInfo}` : ""}
+${intelBlock}
+
+Return EXACTLY this JSON format, no markdown:
+{
+  "concepts": [
+    {
+      "title": "Short punchy title (5-8 words)",
+      "narrative": "2-3 sentence description of the creative concept — the story, the angle, the emotional arc",
+      "whyItConverts": "1 sentence on the psychological mechanism that drives purchase intent",
+      "suggestedHook": "The exact opening line of the ad"
+    }
+  ]
+}
+
+Rules:
+- Each concept must be DISTINCTLY different — different narrative structure, different emotional lever, different hook approach
+- Concepts must respect the funnel stage rules (cold = no product name in hook, warm = can reference brand)
+- Concepts must speak to the target audience's life context and objections
+- Concepts must leverage the psychological lever from the sub-structure
+- At least one concept should be contrarian or unexpected
+- No generic supplement marketing — be specific to this product and angle`;
+
+      const system = "You are an expert creative strategist for DTC supplement advertising. You generate creative concepts that leverage audience psychology, funnel position, and product intelligence to drive purchase intent. Return only valid JSON.";
+
+      const response = await callClaude([{ role: "user", content: prompt }], system, 4096);
+
+      try {
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) return JSON.parse(jsonMatch[0]) as { concepts: Array<{ title: string; narrative: string; whyItConverts: string; suggestedHook: string }> };
+      } catch {}
+      return { concepts: [] };
     }),
 
   // ── Poll status ───────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { SettingsIcon, ExternalLink, Users, MoreHorizontal, Plus, KeyRound, PenTool, Pencil, Trash2, Database } from "lucide-react";
+import { SettingsIcon, ExternalLink, Users, MoreHorizontal, Plus, KeyRound, PenTool, Pencil, Trash2, Database, ChevronUp, ChevronDown, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -690,6 +690,21 @@ function EditStructureModal({
   const [psychologicalLever, setPsychologicalLever] = useState(structure?.data?.psychologicalLever || "");
   const [whyItConverts, setWhyItConverts] = useState(structure?.data?.whyItConverts || "");
   const [funnelStages, setFunnelStages] = useState<string[]>(structure?.data?.funnelStages || ["cold"]);
+  const [stages, setStages] = useState<Array<{ stage: string; function: string }>>(structure?.data?.stages || []);
+
+  const addStage = () => setStages(prev => [...prev, { stage: "", function: "" }]);
+  const removeStage = (i: number) => setStages(prev => prev.filter((_, idx) => idx !== i));
+  const updateStage = (i: number, field: "stage" | "function", value: string) =>
+    setStages(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s));
+  const moveStage = (i: number, direction: -1 | 1) => {
+    const newIdx = i + direction;
+    if (newIdx < 0 || newIdx >= stages.length) return;
+    setStages(prev => {
+      const copy = [...prev];
+      [copy[i], copy[newIdx]] = [copy[newIdx], copy[i]];
+      return copy;
+    });
+  };
 
   const createMutation = trpc.scriptGenerator.createStructure.useMutation({
     onSuccess: onSaved,
@@ -701,7 +716,7 @@ function EditStructureModal({
   });
 
   const handleSave = () => {
-    const data = { funnelStages, awarenessLevel, psychologicalLever, whyItConverts, stages: structure?.data?.stages || [] };
+    const data = { funnelStages, awarenessLevel, psychologicalLever, whyItConverts, stages };
     if (isEdit) {
       updateMutation.mutate({ structureId, name, category, data });
     } else {
@@ -714,7 +729,7 @@ function EditStructureModal({
 
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
-      <DialogContent className="bg-[#0D0F12] border-white/10 max-w-lg">
+      <DialogContent className="bg-[#0D0F12] border-white/10 max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-white">{isEdit ? "Edit Structure" : "Add Structure"}</DialogTitle>
         </DialogHeader>
@@ -779,6 +794,50 @@ function EditStructureModal({
               rows={3}
               className="w-full bg-[#01040A] border border-white/10 text-white rounded-md px-3 py-2 text-sm outline-none resize-none"
             />
+          </div>
+          {/* Stages sequence editor */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-gray-400 block">Stages</label>
+              <button onClick={addStage} className="text-xs text-[#FF3838] hover:text-[#FF3838]/80 flex items-center gap-1">
+                <Plus className="w-3 h-3" /> Add Stage
+              </button>
+            </div>
+            {stages.length === 0 && (
+              <p className="text-xs text-gray-600 italic">No stages defined. Add stages to define the ad sequence.</p>
+            )}
+            <div className="space-y-2">
+              {stages.map((s, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="flex flex-col gap-0.5 pt-1">
+                    <button onClick={() => moveStage(i, -1)} disabled={i === 0} className="text-gray-500 hover:text-white disabled:opacity-20 disabled:hover:text-gray-500"><ChevronUp className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} className="text-gray-500 hover:text-white disabled:opacity-20 disabled:hover:text-gray-500"><ChevronDown className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="flex-1 grid grid-cols-[1fr_2fr] gap-2">
+                    <Input
+                      value={s.stage}
+                      onChange={e => updateStage(i, "stage", e.target.value)}
+                      placeholder="Stage name"
+                      className="bg-[#01040A] border-white/10 text-white h-8 text-xs"
+                    />
+                    <Input
+                      value={s.function}
+                      onChange={e => updateStage(i, "function", e.target.value)}
+                      placeholder="Stage function / purpose"
+                      className="bg-[#01040A] border-white/10 text-white h-8 text-xs"
+                    />
+                  </div>
+                  <button onClick={() => removeStage(i)} className="text-gray-500 hover:text-red-400 pt-1.5">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {stages.length > 0 && (
+              <p className="text-[10px] text-gray-600 mt-1.5">
+                {stages.map(s => s.stage || "…").join(" → ")}
+              </p>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" className="border-white/10 text-gray-300" onClick={onClose}>Cancel</Button>

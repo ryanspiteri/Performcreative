@@ -206,6 +206,16 @@ export default function ScriptGenerator() {
     ];
   }, [product, effectiveAngle, archetype, optionsQuery.data?.audiences]);
 
+  const [aiConcepts, setAiConcepts] = useState<Array<{ title: string; narrative: string; whyItConverts: string; suggestedHook: string }>>([]);
+  const generateConceptsMutation = trpc.scriptGenerator.generateConcepts.useMutation({
+    onSuccess: (data) => setAiConcepts(data.concepts || []),
+    onError: (err: any) => toast.error(`Concept generation failed: ${err.message}`),
+  });
+  const canGenerateConcepts = !!product && !!scriptStyle && !!funnelStage && !!archetype && !!effectiveAngle;
+
+  // Clear AI concepts when upstream inputs change
+  useEffect(() => { setAiConcepts([]); }, [product, scriptStyle, subStructureId, funnelStage, archetype, effectiveAngle]);
+
   const hasUnsavedEdits = useMemo(
     () => JSON.stringify(editedScripts) !== JSON.stringify(savedScripts),
     [editedScripts, savedScripts]
@@ -488,11 +498,53 @@ export default function ScriptGenerator() {
 
             {/* 7. Concept */}
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-[10px] font-bold text-orange-400">7</span>
-                <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Concept</label>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-[10px] font-bold text-orange-400">7</span>
+                  <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Concept</label>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => generateConceptsMutation.mutate({
+                    product, scriptStyle, subStructureId: subStructureId || undefined,
+                    funnelStage: funnelStage as any, archetype, angle: effectiveAngle,
+                  })}
+                  disabled={!canGenerateConcepts || generateConceptsMutation.isPending || isRunning}
+                  className="text-xs border-white/10 text-gray-400 h-7"
+                >
+                  {generateConceptsMutation.isPending ? (
+                    <><Loader2 className="w-3 h-3 animate-spin mr-1" /> Generating...</>
+                  ) : (
+                    <><Sparkles className="w-3 h-3 mr-1" /> Generate Concepts</>
+                  )}
+                </Button>
               </div>
-              {conceptSuggestions.length > 0 && (
+              {aiConcepts.length > 0 && (
+                <div className="flex flex-col gap-2 mb-3">
+                  {aiConcepts.map((c, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setConcept(c.narrative)}
+                      className={`text-left border rounded-lg px-3 py-2.5 transition-colors ${
+                        concept === c.narrative
+                          ? "border-[#FF3838]/50 bg-[#FF3838]/5"
+                          : "bg-white/5 border-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="text-xs font-medium text-white mb-1">{c.title}</div>
+                      <div className="text-[11px] text-gray-400 leading-relaxed">{c.narrative}</div>
+                      {c.suggestedHook && (
+                        <div className="text-[10px] text-orange-400/70 mt-1 italic">Hook: "{c.suggestedHook}"</div>
+                      )}
+                      {c.whyItConverts && (
+                        <div className="text-[10px] text-gray-600 mt-0.5">{c.whyItConverts}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {aiConcepts.length === 0 && conceptSuggestions.length > 0 && (
                 <div className="flex flex-col gap-1.5 mb-2">
                   {conceptSuggestions.map((s, i) => (
                     <button

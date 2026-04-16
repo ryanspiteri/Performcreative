@@ -1,7 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { IterationResults } from "@/components/IterationResults";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle, ExternalLink, ChevronDown, ChevronRight, Loader2, Play, FileText, Eye, PenTool, ListChecks, Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,14 @@ export default function Results() {
     { refetchInterval: (query) => {
       const d = query.state.data;
       if (!d) return false;
+      // Safety: stop polling if pipeline is marked complete
+      if (d.completedAt) return false;
+      if (d.status === "completed" || d.status === "failed") return false;
+      // Safety: stop polling if pipeline has been running > 30 minutes (likely stuck)
+      if ((d.status === "running" || d.status === "pending") && d.createdAt) {
+        const ageMs = Date.now() - new Date(d.createdAt).getTime();
+        if (ageMs > 30 * 60 * 1000) return false;
+      }
       if (d.status === "running" || d.status === "pending") return 3000;
       if (d.pipelineType === "static" && d.staticStage === "stage_3b_selection") return false;
       if (d.pipelineType === "static" && d.staticStage === "stage_6_team_approval") return false;
@@ -116,11 +124,19 @@ export default function Results() {
             )}
           </p>
         </div>
-        {isRunning && (
-          <div className="flex items-center gap-2 text-orange-400 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" /> Pipeline running...
-          </div>
-        )}
+        {isRunning && (() => {
+          const ageMs = run.createdAt ? Date.now() - new Date(run.createdAt).getTime() : 0;
+          const isStale = ageMs > 30 * 60 * 1000;
+          return isStale ? (
+            <div className="flex items-center gap-2 text-yellow-400 text-sm">
+              <AlertTriangle className="w-4 h-4" /> Pipeline may be stuck — started {Math.round(ageMs / 60000)} min ago
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-orange-400 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Pipeline running...
+            </div>
+          );
+        })()}
       </div>
 
       {/* Error */}
@@ -355,7 +371,7 @@ function VideoResults({ run }: { run: any }) {
       )}
 
       {/* Stage 4: Generated Scripts */}
-      {scripts.length > 0 && <ScriptsSection scripts={scripts} />}
+      {scripts.length > 0 && <ScriptsSection scripts={scripts} runId={run.id} />}
 
       {/* Stage 4b: Script Approval Gate */}
       {videoStage === "stage_4b_script_approval" && scripts.length > 0 && (
@@ -445,6 +461,18 @@ function StaticResults({ run }: { run: any }) {
   const briefReview = run.staticBriefReview as any;
   const creativeReview = run.staticCreativeReview as any;
   const isRunning = run.status === "running" || run.status === "pending";
+  const [editingBrief, setEditingBrief] = useState(false);
+  const [briefDraft, setBriefDraft] = useState("");
+  const utils = trpc.useUtils();
+  const updateBriefMutation = trpc.pipeline.updateStaticBrief.useMutation({
+    onSuccess: () => {
+      toast.success("Brief updated");
+      setEditingBrief(false);
+      utils.pipeline.get.invalidate({ id: run.id });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+  const briefEditable = ["stage_2_brief", "stage_3_brief_review", "stage_3b_selection"].includes(run.staticStage);
 
   return (
     <div className="space-y-6">
@@ -527,16 +555,49 @@ function StaticResults({ run }: { run: any }) {
             <h2 className="text-white font-semibold flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#FF3838]" /> Stage 2: Creative Brief
             </h2>
-            <button
-              onClick={() => { navigator.clipboard.writeText(run.staticBrief || ""); toast.success("Brief copied!"); }}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
-            >
-              <Copy className="w-3.5 h-3.5" /> Copy
-            </button>
+            <div className="flex items-center gap-2">
+              {briefEditable && !editingBrief && (
+                <button
+                  onClick={() => { setEditingBrief(true); setBriefDraft(run.staticBrief || ""); }}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+                >
+                  <PenTool className="w-3.5 h-3.5" /> Edit
+                </button>
+              )}
+              <button
+                onClick={() => { navigator.clipboard.writeText(run.staticBrief || ""); toast.success("Brief copied!"); }}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copy
+              </button>
+            </div>
           </div>
-          <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-            <MarkdownContent content={run.staticBrief} />
-          </div>
+          {editingBrief ? (
+            <div>
+              <textarea
+                value={briefDraft}
+                onChange={e => setBriefDraft(e.target.value)}
+                rows={15}
+                className="w-full bg-[#01040A] border border-white/10 text-gray-300 text-sm rounded-lg px-4 py-3 resize-y outline-none focus:border-[#FF3838]/30"
+              />
+              <div className="flex gap-2 mt-3">
+                <Button
+                  onClick={() => updateBriefMutation.mutate({ runId: run.id, brief: briefDraft })}
+                  disabled={updateBriefMutation.isPending}
+                  className="bg-[#FF3838] hover:bg-[#FF3838]/90 text-white text-xs"
+                >
+                  {updateBriefMutation.isPending ? "Saving..." : "Save Brief"}
+                </Button>
+                <Button variant="outline" onClick={() => setEditingBrief(false)} className="border-white/10 text-gray-300 text-xs">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+              <MarkdownContent content={run.staticBrief} />
+            </div>
+          )}
         </div>
       )}
 
@@ -789,9 +850,44 @@ function StepStatus({ label, done }: { label: string; done: boolean }) {
   );
 }
 
-function ScriptsSection({ scripts }: { scripts: any[] }) {
+function ScriptsSection({ scripts, runId }: { scripts: any[]; runId?: number }) {
   const [activeTab, setActiveTab] = useState(0);
-  const script = scripts[activeTab];
+  const [editMode, setEditMode] = useState(false);
+  const [editedScripts, setEditedScripts] = useState<Record<number, any>>({});
+  const utils = trpc.useUtils();
+
+  const saveMutation = trpc.pipeline.saveVideoScriptEdits.useMutation({
+    onSuccess: () => {
+      toast.success("Script edits saved");
+      setEditMode(false);
+      if (runId) utils.pipeline.get.invalidate({ id: runId });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const getScript = (i: number) => editedScripts[i] || scripts[i] || {};
+
+  const updateField = (scriptIndex: number, path: string[], value: string) => {
+    setEditedScripts(prev => {
+      const script = JSON.parse(JSON.stringify(prev[scriptIndex] || scripts[scriptIndex] || {}));
+      if (path.length === 1) {
+        script[path[0]] = value;
+      } else if (path.length === 3 && path[0] === "script") {
+        const segIndex = parseInt(path[1], 10);
+        if (!script.script) script.script = [];
+        script.script[segIndex] = { ...script.script[segIndex], [path[2]]: value };
+      }
+      return { ...prev, [scriptIndex]: script };
+    });
+  };
+
+  const handleSave = () => {
+    if (!runId) return;
+    const all = scripts.map((_, i) => getScript(i));
+    saveMutation.mutate({ runId, scripts: all });
+  };
+
+  const script = editMode ? getScript(activeTab) : scripts[activeTab];
 
   return (
     <div className="bg-[#191B1F] border border-white/5 rounded-xl overflow-hidden mt-6">
@@ -801,6 +897,29 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
             <PenTool className="w-4 h-4 text-[#FF3838]" /> Generated Scripts ({scripts.length})
           </h2>
           <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded font-medium">Expert Reviewed</span>
+          {runId && (
+            <div className="ml-auto flex items-center gap-2">
+              {editMode ? (
+                <>
+                  <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending} className="bg-[#FF3838] hover:bg-[#FF3838]/90 text-white text-xs h-7">
+                    {saveMutation.isPending ? "Saving..." : "Save Edits"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setEditMode(false); setEditedScripts({}); }} className="border-white/10 text-gray-400 text-xs h-7">
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => {
+                  const initial: Record<number, any> = {};
+                  scripts.forEach((s, i) => { initial[i] = JSON.parse(JSON.stringify(s)); });
+                  setEditedScripts(initial);
+                  setEditMode(true);
+                }} className="border-white/10 text-gray-400 text-xs h-7">
+                  <PenTool className="w-3 h-3 mr-1" /> Edit Scripts
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex border-b border-white/5">
           {scripts.map((s: any, i: number) => (
@@ -911,7 +1030,16 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
 
           <div className="mb-6">
             <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 bg-[#01040A] inline-block px-2 py-1 rounded">HOOK</div>
-            <p className="text-white text-base">{script.hook}</p>
+            {editMode ? (
+              <textarea
+                value={script.hook || ""}
+                onChange={e => updateField(activeTab, ["hook"], e.target.value)}
+                rows={2}
+                className="w-full bg-[#01040A] border border-white/10 text-white text-sm rounded-lg px-3 py-2 resize-y outline-none focus:border-[#FF3838]/30 mt-1"
+              />
+            ) : (
+              <p className="text-white text-base">{script.hook}</p>
+            )}
           </div>
 
           {script.script && Array.isArray(script.script) && script.script.length > 0 && (
@@ -930,8 +1058,26 @@ function ScriptsSection({ scripts }: { scripts: any[] }) {
                     {script.script.map((row: any, i: number) => (
                       <tr key={`row-${i}`} className="border-b border-white/5">
                         <td className="py-3 pr-4 text-orange-400 font-medium align-top whitespace-nowrap">{row.timestamp}</td>
-                        <td className="py-3 pr-4 text-gray-300 align-top">{row.visual}</td>
-                        <td className="py-3 text-gray-300 align-top">{row.dialogue}{row.transitionLine ? ` ${row.transitionLine}` : ""}</td>
+                        <td className="py-3 pr-4 text-gray-300 align-top">
+                          {editMode ? (
+                            <textarea
+                              value={row.visual || ""}
+                              onChange={e => updateField(activeTab, ["script", String(i), "visual"], e.target.value)}
+                              rows={2}
+                              className="w-full bg-[#01040A] border border-white/10 text-gray-300 text-sm rounded px-2 py-1 resize-y outline-none focus:border-[#FF3838]/30"
+                            />
+                          ) : row.visual}
+                        </td>
+                        <td className="py-3 text-gray-300 align-top">
+                          {editMode ? (
+                            <textarea
+                              value={row.dialogue || ""}
+                              onChange={e => updateField(activeTab, ["script", String(i), "dialogue"], e.target.value)}
+                              rows={2}
+                              className="w-full bg-[#01040A] border border-white/10 text-gray-300 text-sm rounded px-2 py-1 resize-y outline-none focus:border-[#FF3838]/30"
+                            />
+                          ) : <>{row.dialogue}{row.transitionLine ? ` ${row.transitionLine}` : ""}</>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -2178,7 +2178,7 @@ function formatScriptForClickUp(script: any, runId: number, appUrl: string): str
 export async function runVideoPipelineStage5(runId: number, run: any, appUrl: string) {
   console.log(`[VideoPipeline] Running stage 5 (ClickUp) for run #${runId}`);
   await db.updatePipelineRun(runId, { videoStage: "stage_5_clickup" });
-  const allScripts = (run.scriptsJson as any[]) || [];
+  const allScripts = ((run.editedScriptsJson ?? run.scriptsJson) as any[]) || [];
   try {
     const taskInputs = allScripts.filter(s => s.review?.finalScore > 0).map(s => ({
       title: s.title || `${s.label} Script`,

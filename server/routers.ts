@@ -888,6 +888,36 @@ Return JSON in this exact format:
         return { success: true };
       }),
 
+    saveVideoScriptEdits: protectedProcedure
+      .input(z.object({
+        runId: z.number(),
+        scripts: z.array(z.any()),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.pipelineType !== "video") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Not a video pipeline" });
+        }
+        await db.updatePipelineRun(input.runId, { editedScriptsJson: input.scripts });
+        return { ok: true };
+      }),
+
+    updateStaticBrief: protectedProcedure
+      .input(z.object({
+        runId: z.number(),
+        brief: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.pipelineType !== "static") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Not a static pipeline" });
+        }
+        await db.updatePipelineRun(input.runId, { staticBrief: input.brief });
+        return { success: true };
+      }),
+
     // Upload video for winning ad mode
     uploadWinningAdVideo: protectedProcedure
       .input(z.object({
