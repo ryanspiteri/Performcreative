@@ -165,6 +165,79 @@ export const analyticsRouter = router({
       return autoGenerateFromPatterns(input);
     }),
 
+  /**
+   * Wave 3 — Strategy Dashboard data: pattern breakers, AI vs human performance.
+   */
+  getStrategyDashboard: protectedProcedure
+    .input(z.object({ product: z.string().optional() }))
+    .query(async ({ input }) => {
+      const dbConn = await db.getDb();
+      if (!dbConn) return { patternBreakers: [], aiVsHumanPerformance: null, productsByActivity: [] };
+
+      const { sql: sqlTag } = await import("drizzle-orm");
+      const productFilter = input.product ? sqlTag`AND pr.product = ${input.product}` : sqlTag``;
+
+      // Pattern breakers (creatives that outperformed their expected category)
+      const breakerRows: any = await dbConn.execute(sqlTag`
+        SELECT pi.*, ca.name AS creativeName, ca.thumbnailUrl
+        FROM patternInsights pi
+        LEFT JOIN creativeAssets ca ON ca.id = pi.creativeAssetId
+        WHERE pi.insightType = 'pattern_breaker'
+        ORDER BY pi.deviation DESC, pi.createdAt DESC
+        LIMIT 10
+      `);
+      const patternBreakers = (Array.isArray(breakerRows[0]) ? breakerRows[0] : breakerRows).map((r: any) => ({
+        creativeAssetId: Number(r.creativeAssetId),
+        creativeName: r.creativeName as string | null,
+        thumbnailUrl: r.thumbnailUrl as string | null,
+        combination: r.combination as string,
+        expectedScore: Number(r.expectedScore),
+        actualScore: Number(r.actualScore),
+        deviation: Number(r.deviation),
+        insight: r.insight as string | null,
+      }));
+
+      // AI vs Human performance: aggregate scores by pipeline_runs.creativeSource
+      const aiVsHumanRows: any = await dbConn.execute(sqlTag`
+        SELECT
+          COALESCE(pr.creativeSource, 'human') AS source,
+          COUNT(DISTINCT ca.id) AS creativeCount,
+          AVG(cs.hookScore) AS avgHookScore,
+          AVG(cs.convertScore) AS avgConvertScore,
+          SUM(cs.aggregatedSpendCents) AS totalSpendCents
+        FROM pipeline_runs pr
+        JOIN creativeAssets ca ON ca.pipelineRunId = pr.id
+        JOIN creativeScores cs ON cs.creativeAssetId = ca.id
+        WHERE cs.aggregatedImpressions >= 100
+        ${productFilter}
+        GROUP BY COALESCE(pr.creativeSource, 'human')
+      `);
+      const aiVsHuman = (Array.isArray(aiVsHumanRows[0]) ? aiVsHumanRows[0] : aiVsHumanRows).map((r: any) => ({
+        source: r.source as string,
+        creativeCount: Number(r.creativeCount),
+        avgHookScore: Math.round(Number(r.avgHookScore) || 0),
+        avgConvertScore: Math.round(Number(r.avgConvertScore) || 0),
+        totalSpendCents: Number(r.totalSpendCents) || 0,
+      }));
+
+      // Product activity (to show coverage gaps)
+      const productRows: any = await dbConn.execute(sqlTag`
+        SELECT pr.product, COUNT(DISTINCT pr.id) AS runCount, MAX(pr.createdAt) AS lastRunAt
+        FROM pipeline_runs pr
+        WHERE pr.createdAt >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)
+          AND pr.pipelineType IN ('script', 'video')
+        GROUP BY pr.product
+        ORDER BY runCount DESC
+      `);
+      const productsByActivity = (Array.isArray(productRows[0]) ? productRows[0] : productRows).map((r: any) => ({
+        product: r.product as string,
+        runCount: Number(r.runCount),
+        lastRunAt: r.lastRunAt ? new Date(r.lastRunAt) : null,
+      }));
+
+      return { patternBreakers, aiVsHumanPerformance: aiVsHuman, productsByActivity };
+    }),
+
   getCreativeDetail: protectedProcedure
     .input(z.object({ creativeAssetId: z.number().int() }))
     .query(async ({ input }) => {

@@ -26,6 +26,7 @@ import ContentLibrary from "./pages/ContentLibrary";
 import VisualContent from "./pages/VisualContent";
 import PeopleLibrary from "./pages/PeopleLibrary";
 import CreativePerformance from "./pages/analytics/CreativePerformance";
+import CreativeStrategy from "./pages/analytics/CreativeStrategy";
 import AdDetail from "./pages/analytics/AdDetail";
 import SyncAdmin from "./pages/analytics/SyncAdmin";
 import AppLayout from "./components/AppLayout";
@@ -60,6 +61,7 @@ function AuthenticatedRoutes() {
         <Route path="/static" component={StaticPipeline} />
         <Route path="/results/:id" component={Results} />
         <Route path="/analytics" component={CreativePerformance} />
+        <Route path="/analytics/strategy" component={CreativeStrategy} />
         <Route path="/analytics/ads/:id" component={AdDetail} />
         <Route path="/analytics/admin" component={SyncAdmin} />
         <Route path="/settings" component={Settings} />
