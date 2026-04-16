@@ -137,6 +137,17 @@ export const analyticsRouter = router({
     };
   }),
 
+  /**
+   * Wave 2 — Fatigue detection. Returns a map of creativeAssetId → fatigue status
+   * for creatives where this week's scores are 15%+ below last week's.
+   */
+  getFatigueMap: protectedProcedure
+    .input(z.object({ creativeAssetIds: z.array(z.number().int()).max(200) }))
+    .query(async ({ input }) => {
+      const { getFatigueMap } = await import("../services/creativeAnalytics/fatigueDetector");
+      return getFatigueMap(input.creativeAssetIds);
+    }),
+
   getCreativeDetail: protectedProcedure
     .input(z.object({ creativeAssetId: z.number().int() }))
     .query(async ({ input }) => {

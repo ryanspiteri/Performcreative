@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings, PlayCircle, Sparkles, Loader2 } from "lucide-react";
+import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings, PlayCircle, Sparkles, Loader2, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CreativePreviewDialog } from "@/components/analytics/CreativePreviewDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -269,6 +269,14 @@ export default function CreativePerformance() {
   const rows = perfQuery.data?.rows ?? [];
   const isLoading = perfQuery.isLoading || summary.isLoading;
   const isEmpty = !isLoading && rows.length === 0;
+
+  // Wave 2 — Fatigue detection for visible rows
+  const visibleIds = useMemo(() => rows.map((r: any) => r.creativeAssetId), [rows]);
+  const fatigueQuery = trpc.analytics.getFatigueMap.useQuery(
+    { creativeAssetIds: visibleIds },
+    { enabled: visibleIds.length > 0, staleTime: 10 * 60 * 1000 }
+  );
+  const fatigueMap: Record<number, any> = fatigueQuery.data || {};
 
   return (
     <div className="min-h-screen bg-[#0A0B0D] text-white">
@@ -551,7 +559,33 @@ export default function CreativePerformance() {
                 </TableCell>
                 <TableCell className="sticky left-[84px] bg-[#0A0B0D] hover:bg-[#1E2126] z-[1]">
                   <div className="flex flex-col max-w-[260px]">
-                    <span className="text-sm font-medium text-white truncate">{row.creativeName || "(unnamed)"}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-white truncate">{row.creativeName || "(unnamed)"}</span>
+                      {fatigueMap[row.creativeAssetId]?.status === "fatigued" && (
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <TrendingDown className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Fatigued — hook score dropped {Math.abs(fatigueMap[row.creativeAssetId].hookScoreDeltaPct)}% this week</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {fatigueMap[row.creativeAssetId]?.status === "declining" && (
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <TrendingDown className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Declining — hook score dropped {Math.abs(fatigueMap[row.creativeAssetId].hookScoreDeltaPct)}% this week</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                     <span className="text-[11px] text-[#71717A] uppercase tracking-wide">{row.creativeType}</span>
                   </div>
                 </TableCell>
