@@ -187,6 +187,28 @@ function isReduceDataError(err: any): boolean {
 }
 
 /**
+ * Check if an error indicates Meta's per-user throttle ("User request limit
+ * reached" → error code 17 or subcode 2446079). These are hard rate limits
+ * that require a real cooldown, not a retry. A small sleep often clears the
+ * short-window throttle; for hour-window throttles the retry won't help but
+ * won't hurt either.
+ */
+function isRateLimitError(err: any): boolean {
+  const data = err?.response?.data?.error;
+  const msg = (data?.message ?? err?.message ?? "").toLowerCase();
+  if (msg.includes("user request limit reached")) return true;
+  if (msg.includes("application request limit reached")) return true;
+  // Error codes 4 (app limit), 17 (user limit), 32 (page limit), 613 (custom limit)
+  if ([4, 17, 32, 613].includes(data?.code)) return true;
+  return false;
+}
+
+/** Sleep for N ms. Used between rate-limit retries. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
  * Fetch insights for a single date window with automatic retry on "reduce amount" errors.
  * If Meta rejects the query, halve the window and recursively retry until it fits or the
  * window is 1 day (smallest meaningful chunk).
@@ -198,6 +220,7 @@ async function fetchInsightsWindow(
   windowTo: Date,
   externalIdToLocalId: Map<string, number>,
   result: SyncResult,
+  rateLimitState: { hit: boolean } = { hit: false },
 ): Promise<void> {
   const windowDays = Math.max(1, Math.ceil((windowTo.getTime() - windowFrom.getTime()) / 86400000));
   console.log(`${TAG} ${adAccountId}: fetching insights ${windowFrom.toISOString().slice(0, 10)} → ${windowTo.toISOString().slice(0, 10)} (${windowDays}d)`);
@@ -214,9 +237,40 @@ async function fetchInsightsWindow(
         limit: 100,
       });
       for (const row of page.data ?? []) {
-        const localAdId = externalIdToLocalId.get(row.ad_id);
+        let localAdId = externalIdToLocalId.get(row.ad_id);
+
+        // Lazy-fetch unknown ads (typically PAUSED ads that spent inside our
+        // window — they're not in our ACTIVE-only listAds result). A single
+        // getAdById per new ad is cheap compared to pulling every paused ad
+        // up front. Skip on rate-limit: we'll retry on the next sync cycle.
+        if (!localAdId && !rateLimitState.hit) {
+          try {
+            const fullAd = await client.getAdById(row.ad_id);
+            if (fullAd) {
+              const { creativeAsset, adBase } = metaAdToUpsertPayloads(fullAd, adAccountId);
+              const creativeAssetId = await db.upsertCreativeAsset(creativeAsset);
+              if (creativeAssetId) result.creativeAssetsUpserted++;
+              const newLocalId = await db.upsertAd({ ...adBase, creativeAssetId });
+              if (newLocalId) {
+                externalIdToLocalId.set(row.ad_id, newLocalId);
+                localAdId = newLocalId;
+                result.adsUpserted++;
+              }
+            }
+          } catch (err: any) {
+            if (isRateLimitError(err)) {
+              console.warn(`${TAG} ${adAccountId}: rate-limited during lazy ad fetch — dropping unknown ad lookups for rest of this sync`);
+              rateLimitState.hit = true;
+              // Don't push to errors — we'll catch remaining paused ads on the next sync cycle.
+            } else {
+              // Soft-log; missing one ad's metadata isn't fatal, we'll just skip its stats.
+              console.warn(`${TAG} ${adAccountId}: lazy getAdById failed for ${row.ad_id}: ${err.message}`);
+            }
+          }
+        }
+
         if (!localAdId) {
-          // Ad row not in our ads table yet (maybe new since last /ads fetch, or archived)
+          // Ad still unknown (rate-limited, deleted, or inaccessible) — skip.
           continue;
         }
         try {
@@ -228,12 +282,47 @@ async function fetchInsightsWindow(
       }
       insightsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
     } catch (err: any) {
+      if (isRateLimitError(err)) {
+        // Hard throttle on the insights call itself. Short sleep + retry once;
+        // if it fails again, mark the rest of the sync as rate-limited and
+        // surface it as a soft error (status=partial, not failed).
+        console.warn(`${TAG} ${adAccountId}: rate-limited on insights, sleeping 30s and retrying once`);
+        await sleep(30_000);
+        try {
+          const page = await client.getAdInsights({
+            adAccountId,
+            dateFrom: windowFrom,
+            dateTo: windowTo,
+            timeIncrement: 1,
+            after: insightsAfter,
+            limit: 100,
+          });
+          for (const row of page.data ?? []) {
+            const localAdId = externalIdToLocalId.get(row.ad_id);
+            if (!localAdId) continue;
+            try {
+              await db.upsertAdDailyStat(insightRowToDailyStat(row, localAdId));
+              result.dailyStatsUpserted++;
+            } catch (upsertErr: any) {
+              result.errors.push(`upsert daily stat ${row.ad_id} ${row.date_start}: ${upsertErr.message}`);
+            }
+          }
+          insightsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
+          continue;
+        } catch (retryErr: any) {
+          rateLimitState.hit = true;
+          const msg = `rate limit after retry ${windowFrom.toISOString().slice(0, 10)}→${windowTo.toISOString().slice(0, 10)}: will resume next sync`;
+          console.warn(`${TAG} ${msg}`);
+          result.errors.push(msg);
+          return;
+        }
+      }
       if (isReduceDataError(err) && windowDays > 1) {
         // Split window in half and retry both halves
         const midpoint = new Date((windowFrom.getTime() + windowTo.getTime()) / 2);
         console.log(`${TAG} ${adAccountId}: 'reduce amount' error, splitting window into 2 halves`);
-        await fetchInsightsWindow(client, adAccountId, windowFrom, midpoint, externalIdToLocalId, result);
-        await fetchInsightsWindow(client, adAccountId, midpoint, windowTo, externalIdToLocalId, result);
+        await fetchInsightsWindow(client, adAccountId, windowFrom, midpoint, externalIdToLocalId, result, rateLimitState);
+        await fetchInsightsWindow(client, adAccountId, midpoint, windowTo, externalIdToLocalId, result, rateLimitState);
         return;
       }
       const msg = `getAdInsights ${windowFrom.toISOString().slice(0, 10)}→${windowTo.toISOString().slice(0, 10)}: ${err.response?.data?.error?.message ?? err.message}`;
@@ -288,13 +377,14 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
     console.warn(`${TAG} ${adAccountId}: getAdAccount failed (${err?.message ?? err}) — continuing sync`);
   }
 
-  // 2. Fetch ACTIVE + PAUSED ads for the account (paginated). We include PAUSED
-  // because an ad that spent inside our lookback window may now be paused —
-  // filtering to ACTIVE-only dropped its spend AND (via orphan drop) its Hyros
-  // revenue entirely, silently under-reporting totals vs. Ads Manager. We still
-  // skip ARCHIVED since those can't have recent spend. Uses includeCreative=false
-  // to avoid Meta's "reduce amount of data" error on large accounts. Creative
-  // details (thumbnail, video_id) are fetched lazily per-ad below.
+  // 2. Fetch ACTIVE ads for the account (paginated). We don't include PAUSED
+  // here because accounts with many historical paused ads can easily have
+  // 10k+ paused ads → that list pagination + per-ad creative backfill blows
+  // Meta's Business Use Case rate limit ("User request limit reached"). PAUSED
+  // ads that *spent inside our lookback window* are picked up lazily in the
+  // insights step below via a single getAdById per newly-seen ad_id. That
+  // way we only pay the cost for paused ads that actually have data, not
+  // every paused ad in the account's history.
   let adsAfter: string | undefined = undefined;
   const externalIdToLocalId = new Map<string, number>();
   const adsNeedingCreative: string[] = [];
@@ -306,7 +396,7 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
           adAccountId,
           after: adsAfter,
           limit: 50,
-          status: ["ACTIVE", "PAUSED"],
+          status: ["ACTIVE"],
           includeCreative: false,
         });
       for (const ad of page.data ?? []) {
@@ -328,6 +418,42 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
       }
       adsAfter = page.paging?.next ? page.paging.cursors?.after : undefined;
     } catch (err: any) {
+      // Rate limits on listAds happen when the account has many active ads.
+      // Retry once after a short sleep; if still throttled, save what we have
+      // and let insights continue — we'll catch up on the next sync cycle.
+      if (isRateLimitError(err)) {
+        console.warn(`${TAG} ${adAccountId}: rate-limited on listAds, sleeping 30s and retrying once`);
+        await sleep(30_000);
+        try {
+          const retryPage = await client.listAds({
+            adAccountId,
+            after: adsAfter,
+            limit: 50,
+            status: ["ACTIVE"],
+            includeCreative: false,
+          });
+          for (const ad of retryPage.data ?? []) {
+            const { creativeAsset, adBase } = metaAdToUpsertPayloads(ad, adAccountId);
+            const creativeAssetId = await db.upsertCreativeAsset(creativeAsset);
+            if (creativeAssetId) result.creativeAssetsUpserted++;
+            const localAdId = await db.upsertAd({ ...adBase, creativeAssetId });
+            if (localAdId) {
+              result.adsUpserted++;
+              externalIdToLocalId.set(ad.id, localAdId);
+              adsNeedingCreative.push(ad.id);
+            }
+          }
+          adsAfter = retryPage.paging?.next ? retryPage.paging.cursors?.after : undefined;
+          continue;
+        } catch (retryErr: any) {
+          // Second throttle — bail out of listAds but keep what we have and
+          // proceed to insights so partial data still lands.
+          const msg = `listAds rate-limited after retry for ${adAccountId}: will resume next sync`;
+          console.warn(`${TAG} ${msg}`);
+          result.errors.push(msg);
+          break;
+        }
+      }
       const msg = `listAds failed for ${adAccountId}: ${err.response?.data?.error?.message ?? err.message}`;
       console.error(`${TAG} ${msg}`);
       result.errors.push(msg);
@@ -454,14 +580,20 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
       results.push(result);
 
       const totalUpserted = result.adsUpserted + result.dailyStatsUpserted;
-      const status = result.errors.length === 0 ? "success" : result.errors.length < 5 ? "partial" : "failed";
-      // Surface intentional skips in lastSyncError so the admin UI distinguishes
-      // "ran and synced 0 rows" from "skipped due to currency gate". Doesn't
-      // affect status — a skip is a successful no-op, not a failure.
-      const errorSummary =
-        result.errors.length > 0
-          ? result.errors.slice(0, 5).join("\n")
-          : result.skippedReason ?? null;
+      // Status precedence: skipped > errors > partial > success.
+      // Skipped is a distinct status so the admin UI doesn't render an
+      // intentional currency-gate skip as a red "failed" banner.
+      const status = result.skippedReason
+        ? "skipped"
+        : result.errors.length === 0
+          ? "success"
+          : result.errors.length < 5
+            ? "partial"
+            : "failed";
+      // lastSyncError is ONLY real errors. Skip notes live in lastSyncNote so
+      // the admin UI can render them as info (grey), not as a failure banner.
+      const errorSummary = result.errors.length > 0 ? result.errors.slice(0, 5).join("\n") : null;
+      const noteSummary = result.skippedReason ?? null;
 
       await db.updateSyncState("meta", accountId, {
         sourceName: "meta",
@@ -469,6 +601,7 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
         lastSyncCompletedAt: new Date(),
         lastSyncStatus: status,
         lastSyncError: errorSummary,
+        lastSyncNote: noteSummary,
         rowsFetched: totalUpserted,
         rowsUpserted: totalUpserted,
         consecutiveFailures: status === "failed" ? 1 : 0,

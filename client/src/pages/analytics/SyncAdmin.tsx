@@ -37,6 +37,7 @@ function statusColor(status: string | null | undefined): string {
     case "running": return "#F59E0B";
     case "failed": return "#EF4444";
     case "partial": return "#F59E0B";
+    case "skipped": return "#71717A"; // grey — intentional no-op, not a problem
     default: return "#71717A";
   }
 }
@@ -133,11 +134,23 @@ export default function SyncAdmin() {
   const states = syncStatus.data?.states ?? [];
   const metaStates = states.filter((s) => s.sourceName === "meta");
   const hyrosStates = states.filter((s) => s.sourceName === "hyros");
-  const errorsFromSyncs = states.filter((s) => s.lastSyncError).map((s) => ({
-    source: s.sourceName,
-    account: s.adAccountId,
-    error: s.lastSyncError,
-  }));
+  // Only surface REAL errors (not intentional skips) in the red banner.
+  // Skips land in `lastSyncNote` with status='skipped' and are shown below
+  // as info-styled banners instead.
+  const errorsFromSyncs = states
+    .filter((s) => s.lastSyncError && s.lastSyncStatus !== "skipped")
+    .map((s) => ({
+      source: s.sourceName,
+      account: s.adAccountId,
+      error: s.lastSyncError,
+    }));
+  const notesFromSyncs = states
+    .filter((s) => (s as any).lastSyncNote)
+    .map((s) => ({
+      source: s.sourceName,
+      account: s.adAccountId,
+      note: (s as any).lastSyncNote as string,
+    }));
 
   return (
     <div className="min-h-screen bg-[#0A0B0D] text-white">
@@ -203,7 +216,7 @@ export default function SyncAdmin() {
         </div>
       )}
 
-      {/* Error alerts */}
+      {/* Error alerts — only real errors, not intentional skips */}
       {errorsFromSyncs.length > 0 && (
         <div className="px-6 mb-6">
           {errorsFromSyncs.map((e, i) => (
@@ -218,6 +231,26 @@ export default function SyncAdmin() {
                   {e.source} sync failed {e.account ? `(${e.account})` : ""}
                 </div>
                 <div className="text-sm text-[#A1A1AA] mt-1 whitespace-pre-wrap break-words">{e.error}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Info notes — intentional skips, like the AUD currency gate */}
+      {notesFromSyncs.length > 0 && (
+        <div className="px-6 mb-6">
+          {notesFromSyncs.map((n, i) => (
+            <div
+              key={i}
+              className="p-4 rounded-md border-l-4 border-[#71717A] bg-[rgba(113,113,122,0.08)] flex gap-3 mb-3"
+            >
+              <AlertCircle className="w-5 h-5 text-[#A1A1AA] flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-[#A1A1AA]">
+                  {n.source} {n.account ? `(${n.account})` : ""}
+                </div>
+                <div className="text-sm text-[#A1A1AA] mt-1 whitespace-pre-wrap break-words">{n.note}</div>
               </div>
             </div>
           ))}

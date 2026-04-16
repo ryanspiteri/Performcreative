@@ -104,6 +104,10 @@ async function runStartupColumnMigrations() {
       { table: "adDailyStats", column: "metaPurchaseCount", ddl: "INT NOT NULL DEFAULT 0" },
       { table: "adDailyStats", column: "metaPurchaseValueCents", ddl: "INT NOT NULL DEFAULT 0" },
       { table: "adDailyStats", column: "metaRoasBp", ddl: "INT NOT NULL DEFAULT 0" },
+      // Sync state: informational note separate from error (used for intentional
+      // skips like the AUD currency gate, so the admin UI doesn't render them
+      // as red "failed" banners).
+      { table: "adSyncState", column: "lastSyncNote", ddl: "TEXT NULL" },
     ];
 
     let added = 0;
@@ -198,6 +202,30 @@ async function runStartupColumnMigrations() {
         failed++;
         console.error(`${TAG} failed to add ${col.table}.${col.column}: ${err?.message ?? err}`);
       }
+    }
+
+    // Enum widening: adSyncState.lastSyncStatus needs to accept 'skipped'. MySQL
+    // MODIFY COLUMN on an ENUM is additive-safe (existing values keep their
+    // mappings) and idempotent — re-running with the same enum set is a no-op.
+    try {
+      const colInfo: any = await dbConn.execute(sql`
+        SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'adSyncState'
+          AND COLUMN_NAME = 'lastSyncStatus'
+        LIMIT 1
+      `);
+      const colRows = Array.isArray(colInfo[0]) ? colInfo[0] : colInfo;
+      const currentType: string = (colRows[0]?.COLUMN_TYPE ?? "").toString();
+      if (currentType && !currentType.includes("'skipped'")) {
+        await dbConn.execute(sql.raw(
+          `ALTER TABLE \`adSyncState\` MODIFY COLUMN \`lastSyncStatus\` ` +
+          `ENUM('idle','running','success','failed','partial','skipped') NOT NULL DEFAULT 'idle'`,
+        ));
+        console.log(`${TAG} widened adSyncState.lastSyncStatus enum to include 'skipped'`);
+      }
+    } catch (err: any) {
+      console.error(`${TAG} failed to widen lastSyncStatus enum:`, err?.message ?? err);
     }
 
     console.log(`${TAG} done: ${added} added, ${existed} already existed, ${failed} failed`);

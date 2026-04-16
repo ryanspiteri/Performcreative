@@ -689,8 +689,10 @@ export const adSyncState = mysqlTable("adSyncState", {
   adAccountId: varchar("adAccountId", { length: 128 }),
   lastSyncStartedAt: timestamp("lastSyncStartedAt"),
   lastSyncCompletedAt: timestamp("lastSyncCompletedAt"),
-  lastSyncStatus: mysqlEnum("lastSyncStatus", ["idle", "running", "success", "failed", "partial"]).notNull().default("idle"),
+  lastSyncStatus: mysqlEnum("lastSyncStatus", ["idle", "running", "success", "failed", "partial", "skipped"]).notNull().default("idle"),
   lastSyncError: text("lastSyncError"),
+  /** Informational note (e.g. "skipped: currency USD not in allowlist"). Not an error. */
+  lastSyncNote: text("lastSyncNote"),
   rowsFetched: int("rowsFetched").notNull().default(0),
   rowsUpserted: int("rowsUpserted").notNull().default(0),
   consecutiveFailures: int("consecutiveFailures").notNull().default(0),
