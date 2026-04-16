@@ -35,6 +35,9 @@ const creativePerfQuerySchema = z.object({
   campaignId: z.string().optional(),
   adAccountId: z.string().optional(),
   minSpendCents: z.number().int().min(0).optional(),
+  // Wave 1e — AI tag filters
+  messagingAngle: z.string().optional(),
+  hookTactic: z.string().optional(),
   sortBy: sortByEnum.default("spendCents"),
   sortDirection: sortDirEnum.default("desc"),
   limit: z.number().int().min(1).max(500).default(50),
@@ -96,6 +99,42 @@ export const analyticsRouter = router({
     );
 
     return { campaigns, adAccounts };
+  }),
+
+  /**
+   * Wave 1e — Return distinct AI tag values (messagingAngle, hookTactic) that
+   * have at least one tagged creative. Used to populate the tag filter
+   * dropdowns on the Creative Performance page.
+   */
+  getTagFilterOptions: protectedProcedure.query(async () => {
+    const dbConn = await db.getDb();
+    if (!dbConn) return { messagingAngles: [], hookTactics: [] };
+
+    const { sql: sqlTag } = await import("drizzle-orm");
+
+    const angleRows: any = await dbConn.execute(sqlTag`
+      SELECT messagingAngle, COUNT(*) AS cnt
+      FROM creativeAiTags
+      WHERE messagingAngle IS NOT NULL AND messagingAngle != ''
+      GROUP BY messagingAngle
+      ORDER BY cnt DESC
+    `);
+    const tacticRows: any = await dbConn.execute(sqlTag`
+      SELECT hookTactic, COUNT(*) AS cnt
+      FROM creativeAiTags
+      WHERE hookTactic IS NOT NULL AND hookTactic != ''
+      GROUP BY hookTactic
+      ORDER BY cnt DESC
+    `);
+
+    return {
+      messagingAngles: (Array.isArray(angleRows[0]) ? angleRows[0] : angleRows).map(
+        (r: any) => ({ value: r.messagingAngle as string, count: Number(r.cnt) || 0 }),
+      ),
+      hookTactics: (Array.isArray(tacticRows[0]) ? tacticRows[0] : tacticRows).map(
+        (r: any) => ({ value: r.hookTactic as string, count: Number(r.cnt) || 0 }),
+      ),
+    };
   }),
 
   getCreativeDetail: protectedProcedure

@@ -27,6 +27,10 @@ export interface CreativePerfQuery {
   campaignId?: string;
   adAccountId?: string;
   minSpendCents?: number;
+  /** Wave 1e — filter by AI tag (messagingAngle) */
+  messagingAngle?: string;
+  /** Wave 1e — filter by AI tag (hookTactic) */
+  hookTactic?: string;
   sortBy: SortByField;
   sortDirection: SortDirection;
   limit: number;
@@ -115,6 +119,9 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
   const creativeTypeFilter = query.creativeType ? sql`AND ca.creativeType = ${query.creativeType}` : sql``;
   const campaignFilter = query.campaignId ? sql`AND a.campaignId = ${query.campaignId}` : sql``;
   const accountFilter = query.adAccountId ? sql`AND a.adAccountId = ${query.adAccountId}` : sql``;
+  const angleFilter = query.messagingAngle ? sql`AND t.messagingAngle = ${query.messagingAngle}` : sql``;
+  const tacticFilter = query.hookTactic ? sql`AND t.hookTactic = ${query.hookTactic}` : sql``;
+  const needsTagJoin = !!(query.messagingAngle || query.hookTactic);
 
   // sortBy is pre-validated; use sql.raw carefully
   const sortColumn = ALLOWED_SORT_FIELDS[query.sortBy];
@@ -165,10 +172,13 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
       WHERE cs2.date >= ${query.dateFrom}
         AND cs2.date <= ${query.dateTo}
     ) cs ON cs.creativeAssetId = ca.id AND cs.rn = 1
+    ${needsTagJoin ? sql`INNER JOIN creativeAiTags t ON t.creativeAssetId = ca.id AND t.tagVersion = 1` : sql``}
     WHERE 1 = 1
       ${creativeTypeFilter}
       ${campaignFilter}
       ${accountFilter}
+      ${angleFilter}
+      ${tacticFilter}
     GROUP BY ca.id, ca.name, ca.thumbnailUrl, ca.creativeType, ca.pipelineRunId,
              attr.revenueCents, attr.conversions,
              cs.hookScore, cs.watchScore, cs.clickScore, cs.convertScore

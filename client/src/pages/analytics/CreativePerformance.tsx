@@ -176,6 +176,9 @@ export default function CreativePerformance() {
   const [campaignFilter, setCampaignFilter] = useState(initial.campaign);
   const [accountFilter, setAccountFilter] = useState(initial.account);
   const [minSpend, setMinSpend] = useState(initial.minSpend);
+  // Wave 1e — AI tag filters
+  const [messagingAngleFilter, setMessagingAngleFilter] = useState("");
+  const [hookTacticFilter, setHookTacticFilter] = useState("");
 
   // Preview dialog state: which creative (if any) is being previewed.
   const [previewTarget, setPreviewTarget] = useState<{
@@ -193,6 +196,8 @@ export default function CreativePerformance() {
 
   // Fetch filter options (campaigns + accounts) for the dropdowns.
   const filterOptions = trpc.analytics.getFilterOptions.useQuery();
+  // Wave 1e — AI tag filter options
+  const tagFilterOptions = trpc.analytics.getTagFilterOptions.useQuery();
 
   // Sync filter state to URL via replaceState so back button doesn't pile up.
   useEffect(() => {
@@ -221,6 +226,8 @@ export default function CreativePerformance() {
     campaignId: campaignFilter || undefined,
     adAccountId: accountFilter || undefined,
     minSpendCents: minSpend > 0 ? minSpend * 100 : undefined,
+    messagingAngle: messagingAngleFilter || undefined,
+    hookTactic: hookTacticFilter || undefined,
     sortBy,
     sortDirection: sortDir,
     limit: 100,
@@ -373,6 +380,42 @@ export default function CreativePerformance() {
             className="w-[80px] h-8 text-sm bg-[#0A0B0D] border border-[rgba(255,255,255,0.10)] rounded-md px-2 text-white font-mono tabular-nums placeholder:text-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FF3838]"
           />
         </div>
+
+        {/* Wave 1e — Messaging angle filter */}
+        {tagFilterOptions.data && tagFilterOptions.data.messagingAngles.length > 0 && (
+          <Select value={messagingAngleFilter || "_all"} onValueChange={(v) => setMessagingAngleFilter(v === "_all" ? "" : v)}>
+            <SelectTrigger className="w-[170px] h-8 text-sm bg-[#0A0B0D] border-[rgba(255,255,255,0.10)] truncate">
+              <SelectValue placeholder="All angles" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#15171B] border-[rgba(255,255,255,0.10)] max-h-[300px]">
+              <SelectItem value="_all">All angles</SelectItem>
+              {tagFilterOptions.data.messagingAngles.map((a: { value: string; count: number }) => (
+                <SelectItem key={a.value} value={a.value}>
+                  <span className="capitalize">{a.value.replace(/_/g, " ")}</span>
+                  <span className="text-[#71717A] ml-1">({a.count})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Wave 1e — Hook tactic filter */}
+        {tagFilterOptions.data && tagFilterOptions.data.hookTactics.length > 0 && (
+          <Select value={hookTacticFilter || "_all"} onValueChange={(v) => setHookTacticFilter(v === "_all" ? "" : v)}>
+            <SelectTrigger className="w-[170px] h-8 text-sm bg-[#0A0B0D] border-[rgba(255,255,255,0.10)] truncate">
+              <SelectValue placeholder="All tactics" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#15171B] border-[rgba(255,255,255,0.10)] max-h-[300px]">
+              <SelectItem value="_all">All tactics</SelectItem>
+              {tagFilterOptions.data.hookTactics.map((t: { value: string; count: number }) => (
+                <SelectItem key={t.value} value={t.value}>
+                  <span className="capitalize">{t.value.replace(/_/g, " ")}</span>
+                  <span className="text-[#71717A] ml-1">({t.count})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* KPI strip */}
