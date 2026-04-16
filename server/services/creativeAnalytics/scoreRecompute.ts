@@ -17,6 +17,7 @@
  */
 import { sql } from "drizzle-orm";
 import * as db from "../../db";
+import { ENV } from "../../_core/env";
 import { computeScores, computePercentiles, determineCoverage, type AccountBenchmarks, type ScoreInputs } from "./scoreEngine";
 import { detectPatternBreakers } from "./patternMiner";
 
@@ -77,7 +78,7 @@ export async function computeAccountBenchmarks(): Promise<AccountBenchmarks> {
     JOIN adAttributionStats attr ON attr.adId = d.adId AND DATE(attr.date) = DATE(d.date)
     WHERE d.date >= ${ninetyDaysAgo}
       AND d.impressions >= 100
-      AND attr.attributionModel = 'first_click'
+      AND attr.attributionModel = ${ENV.hyrosAttributionModel}
     GROUP BY d.adId
     HAVING spend > 100
   `);
@@ -157,7 +158,7 @@ export async function recomputeForDateRange(dateFrom: Date, dateTo: Date): Promi
     JOIN ads a ON a.id = attr.adId
     WHERE attr.date >= ${dateFrom}
       AND attr.date <= ${dateTo}
-      AND attr.attributionModel = 'first_click'
+      AND attr.attributionModel = ${ENV.hyrosAttributionModel}
     GROUP BY a.creativeAssetId, DATE(attr.date)
   `);
   const attributions: {
@@ -186,7 +187,13 @@ export async function recomputeForDateRange(dateFrom: Date, dateTo: Date): Promi
     const inputs: ScoreInputs = {
       thumbstopBp: impressions > 0 ? Math.round((videoPlayCount / impressions) * 10000) : 0,
       holdRateBp: impressions > 0 ? Math.round((video50Count / impressions) * 10000) : 0,
-      ctrBp: impressions > 0 ? Math.round((Number(agg.clicks) / impressions) * 10000) : 0,
+      // CTR is stored in adDailyStats.ctrBp using "% × 10000" (from parseMetaRateToBp:
+      // Meta's "2.50" -> 25000). `clicks / impressions` gives a fraction; to match the
+      // stored/benchmark scale we need to convert to percentage first:
+      //   fraction × 100 = percentage,  then × 10000 = basis-points-x100.
+      // Bug: previously multiplied by 10000 only, producing values 100× smaller than
+      // the benchmark scale → Click score was pinned near 0 on every creative.
+      ctrBp: impressions > 0 ? Math.round((Number(agg.clicks) / impressions) * 1_000_000) : 0,
       outboundCtrBp: 0,
       impressions,
       clicks: Number(agg.clicks),

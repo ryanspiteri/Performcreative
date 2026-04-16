@@ -249,7 +249,11 @@ export default function AdDetail() {
         {/* Metric summary */}
         {perfRow && (
           <div className="flex flex-wrap gap-8 mb-8 p-6 bg-[#15171B] rounded-lg border border-[rgba(255,255,255,0.06)]">
-            <MetricCell label="Spend" value={formatCents(perfRow.spendCents)} subLabel="Meta" />
+            {/* Both values reconcile to the Hyros dashboard. Revenue comes directly
+                from Hyros /sales attribution. Spend is Meta's number, which is exactly
+                what the Hyros dashboard displays (Hyros pulls spend from the Meta API
+                — same upstream source). Labeled 'Hyros' so ROAS here matches Hyros UI. */}
+            <MetricCell label="Spend" value={formatCents(perfRow.spendCents)} subLabel="Hyros" />
             <MetricCell label="Revenue" value={formatCents(perfRow.revenueCents)} subLabel="Hyros" />
             <MetricCell label="ROAS" value={`${(perfRow.roasBp / 100).toFixed(2)}x`} />
             <MetricCell label="AOV" value={formatCents(perfRow.aovCents)} />
