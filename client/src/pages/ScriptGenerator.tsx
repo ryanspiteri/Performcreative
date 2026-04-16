@@ -186,6 +186,36 @@ export default function ScriptGenerator() {
     }
   }, [run?.id]);
 
+  // Hydrate form from winner-mode URL params (Generate from Winner button)
+  // Only applies on first mount when there is NO runId — winner mode starts a fresh config.
+  const [winnerSource, setWinnerSource] = useState<{ name: string; hook: string } | null>(null);
+  useEffect(() => {
+    if (runId) return; // Don't override runId-hydrated state
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const winnerProduct = params.get("product");
+    const winnerHook = params.get("winnerHook");
+    const winnerAngle = params.get("winnerAngle");
+    const winnerFunnel = params.get("funnelStage");
+    const winnerName = params.get("winnerName");
+
+    if (winnerProduct) setProduct(winnerProduct);
+    if (winnerFunnel && ["cold", "warm", "retargeting", "retention"].includes(winnerFunnel)) {
+      setFunnelStage(winnerFunnel);
+    }
+    if (winnerAngle) {
+      setAngle("__custom__");
+      setCustomAngle(winnerAngle.replace(/_/g, " "));
+    }
+    if (winnerHook) {
+      setConcept(`Inspired by winning ad hook: "${winnerHook}". Build a fresh script that captures the same engagement mechanism but stays distinct from the original.`);
+    }
+    if (winnerName || winnerHook) {
+      setWinnerSource({ name: winnerName || "Unknown winner", hook: winnerHook || "" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isCustomStyle = scriptStyle === "__custom__";
   const effectiveAngle = angle === "__custom__" ? customAngle : angle;
 
@@ -337,6 +367,30 @@ export default function ScriptGenerator() {
         {/* ── Left Panel: Form ── */}
         <div className="w-full md:w-[400px] shrink-0">
           <div className="bg-[#0D0F12] rounded-xl border border-white/5 p-5 space-y-5 overflow-y-auto max-h-[calc(100vh-140px)]">
+
+            {/* Winner source banner */}
+            {winnerSource && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Generating from Winner</p>
+                  <p className="text-xs text-gray-300 mt-1 truncate" title={winnerSource.name}>{winnerSource.name}</p>
+                  {winnerSource.hook && (
+                    <p className="text-[11px] text-gray-400 mt-1 italic line-clamp-2">"{winnerSource.hook}"</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setWinnerSource(null);
+                    window.history.replaceState({}, "", "/scripts");
+                  }}
+                  className="text-gray-500 hover:text-white"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* 1. Product */}
             <div>

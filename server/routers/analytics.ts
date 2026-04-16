@@ -103,12 +103,16 @@ export const analyticsRouter = router({
     .query(async ({ input }) => {
       const asset = await db.getCreativeAssetById(input.creativeAssetId);
       if (!asset) return null;
-      const ads = await db.listAdsForCreative(input.creativeAssetId);
-      const latestScore = await db.getLatestCreativeScore(input.creativeAssetId);
+      const [ads, latestScore, aiTag] = await Promise.all([
+        db.listAdsForCreative(input.creativeAssetId),
+        db.getLatestCreativeScore(input.creativeAssetId),
+        db.getCreativeAiTag(input.creativeAssetId).catch(() => null),
+      ]);
       return {
         asset,
         ads,
         latestScore,
+        aiTag,
       };
     }),
 

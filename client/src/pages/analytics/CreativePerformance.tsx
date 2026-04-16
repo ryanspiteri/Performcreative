@@ -27,9 +27,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings, PlayCircle } from "lucide-react";
+import { BarChart3, ArrowDown, ArrowUp, RefreshCw, Settings, PlayCircle, Sparkles, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CreativePreviewDialog } from "@/components/analytics/CreativePreviewDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 type SortBy = "spendCents" | "revenueCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
 type CreativeType = "all" | "video" | "image";
@@ -181,6 +182,13 @@ export default function CreativePerformance() {
     id: number;
     name: string;
     thumbnailUrl: string | null;
+  } | null>(null);
+
+  // "Generate from Winner" dialog state
+  const [generateTarget, setGenerateTarget] = useState<{
+    id: number;
+    name: string;
+    creativeType: string;
   } | null>(null);
 
   // Fetch filter options (campaigns + accounts) for the dropdowns.
@@ -422,6 +430,7 @@ export default function CreativePerformance() {
               <TableHead className="text-right"><SortHeader field="watchScore" label="Watch" /></TableHead>
               <TableHead className="text-right"><SortHeader field="clickScore" label="Click" /></TableHead>
               <TableHead className="text-right"><SortHeader field="convertScore" label="Convert" /></TableHead>
+              <TableHead className="text-right w-[100px]">Generate</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -516,6 +525,25 @@ export default function CreativePerformance() {
                 <TableCell className="text-right"><ScoreCell score={row.watchScore} label="Watch" metricBp={row.holdRateBp} /></TableCell>
                 <TableCell className="text-right"><ScoreCell score={row.clickScore} label="Click" metricBp={row.ctrBp} /></TableCell>
                 <TableCell className="text-right"><ScoreCell score={row.convertScore} label="Convert" metricBp={row.roasBp} /></TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setGenerateTarget({
+                        id: row.creativeAssetId,
+                        name: row.creativeName || "(unnamed)",
+                        creativeType: row.creativeType,
+                      });
+                    }}
+                    className="h-8 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                    aria-label="Generate from this winner"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />
+                    <span className="text-xs">Generate</span>
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -531,6 +559,145 @@ export default function CreativePerformance() {
         creativeName={previewTarget?.name ?? ""}
         thumbnailUrl={previewTarget?.thumbnailUrl ?? null}
       />
+
+      <GenerateFromWinnerDialog
+        target={generateTarget}
+        onClose={() => setGenerateTarget(null)}
+      />
     </div>
+  );
+}
+
+/**
+ * Dialog that shows a winning creative's metadata + tags and provides
+ * a CTA to navigate to /scripts pre-filled with the winner's context.
+ */
+function GenerateFromWinnerDialog({
+  target,
+  onClose,
+}: {
+  target: { id: number; name: string; creativeType: string } | null;
+  onClose: () => void;
+}) {
+  const [, setLocation] = useLocation();
+  const detailQuery = trpc.analytics.getCreativeDetail.useQuery(
+    { creativeAssetId: target?.id ?? 0 },
+    { enabled: !!target?.id }
+  );
+
+  if (!target) return null;
+
+  const detail = detailQuery.data;
+  const asset = detail?.asset;
+  const score = detail?.latestScore;
+  const aiTag = detail?.aiTag;
+
+  // Best-effort product inference from creative name.
+  // (Future: source from pipeline_runs.product if linked.)
+  const PRODUCTS = ["Hyperburn", "Thermosleep", "Hyperload", "Thermoburn", "Carb Control", "Protein + Collagen", "Creatine", "HyperPump", "AminoLoad", "Marine Collagen", "SuperGreens", "Whey ISO Pro"];
+  const inferredProduct = PRODUCTS.find(p => target.name.toLowerCase().includes(p.toLowerCase())) || "";
+
+  const hookText = (aiTag?.hookText || asset?.adCopyTitle || "") as string;
+  const messagingAngle = (aiTag?.messagingAngle || "") as string;
+  const hookTactic = (aiTag?.hookTactic || "") as string;
+
+  const handleGenerateScripts = () => {
+    const params = new URLSearchParams();
+    if (inferredProduct) params.set("product", inferredProduct);
+    if (hookText) params.set("winnerHook", hookText);
+    if (messagingAngle) params.set("winnerAngle", messagingAngle);
+    if (hookTactic) params.set("winnerTactic", hookTactic);
+    params.set("winnerName", target.name);
+    setLocation(`/scripts?${params.toString()}`);
+    onClose();
+  };
+
+  return (
+    <Dialog open={!!target} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="bg-[#0D0F12] border-white/10 text-white max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            Generate from Winner
+          </DialogTitle>
+          <DialogDescription className="text-gray-400">
+            Generate new scripts inspired by this winning creative's angle and hook.
+          </DialogDescription>
+        </DialogHeader>
+
+        {detailQuery.isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Creative</p>
+              <p className="text-sm text-white truncate">{target.name}</p>
+            </div>
+
+            {score && (
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[
+                  { label: "Hook", value: score.hookScore },
+                  { label: "Watch", value: score.watchScore },
+                  { label: "Click", value: score.clickScore },
+                  { label: "Convert", value: score.convertScore },
+                ].map(s => (
+                  <div key={s.label} className="rounded-lg bg-[#15171B] p-2">
+                    <p className="text-[10px] text-gray-500 uppercase">{s.label}</p>
+                    <p className={`text-lg font-bold ${s.value >= 70 ? "text-emerald-400" : s.value >= 40 ? "text-yellow-400" : "text-red-400"}`}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {hookText && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Hook</p>
+                <p className="text-sm text-gray-300 italic line-clamp-3">"{hookText}"</p>
+              </div>
+            )}
+
+            <div className="flex gap-4 text-xs">
+              {messagingAngle && (
+                <div>
+                  <span className="text-gray-500 uppercase tracking-wider">Angle: </span>
+                  <span className="text-emerald-400">{messagingAngle.replace(/_/g, " ")}</span>
+                </div>
+              )}
+              {hookTactic && (
+                <div>
+                  <span className="text-gray-500 uppercase tracking-wider">Tactic: </span>
+                  <span className="text-emerald-400">{hookTactic.replace(/_/g, " ")}</span>
+                </div>
+              )}
+            </div>
+
+            {inferredProduct ? (
+              <p className="text-xs text-gray-500">
+                Product: <span className="text-white">{inferredProduct}</span> (inferred from creative name)
+              </p>
+            ) : (
+              <p className="text-xs text-yellow-400">
+                Could not infer product from creative name — you'll pick it in the next step.
+              </p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleGenerateScripts}
+            disabled={detailQuery.isLoading}
+            className="bg-emerald-500 hover:bg-emerald-400 text-black"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            Generate Scripts
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
