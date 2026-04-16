@@ -14,10 +14,17 @@ import { useLocation, useRoute, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, BarChart3, PlayCircle } from "lucide-react";
 import { CreativePreviewDialog } from "@/components/analytics/CreativePreviewDialog";
 
 const VALID_DAYS = new Set([7, 14, 30, 90]);
+const DATE_PRESETS = [
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 14 days", days: 14 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+];
 function parseDaysFromSearch(search: string): number {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const raw = Number(params.get("days"));
@@ -185,14 +192,38 @@ export default function AdDetail() {
   return (
     <div className="min-h-screen bg-[#0A0B0D] text-white">
       <div className="px-6 py-5">
-        <Button
-          variant="ghost"
-          onClick={() => setLocation(backHref)}
-          className="text-[#A1A1AA] hover:text-white hover:bg-[#15171B] mb-4"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Creative Performance
-        </Button>
+        <div className="flex items-center justify-between mb-4">
+          <Button
+            variant="ghost"
+            onClick={() => setLocation(backHref)}
+            className="text-[#A1A1AA] hover:text-white hover:bg-[#15171B]"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Creative Performance
+          </Button>
+          {/* Date preset picker — pushes the new ?days=N back into the URL so
+              the back button preserves the new range too. */}
+          <Select
+            value={String(lookbackDays)}
+            onValueChange={(v) => {
+              const newDays = Number(v);
+              const next = new URLSearchParams(search?.startsWith("?") ? search.slice(1) : search ?? "");
+              next.set("days", String(newDays));
+              setLocation(`/analytics/ads/${creativeAssetId}?${next.toString()}`);
+            }}
+          >
+            <SelectTrigger className="w-[160px] h-8 text-sm bg-[#0A0B0D] border-[rgba(255,255,255,0.10)]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-[#15171B] border-[rgba(255,255,255,0.10)]">
+              {DATE_PRESETS.map((p) => (
+                <SelectItem key={p.days} value={String(p.days)}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Header */}
         <div className="flex gap-6 mb-8">
