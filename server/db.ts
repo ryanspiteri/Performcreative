@@ -1331,6 +1331,78 @@ export async function updateSyncState(sourceName: string, adAccountId: string | 
   }
 }
 
+// ─── Script Intelligence: Review Calibration Data ──────────────────────────
+
+export interface ReviewCalibrationExample {
+  hook: string;
+  reviewScore: number;
+  hookScore: number;
+  convertScore: number;
+  divergenceType: "high_review_low_production" | "low_review_high_production";
+}
+
+/**
+ * Find scripts where the expert review score diverged significantly from
+ * real-world production performance. Used to calibrate the review panel.
+ */
+export async function getReviewCalibrationData(limit = 4): Promise<ReviewCalibrationExample[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    // Get scripts that have both review scores (in scriptsJson) and production scores
+    const rows = await db.execute(sql`
+      SELECT
+        pr.scriptsJson,
+        MAX(cs.hookScore) AS hookScore,
+        MAX(cs.convertScore) AS convertScore
+      FROM ${pipelineRuns} pr
+      JOIN ${creativeAssets} ca ON ca.pipelineRunId = pr.id
+      JOIN ${creativeScores} cs ON cs.creativeAssetId = ca.id
+      WHERE pr.pipelineType IN ('script', 'video')
+        AND pr.status = 'completed'
+        AND pr.scriptsJson IS NOT NULL
+        AND cs.aggregatedImpressions >= 100
+      GROUP BY pr.id
+      ORDER BY pr.createdAt DESC
+      LIMIT 50
+    `);
+
+    const examples: ReviewCalibrationExample[] = [];
+
+    for (const r of (rows as any)[0] || []) {
+      const scripts = typeof r.scriptsJson === "string" ? JSON.parse(r.scriptsJson) : r.scriptsJson;
+      const scriptArr = Array.isArray(scripts) ? scripts : [scripts];
+      const hookScore = Number(r.hookScore) || 0;
+      const convertScore = Number(r.convertScore) || 0;
+
+      for (const script of scriptArr) {
+        const reviewScore = script?.review?.finalScore;
+        const hook = script?.hook;
+        if (!reviewScore || !hook) continue;
+
+        // High review, low production
+        if (reviewScore >= 85 && hookScore <= 40) {
+          examples.push({ hook, reviewScore, hookScore, convertScore, divergenceType: "high_review_low_production" });
+        }
+        // Low review, high production
+        if (reviewScore < 80 && hookScore >= 80) {
+          examples.push({ hook, reviewScore, hookScore, convertScore, divergenceType: "low_review_high_production" });
+        }
+      }
+    }
+
+    // Return balanced examples: up to limit/2 of each type
+    const half = Math.ceil(limit / 2);
+    const highLow = examples.filter(e => e.divergenceType === "high_review_low_production").slice(0, half);
+    const lowHigh = examples.filter(e => e.divergenceType === "low_review_high_production").slice(0, half);
+    return [...highLow, ...lowHigh];
+  } catch (err: any) {
+    console.error("[DB] getReviewCalibrationData failed:", err.message);
+    return [];
+  }
+}
+
 // ─── Script Intelligence: Winning Scripts by Context ───────────────────────
 
 export interface WinningScript {

@@ -30,6 +30,7 @@ import {
   getSubStructurePromptBlock,
   reviewScriptWithPanel,
   fetchWinningExamples,
+  buildReviewCalibrationBlock,
   type ScriptStyleId,
   type FunnelStage,
   type ActorArchetype,
@@ -377,6 +378,10 @@ Make the script ~${duration} seconds long with ${segmentCount} timestamp segment
     // ── Stage 3: Expert review ────────────────────────────────────────────
     console.log(`[ScriptPipeline] Run #${runId} — Stage 3: Expert review`);
 
+    // Fetch calibration data for the review panel (non-blocking)
+    const calibrationBlock = await buildReviewCalibrationBlock();
+    if (calibrationBlock) console.log(`[ScriptPipeline] Run #${runId} — Review calibration data loaded`);
+
     // Build a synthetic brief for the review function
     const syntheticBrief: VideoBriefOptions = {
       funnelStage,
@@ -407,7 +412,8 @@ Make the script ~${duration} seconds long with ${segmentCount} timestamp segment
             styleLabel,
             syntheticBrief,
             productInfoContext,
-            funnelStage
+            funnelStage,
+            calibrationBlock
           ),
           STAGE_4_TIMEOUT,
           `reviewScript_${i + 1}`

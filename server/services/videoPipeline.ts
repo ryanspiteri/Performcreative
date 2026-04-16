@@ -52,6 +52,42 @@ export async function fetchWinningExamples(
   }
 }
 
+/**
+ * Build a calibration block for the expert review panel from real divergence data.
+ * Shows examples where review scores didn't match production performance.
+ */
+export async function buildReviewCalibrationBlock(): Promise<string> {
+  try {
+    const examples = await db.getReviewCalibrationData(4);
+    if (examples.length === 0) return "";
+
+    const highLow = examples.filter(e => e.divergenceType === "high_review_low_production");
+    const lowHigh = examples.filter(e => e.divergenceType === "low_review_high_production");
+
+    let block = "=== CALIBRATION DATA (real performance vs review scores — use to improve accuracy) ===\n";
+
+    if (highLow.length > 0) {
+      block += "\nScripts that scored HIGH in review but LOW in production (over-scored):\n";
+      for (const e of highLow) {
+        block += `- Hook: "${e.hook.slice(0, 100)}" — Review: ${e.reviewScore}/100, Production hookScore: ${e.hookScore}/100. Polish does not equal performance.\n`;
+      }
+    }
+
+    if (lowHigh.length > 0) {
+      block += "\nScripts that scored LOW in review but HIGH in production (under-scored):\n";
+      for (const e of lowHigh) {
+        block += `- Hook: "${e.hook.slice(0, 100)}" — Review: ${e.reviewScore}/100, Production hookScore: ${e.hookScore}/100. Authenticity often outperforms craft.\n`;
+      }
+    }
+
+    block += "\nUse this data to calibrate your scoring. A polished script is not necessarily a converting script.\n=== END CALIBRATION ===";
+    return block;
+  } catch (err: any) {
+    console.error("[VideoPipeline] buildReviewCalibrationBlock failed:", err.message);
+    return "";
+  }
+}
+
 // ============================================================
 // SCRIPT STYLE DEFINITIONS — COPY FRAMEWORK v3.0
 // ============================================================
@@ -1670,7 +1706,8 @@ export async function reviewScriptWithPanel(
   scriptStyle: string,
   brief: VideoBriefOptions,
   productInfoContext: string,
-  funnelStage: FunnelStage
+  funnelStage: FunnelStage,
+  calibrationBlock?: string
 ): Promise<{ rounds: any[]; finalScore: number; approved: boolean; summary: string }> {
   // ── Programmatic pre-checks (catch obvious failures before burning API calls) ──
   const scriptText = JSON.stringify(scriptJson).toLowerCase();
@@ -1752,6 +1789,7 @@ Score range guidance:
 - 70-79: Framework correct but script does not sell the product effectively. Structural issue.
 - Below 70: Could be for any brand. Fundamental commercial failure. Requires structural rewrite.
 
+${calibrationBlock || ""}
 Return JSON:
 {
   "reviews": [
@@ -2104,11 +2142,13 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
   const defaultArchetype = archetypes.length > 0 ? archetypes[0] : undefined;
   const productInfoContext = await loadProductInfoContext(run.product);
 
-  // Fetch winning examples for few-shot injection
-  const winningExamplesBlock = await fetchWinningExamples(run.product, funnelStage);
-  if (winningExamplesBlock) {
-    console.log(`[VideoPipeline] Run #${runId} — Winning examples loaded (${winningExamplesBlock.length} chars)`);
-  }
+  // Fetch performance intelligence for this run
+  const [winningExamplesBlock, calibrationBlock] = await Promise.all([
+    fetchWinningExamples(run.product, funnelStage),
+    buildReviewCalibrationBlock(),
+  ]);
+  if (winningExamplesBlock) console.log(`[VideoPipeline] Run #${runId} — Winning examples loaded`);
+  if (calibrationBlock) console.log(`[VideoPipeline] Run #${runId} — Review calibration data loaded`);
 
   await db.updatePipelineRun(runId, { videoStage: "stage_4_scripts" });
   const concepts = brief.concepts || [
@@ -2147,7 +2187,7 @@ export async function runVideoPipelineStage4(runId: number, run: any) {
         review = await withTimeout(
           reviewScriptWithPanel(
             script, run.product, styleLabel, brief,
-            productInfoContext, funnelStage
+            productInfoContext, funnelStage, calibrationBlock
           ),
           STEP_TIMEOUT * 2, `Review ${label}`
         );
