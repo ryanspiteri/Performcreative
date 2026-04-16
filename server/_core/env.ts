@@ -52,9 +52,31 @@ export const ENV = {
   /** Comma-separated list of ad account IDs (e.g. "act_123,act_456") */
   metaAdAccountIds: process.env.META_AD_ACCOUNT_IDS ?? "",
   metaGraphApiVersion: process.env.META_GRAPH_API_VERSION ?? "v22.0",
+  /**
+   * Attribution windows used when querying Meta insights. Must match the
+   * columns currently shown in Ads Manager, or our numbers will drift vs.
+   * the UI. Common values: "7d_click", "1d_view", "28d_click", "1d_click".
+   * Pass as comma-separated list. Default matches Meta's current standard.
+   */
+  metaAttributionWindows: (process.env.META_ATTRIBUTION_WINDOWS ?? "7d_click,1d_view")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0),
   /** Creative Analytics OS — Hyros reporting API (read-only attribution) */
   hyrosApiKey: process.env.HYROS_API_KEY ?? "",
   hyrosBaseUrl: process.env.HYROS_BASE_URL ?? "https://api.hyros.com/v1/api/v1.0",
+  /**
+   * Which Hyros touchpoint to attribute revenue to. Must match the setting
+   * the Hyros dashboard is using when you eyeball numbers, otherwise they'll
+   * always disagree. `first_click` is Hyros's common default.
+   */
+  hyrosAttributionModel: (process.env.HYROS_ATTRIBUTION_MODEL ?? "first_click") as "first_click" | "last_click",
+  /**
+   * Revenue mode: "gross" (price) matches the default Hyros dashboard number.
+   * "net" (price - refunded) is useful when reporting to finance but won't line
+   * up against the Hyros UI.
+   */
+  hyrosRevenueMode: (process.env.HYROS_REVENUE_MODE ?? "gross") as "gross" | "net",
   /** Sync cadence + lookback windows */
   analyticsSyncIntervalMinutes: parseInt(process.env.ANALYTICS_SYNC_INTERVAL_MINUTES ?? "60", 10),
   analyticsBackfillLookbackDays: parseInt(process.env.ANALYTICS_BACKFILL_LOOKBACK_DAYS ?? "90", 10),

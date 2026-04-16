@@ -19,6 +19,7 @@ import {
   type HyrosSale,
   type HyrosSaleResponse,
 } from "./hyrosSchemas";
+import { formatYmdInTz, REPORTING_TZ } from "../shared/tzDates";
 
 const TAG = "[HyrosClient]";
 
@@ -111,8 +112,14 @@ export class HyrosClient {
   }
 }
 
+/**
+ * Format a Date as "YYYY-MM-DD" in the reporting timezone (Australia/Sydney).
+ * Hyros `/sales` filters fromDate/toDate against `creationDate`, so sending a
+ * Sydney calendar day keeps our window aligned with what the Hyros dashboard
+ * shows when the user picks the same range.
+ */
 function toHyrosDate(d: Date): string {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  return formatYmdInTz(d, REPORTING_TZ);
 }
 
 /**

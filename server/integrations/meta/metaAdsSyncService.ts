@@ -37,6 +37,7 @@ import type {
 import { ENV } from "../../_core/env";
 import { recomputeForDateRange } from "../../services/creativeAnalytics/scoreRecompute";
 import { runTaggingPass } from "../../services/creativeAnalytics/tagEngine";
+import { parseAndBucketToTz, REPORTING_TZ } from "../shared/tzDates";
 
 const TAG = "[MetaSync]";
 const LOCK_NAME = "perform_meta_sync_lock";
@@ -141,9 +142,16 @@ function insightRowToDailyStat(row: MetaInsightRow, adId: number): InsertAdDaily
   const metaPurchaseValueCents = parsePurchaseValueCents(row.action_values);
   const metaRoasBp = parsePurchaseRoasBp(row.purchase_roas);
 
+  // Meta returns `date_start` as "YYYY-MM-DD" already in the ad account's
+  // timezone (Sydney for AU accounts). Bucket to Sydney-midnight-as-UTC so the
+  // stored timestamp matches what the Ads Manager UI considers "that day".
+  // Previously `new Date(`${row.date_start}T00:00:00Z`)` treated the string as
+  // UTC, which shifted the bucket by up to a day for rows near midnight.
+  const bucketDate = parseAndBucketToTz(row.date_start, REPORTING_TZ) ?? new Date(`${row.date_start}T00:00:00Z`);
+
   return {
     adId,
-    date: new Date(`${row.date_start}T00:00:00Z`),
+    date: bucketDate,
     source: "meta",
     spendCents: parseMetaMoneyToCents(row.spend),
     impressions,
@@ -280,10 +288,13 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
     console.warn(`${TAG} ${adAccountId}: getAdAccount failed (${err?.message ?? err}) — continuing sync`);
   }
 
-  // 2. Fetch ACTIVE ads for the account (paginated). We skip PAUSED/ARCHIVED to avoid
-  // pulling 20k+ historical ads — we only care about currently-spending creatives.
-  // Uses includeCreative=false to avoid Meta's "reduce amount of data" error on large
-  // accounts. Creative details (thumbnail, video_id) are fetched lazily per-ad below.
+  // 2. Fetch ACTIVE + PAUSED ads for the account (paginated). We include PAUSED
+  // because an ad that spent inside our lookback window may now be paused —
+  // filtering to ACTIVE-only dropped its spend AND (via orphan drop) its Hyros
+  // revenue entirely, silently under-reporting totals vs. Ads Manager. We still
+  // skip ARCHIVED since those can't have recent spend. Uses includeCreative=false
+  // to avoid Meta's "reduce amount of data" error on large accounts. Creative
+  // details (thumbnail, video_id) are fetched lazily per-ad below.
   let adsAfter: string | undefined = undefined;
   const externalIdToLocalId = new Map<string, number>();
   const adsNeedingCreative: string[] = [];
@@ -295,7 +306,7 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
           adAccountId,
           after: adsAfter,
           limit: 50,
-          status: ["ACTIVE"],
+          status: ["ACTIVE", "PAUSED"],
           includeCreative: false,
         });
       for (const ad of page.data ?? []) {

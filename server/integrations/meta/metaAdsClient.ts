@@ -10,6 +10,7 @@
  */
 import axios, { type AxiosInstance } from "axios";
 import { ENV } from "../../_core/env";
+import { formatYmdInTz, REPORTING_TZ } from "../shared/tzDates";
 
 const TAG = "[MetaAdsClient]";
 
@@ -429,10 +430,17 @@ export class MetaAdsClient {
 
     const query: Record<string, string | number> = {
       level: "ad",
+      // Meta interprets `time_range.since/until` in the ad account's timezone.
+      // Our accounts are Sydney-anchored, so format the dates in that tz —
+      // otherwise UTC-derived YMDs near midnight land on the wrong day.
       time_range: JSON.stringify({
         since: toMetaDate(params.dateFrom),
         until: toMetaDate(params.dateTo),
       }),
+      // Pin the attribution window so our numbers stay stable even if Meta
+      // shifts defaults. Must match what the user's Ads Manager column is set
+      // to, or the two will never line up. Configurable via env.
+      action_attribution_windows: JSON.stringify(ENV.metaAttributionWindows),
       fields,
       limit: params.limit ?? 100,
       access_token: this.accessToken,
@@ -599,8 +607,15 @@ export class MetaAdsClient {
   }
 }
 
+/**
+ * Format a Date as "YYYY-MM-DD" in the reporting timezone (Australia/Sydney).
+ * Meta interprets `time_range.since/until` in the ad account's timezone — our
+ * accounts are Sydney — so this must be the Sydney calendar day, NOT the UTC
+ * day. Using `toISOString().slice(0,10)` (UTC) caused days near midnight to
+ * shift, dropping or duplicating spend vs. what Ads Manager shows.
+ */
 function toMetaDate(d: Date): string {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  return formatYmdInTz(d, REPORTING_TZ);
 }
 
 /**

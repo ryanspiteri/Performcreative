@@ -12,14 +12,24 @@ import { sql } from "drizzle-orm";
 import {
   HyrosClient,
   HyrosShapeError,
-  parseHyrosDate,
-  bucketDateToUtcMidnight,
   type HyrosSale,
 } from "./hyrosClient";
 import * as db from "../../db";
 import type { InsertAdAttributionStat } from "../../../drizzle/schema";
 import { ENV } from "../../_core/env";
 import { recomputeForDateRange } from "../../services/creativeAnalytics/scoreRecompute";
+import { parseAndBucketToTz, REPORTING_TZ } from "../shared/tzDates";
+
+/**
+ * Sentinel hyrosAdId used to bucket sales that Hyros attributes only at the
+ * campaign/adset/account level (no `firstSource.sourceLinkAd.adSourceId`).
+ * We can't link these to a creative, but we still need their revenue to count
+ * in the KPI strip totals — otherwise our "Total Revenue" is always lower
+ * than the Hyros dashboard's "Revenue" card. The report layer includes this
+ * row in summary sums but excludes it from the per-creative list (by design —
+ * it has no adId to join through).
+ */
+export const UNATTRIBUTED_HYROS_AD_ID = "__unattributed__";
 
 const TAG = "[HyrosSync]";
 const LOCK_NAME = "perform_hyros_sync_lock";
@@ -27,11 +37,13 @@ const LOCK_NAME = "perform_hyros_sync_lock";
 let _syncTimer: ReturnType<typeof setInterval> | null = null;
 let _isSyncing = false;
 
+type AttributionModel = "first_click" | "last_click";
+
 interface AggregationKey {
   hyrosAdId: string;
   externalAdId: string;
   date: Date;
-  attributionModel: "first_click" | "last_click";
+  attributionModel: AttributionModel;
 }
 
 interface AggregationBucket {
@@ -43,9 +55,14 @@ interface AggregationBucket {
 
 export interface HyrosSyncResult {
   salesProcessed: number;
+  /** Sales aggregated into the __unattributed__ bucket (no ad-level sourceLinkAd). */
+  salesUnattributed: number;
+  /** Sales skipped entirely because creationDate couldn't be parsed. */
   salesSkipped: number;
   /** Sales skipped because their currency wasn't in the allowlist (e.g. USD store dropped for V1). */
   salesSkippedCurrency: number;
+  /** Sales skipped as duplicates (same sale.id seen on a later page). */
+  salesDeduped: number;
   rowsUpserted: number;
   errors: string[];
 }
@@ -74,20 +91,29 @@ export function isSaleCurrencyAllowed(sale: HyrosSale): boolean {
 }
 
 /**
- * Extract net revenue in cents from a Hyros sale.
+ * Extract revenue in cents from a Hyros sale.
  *
  * Hyros's `usdPrice` is an object: `{ price, discount, hardCost, refunded, currency }`.
- * V1 uses NET revenue: `max(0, price - refunded)`, matching how Motion nets refunds
- * in its reporting. A previous version of this code assumed `usdPrice` was a plain
- * number, which made every sale produce NaN revenue and every upsert silently fail.
+ * A previous version assumed `usdPrice` was a plain number, producing NaN.
  *
- * Returns an object so the caller can track *why* revenue is zero (missing field
- * vs. fully-refunded sale) via the sync result.
+ * Mode is controlled by `ENV.hyrosRevenueMode`:
+ *   - "gross" (default) — just `price`. Matches Hyros dashboard's Revenue card.
+ *   - "net" — `max(0, price - refunded)`. Useful for finance-style reporting.
+ *
+ * Returns an object so the caller can track *why* revenue is zero (missing
+ * field vs. fully-refunded sale) via the sync result.
  */
-export function extractNetRevenueCents(sale: HyrosSale): { revenueCents: number; reason?: "missing" } {
+export function extractRevenueCents(
+  sale: HyrosSale,
+  mode: "gross" | "net" = ENV.hyrosRevenueMode,
+): { revenueCents: number; reason?: "missing" } {
   const price = sale.usdPrice?.price;
   if (price == null || !Number.isFinite(price)) {
     return { revenueCents: 0, reason: "missing" };
+  }
+  if (mode === "gross") {
+    const cents = Math.round(price * 100);
+    return { revenueCents: Number.isFinite(cents) && cents >= 0 ? cents : 0 };
   }
   const refunded = sale.usdPrice?.refunded;
   const refundedSafe = refunded != null && Number.isFinite(refunded) ? refunded : 0;
@@ -95,6 +121,9 @@ export function extractNetRevenueCents(sale: HyrosSale): { revenueCents: number;
   const cents = Math.round(netDollars * 100);
   return { revenueCents: Number.isFinite(cents) ? cents : 0 };
 }
+
+/** Back-compat alias — existing callers (and tests) still reference the old name. */
+export const extractNetRevenueCents = (sale: HyrosSale) => extractRevenueCents(sale, "net");
 
 /**
  * Aggregate sales into daily per-ad buckets by attribution model.
@@ -108,11 +137,23 @@ export function extractNetRevenueCents(sale: HyrosSale): { revenueCents: number;
 export function aggregateSalesToBuckets(
   sales: HyrosSale[],
   result: HyrosSyncResult,
+  seenSaleIds?: Set<string>,
 ): Map<string, AggregationBucket> {
   const buckets = new Map<string, AggregationBucket>();
   let missingPriceCount = 0;
+  const attributionModel: AttributionModel = ENV.hyrosAttributionModel;
 
   for (const sale of sales) {
+    // Dedup by sale.id. Hyros pagination can return the same sale twice on
+    // boundary rows, especially when new sales arrive mid-fetch.
+    if (seenSaleIds && sale.id) {
+      if (seenSaleIds.has(sale.id)) {
+        result.salesDeduped++;
+        continue;
+      }
+      seenSaleIds.add(sale.id);
+    }
+
     // Currency filter — V1 is AUD-only. Other-currency sales are tracked separately
     // from the ad-attribution skip count so we can see "how much are we dropping
     // because of the store filter" vs "how much are we dropping because Hyros didn't
@@ -121,38 +162,51 @@ export function aggregateSalesToBuckets(
       result.salesSkippedCurrency++;
       continue;
     }
-    const source = sale.firstSource;
-    const hyrosAdId = source?.sourceLinkAd?.adSourceId;
-    if (!hyrosAdId) {
-      result.salesSkipped++;
-      continue;
-    }
-    const externalAdId = source?.adSource?.adSourceId ?? hyrosAdId;
-    const saleDate = parseHyrosDate(sale.creationDate);
-    if (!saleDate) {
-      result.salesSkipped++;
-      continue;
-    }
-    const bucketDate = bucketDateToUtcMidnight(saleDate);
 
-    const { revenueCents, reason } = extractNetRevenueCents(sale);
+    // Pick the attribution source based on env. Hyros returns both firstSource
+    // and lastSource per sale; the dashboard reports whichever model the user
+    // has selected, so we mirror that here to keep numbers aligned.
+    const source = attributionModel === "last_click" ? sale.lastSource : sale.firstSource;
+    // Bucket by Sydney calendar day of the sale's creationDate, not UTC. Hyros
+    // sums sales the user sees as "today" in the dashboard, which is Sydney
+    // local — bucketing in UTC shifted ~5-15% of sales by a day near midnight.
+    const bucketDate = parseAndBucketToTz(sale.creationDate, REPORTING_TZ);
+    if (!bucketDate) {
+      result.salesSkipped++;
+      continue;
+    }
+
+    const { revenueCents, reason } = extractRevenueCents(sale);
     if (reason === "missing") {
       missingPriceCount++;
     }
 
-    const bucketKey = `${hyrosAdId}|${bucketDate.toISOString()}|first_click`;
+    // If Hyros has no ad-level attribution, fold the sale into an UNATTRIBUTED
+    // bucket so its revenue still counts in KPI totals. Without this, every
+    // campaign/adset/organic sale was silently dropped and our "Total Revenue"
+    // was always lower than Hyros's. adId stays null — the report layer
+    // recognises the sentinel and includes these rows in summary sums only.
+    const hyrosAdId = source?.sourceLinkAd?.adSourceId ?? UNATTRIBUTED_HYROS_AD_ID;
+    const externalAdId = source?.adSource?.adSourceId ?? hyrosAdId;
+    if (hyrosAdId === UNATTRIBUTED_HYROS_AD_ID) {
+      result.salesUnattributed++;
+    }
+
+    const bucketKey = `${hyrosAdId}|${bucketDate.toISOString()}|${attributionModel}`;
     let bucket = buckets.get(bucketKey);
     if (!bucket) {
       bucket = {
-        key: { hyrosAdId, externalAdId, date: bucketDate, attributionModel: "first_click" },
+        key: { hyrosAdId, externalAdId, date: bucketDate, attributionModel },
         spendCents: 0,
         conversions: 0,
         revenueCents: 0,
       };
       buckets.set(bucketKey, bucket);
     }
-    const quantity = sale.quantity ?? 1;
-    bucket.conversions += quantity;
+    // One sale = one conversion. Earlier code summed `sale.quantity ?? 1`,
+    // which inflated conversions on multi-unit orders and made CPA look
+    // artificially low vs. the Hyros "Sales" column (which counts transactions).
+    bucket.conversions += 1;
     bucket.revenueCents += revenueCents;
   }
 
@@ -177,11 +231,15 @@ async function flushBuckets(
 ): Promise<number> {
   let upserted = 0;
   for (const bucket of Array.from(buckets.values())) {
-    // Look up the corresponding ad in our DB if Meta sync has already synced it.
-    // If not found, we still upsert with adId=null — the orphan will be linked
-    // on the next Meta sync via db.relinkOrphanedAttributions().
-    const existingAd = await db.getAdByExternalId("meta", bucket.key.hyrosAdId);
-    const localAdId = existingAd?.id ?? null;
+    // The UNATTRIBUTED sentinel never maps to an ad — skip the lookup.
+    // Every other bucket gets looked up in our DB. If not found, we still
+    // upsert with adId=null — the orphan will be linked by the post-flush
+    // `relinkOrphanedAttributions()` call once Meta sync has seen the ad.
+    let localAdId: number | null = null;
+    if (bucket.key.hyrosAdId !== UNATTRIBUTED_HYROS_AD_ID) {
+      const existingAd = await db.getAdByExternalId("meta", bucket.key.hyrosAdId);
+      localAdId = existingAd?.id ?? null;
+    }
 
     const aovCents = bucket.conversions > 0 ? Math.round(bucket.revenueCents / bucket.conversions) : 0;
 
@@ -220,8 +278,10 @@ async function flushBuckets(
 export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<HyrosSyncResult> {
   const result: HyrosSyncResult = {
     salesProcessed: 0,
+    salesUnattributed: 0,
     salesSkipped: 0,
     salesSkippedCurrency: 0,
+    salesDeduped: 0,
     rowsUpserted: 0,
     errors: [],
   };
@@ -236,6 +296,8 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
   // Paginate through sales
   let pageId: string | undefined = undefined;
   const allBuckets = new Map<string, AggregationBucket>();
+  // Shared across pages so the same sale.id appearing on two pages only counts once.
+  const seenSaleIds = new Set<string>();
 
   do {
     try {
@@ -250,7 +312,7 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
 
       // Single pass: aggregateSalesToBuckets increments result.salesSkipped
       // for sales without ad-level attribution or with invalid creationDate.
-      const pageBuckets = aggregateSalesToBuckets(sales, result);
+      const pageBuckets = aggregateSalesToBuckets(sales, result, seenSaleIds);
       for (const [k, v] of Array.from(pageBuckets.entries())) {
         const existing = allBuckets.get(k);
         if (existing) {
@@ -277,12 +339,26 @@ export async function syncHyrosRange(dateFrom: Date, dateTo: Date): Promise<Hyro
   } while (pageId);
 
   console.log(
-    `${TAG} Processed ${result.salesProcessed} sales (${result.salesSkipped} unattributed, ${result.salesSkippedCurrency} non-AUD), ${allBuckets.size} buckets to flush`
+    `${TAG} Processed ${result.salesProcessed} sales (unattributed=${result.salesUnattributed}, bad-date=${result.salesSkipped}, non-AUD=${result.salesSkippedCurrency}, deduped=${result.salesDeduped}), ${allBuckets.size} buckets to flush`
   );
 
   result.rowsUpserted = await flushBuckets(allBuckets, result);
+
+  // Relink any rows we just wrote with adId=null that now have a matching ad
+  // in our DB (Meta sync may have run in between, or between pages). Previously
+  // this only ran after Meta sync, so Hyros-first orphans stayed hidden until
+  // the next Meta cycle.
+  try {
+    const linkedCount = await db.relinkOrphanedAttributions();
+    if (linkedCount > 0) {
+      console.log(`${TAG} relinked ${linkedCount} orphaned attribution rows post-flush`);
+    }
+  } catch (relinkErr: any) {
+    console.error(`${TAG} relinkOrphanedAttributions failed (non-fatal):`, relinkErr?.message ?? relinkErr);
+  }
+
   console.log(
-    `${TAG} done: processed=${result.salesProcessed} skipped=${result.salesSkipped} nonAud=${result.salesSkippedCurrency} upserted=${result.rowsUpserted} errors=${result.errors.length}`
+    `${TAG} done: processed=${result.salesProcessed} unattributed=${result.salesUnattributed} skipped=${result.salesSkipped} nonAud=${result.salesSkippedCurrency} deduped=${result.salesDeduped} upserted=${result.rowsUpserted} errors=${result.errors.length}`
   );
   return result;
 }
@@ -386,7 +462,15 @@ export async function runHyrosSync(lookbackDays?: number): Promise<{ result: Hyr
 }
 
 function emptyResult(): HyrosSyncResult {
-  return { salesProcessed: 0, salesSkipped: 0, salesSkippedCurrency: 0, rowsUpserted: 0, errors: [] };
+  return {
+    salesProcessed: 0,
+    salesUnattributed: 0,
+    salesSkipped: 0,
+    salesSkippedCurrency: 0,
+    salesDeduped: 0,
+    rowsUpserted: 0,
+    errors: [],
+  };
 }
 
 export function startAutoHyrosSync(): void {

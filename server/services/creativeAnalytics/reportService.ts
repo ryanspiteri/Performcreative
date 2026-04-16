@@ -16,6 +16,8 @@
  */
 import { sql } from "drizzle-orm";
 import * as db from "../../db";
+import { ENV } from "../../_core/env";
+import { UNATTRIBUTED_HYROS_AD_ID } from "../../integrations/hyros/hyrosSyncService";
 
 export type SortByField = "spendCents" | "revenueCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
 export type SortDirection = "asc" | "desc";
@@ -162,7 +164,7 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
       JOIN ads a2 ON a2.id = attr.adId
       WHERE attr.date >= ${query.dateFrom}
         AND attr.date <= ${query.dateTo}
-        AND attr.attributionModel = 'first_click'
+        AND attr.attributionModel = ${ENV.hyrosAttributionModel}
       GROUP BY a2.creativeAssetId
     ) attr ON attr.creativeAssetId = ca.id
     LEFT JOIN (
@@ -288,7 +290,7 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
       JOIN creativeAssets ca2 ON ca2.id = a2.creativeAssetId
       WHERE attr.date >= ${query.dateFrom}
         AND attr.date <= ${query.dateTo}
-        AND attr.attributionModel = 'first_click'
+        AND attr.attributionModel = ${ENV.hyrosAttributionModel}
         ${creativeTypeFilterAttr}
         ${campaignFilterAttr}
         ${accountFilterAttr}
@@ -301,13 +303,37 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
   const row: any = (Array.isArray(rows[0]) ? rows[0][0] : rows[0]) ?? {};
 
   const totalSpend = Number(row.totalSpend) || 0;
-  const totalRevenue = Number(row.totalRevenue) || 0;
+  let totalRevenue = Number(row.totalRevenue) || 0;
+  let totalConversions = Number(row.totalConversions) || 0;
+
+  // Add the UNATTRIBUTED bucket to totals when no per-creative filters are
+  // active. Unattributed rows have no adId → no campaign, no creativeType, no
+  // adAccount — so mixing them into a filtered view would leak revenue across
+  // filter groups. When the user is looking at the account-wide KPI, though,
+  // their total should match Hyros's dashboard, which counts these.
+  const noFiltersActive = !query.creativeType && !query.campaignId && !query.adAccountId;
+  if (noFiltersActive) {
+    const unattrRows: any = await dbConn.execute(sql`
+      SELECT
+        COALESCE(SUM(revenueCents), 0) AS revenueCents,
+        COALESCE(SUM(conversions), 0) AS conversions
+      FROM adAttributionStats
+      WHERE date >= ${query.dateFrom}
+        AND date <= ${query.dateTo}
+        AND attributionModel = ${ENV.hyrosAttributionModel}
+        AND hyrosAdId = ${UNATTRIBUTED_HYROS_AD_ID}
+    `);
+    const unattr: any = (Array.isArray(unattrRows[0]) ? unattrRows[0][0] : unattrRows[0]) ?? {};
+    totalRevenue += Number(unattr.revenueCents) || 0;
+    totalConversions += Number(unattr.conversions) || 0;
+  }
+
   const blendedRoasBp = totalSpend > 0 ? Math.round((totalRevenue / totalSpend) * 100) : 0;
   return {
     totalSpendCents: totalSpend,
     totalRevenueCents: totalRevenue,
     blendedRoasBp,
-    totalConversions: Number(row.totalConversions) || 0,
+    totalConversions,
     activeCreativesCount: Number(row.activeCreatives) || 0,
   };
 }
@@ -365,7 +391,7 @@ export async function getCreativeRow(
       JOIN ads a3 ON a3.id = attr.adId
       WHERE attr.date >= ${dateFrom}
         AND attr.date <= ${dateTo}
-        AND attr.attributionModel = 'first_click'
+        AND attr.attributionModel = ${ENV.hyrosAttributionModel}
       GROUP BY a3.creativeAssetId
     ) attr ON attr.creativeAssetId = ca.id
     LEFT JOIN (
@@ -450,7 +476,7 @@ export async function getCreativeTimeSeries(creativeAssetId: number, dateFrom: D
       COALESCE(SUM(attr.conversions), 0) AS conversions
     FROM adDailyStats d
     JOIN ads a ON a.id = d.adId
-    LEFT JOIN adAttributionStats attr ON attr.adId = d.adId AND DATE(attr.date) = DATE(d.date) AND attr.attributionModel = 'first_click'
+    LEFT JOIN adAttributionStats attr ON attr.adId = d.adId AND DATE(attr.date) = DATE(d.date) AND attr.attributionModel = ${ENV.hyrosAttributionModel}
     WHERE a.creativeAssetId = ${creativeAssetId}
       AND d.date >= ${dateFrom}
       AND d.date <= ${dateTo}

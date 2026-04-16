@@ -19,6 +19,8 @@ vi.mock("../../_core/env", () => ({
   ENV: {
     hyrosApiKey: "test",
     hyrosBaseUrl: "https://api.hyros.com/v1/api/v1.0",
+    hyrosAttributionModel: "first_click",
+    hyrosRevenueMode: "gross",
     analyticsRollingLookbackDays: 14,
     analyticsSyncIntervalMinutes: 60,
     // Other ENV keys consumed by sibling modules during import chain:
@@ -40,12 +42,22 @@ vi.mock("../../_core/env", () => ({
 import {
   aggregateSalesToBuckets,
   extractNetRevenueCents,
+  extractRevenueCents,
+  UNATTRIBUTED_HYROS_AD_ID,
   type HyrosSyncResult,
 } from "./hyrosSyncService";
 import type { HyrosSale } from "./hyrosClient";
 
 function emptyResult(): HyrosSyncResult {
-  return { salesProcessed: 0, salesSkipped: 0, salesSkippedCurrency: 0, rowsUpserted: 0, errors: [] };
+  return {
+    salesProcessed: 0,
+    salesUnattributed: 0,
+    salesSkipped: 0,
+    salesSkippedCurrency: 0,
+    salesDeduped: 0,
+    rowsUpserted: 0,
+    errors: [],
+  };
 }
 
 function loadRealFixture(): HyrosSale[] {
@@ -143,6 +155,24 @@ describe("extractNetRevenueCents", () => {
   });
 });
 
+describe("extractRevenueCents (gross vs net modes)", () => {
+  it("gross mode returns price as cents, ignoring refunds (matches Hyros dashboard)", () => {
+    const { revenueCents } = extractRevenueCents(
+      makeSale({ usdPrice: { price: 100, discount: 0, hardCost: 0, refunded: 25, currency: "AUD" } }),
+      "gross",
+    );
+    expect(revenueCents).toBe(10000);
+  });
+
+  it("net mode subtracts refunded from price", () => {
+    const { revenueCents } = extractRevenueCents(
+      makeSale({ usdPrice: { price: 100, discount: 0, hardCost: 0, refunded: 25, currency: "AUD" } }),
+      "net",
+    );
+    expect(revenueCents).toBe(7500);
+  });
+});
+
 describe("aggregateSalesToBuckets", () => {
   let result: HyrosSyncResult;
   beforeEach(() => {
@@ -171,7 +201,7 @@ describe("aggregateSalesToBuckets", () => {
     expect(withRevenue.length).toBeGreaterThan(0);
   });
 
-  it("aggregates multiple sales on the same day + same ad into one bucket", () => {
+  it("aggregates multiple sales on the same day + same ad into one bucket, counting each sale as 1 conversion", () => {
     const day = "Thu Apr 09 10:00:00 UTC 2026";
     const sale1 = makeSale({ id: "s1", creationDate: day, quantity: 1, usdPrice: { price: 50, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } });
     const sale2 = makeSale({ id: "s2", creationDate: day, quantity: 2, usdPrice: { price: 75, discount: 0, hardCost: 0, refunded: 0, currency: "AUD" } });
@@ -180,17 +210,22 @@ describe("aggregateSalesToBuckets", () => {
     expect(buckets.size).toBe(1);
     const bucket = Array.from(buckets.values())[0];
     expect(bucket.revenueCents).toBe(5000 + 7500);
-    expect(bucket.conversions).toBe(1 + 2);
+    // Two transactions — ignore quantity-as-units. Matches Hyros "Sales" column.
+    expect(bucket.conversions).toBe(2);
   });
 
-  it("skips sales without sourceLinkAd.adSourceId and increments salesSkipped", () => {
+  it("routes sales without sourceLinkAd.adSourceId to the UNATTRIBUTED bucket", () => {
     const organic = makeSale({
       id: "org",
       firstSource: { name: "Email", disregarded: true, organic: true },
     });
     const buckets = aggregateSalesToBuckets([organic], result);
-    expect(buckets.size).toBe(0);
-    expect(result.salesSkipped).toBe(1);
+    // Sale IS bucketed (so it counts in totals), just to the unattributed sentinel.
+    expect(buckets.size).toBe(1);
+    expect(result.salesUnattributed).toBe(1);
+    expect(result.salesSkipped).toBe(0);
+    const bucket = Array.from(buckets.values())[0];
+    expect(bucket.key.hyrosAdId).toBe(UNATTRIBUTED_HYROS_AD_ID);
   });
 
   it("skips sales with invalid creationDate and increments salesSkipped", () => {
@@ -231,6 +266,14 @@ describe("aggregateSalesToBuckets", () => {
     expect(result.salesSkipped).toBe(0);
     const bucket = Array.from(buckets.values())[0];
     expect(bucket.revenueCents).toBe(15000); // only the AUD sale made it through
+  });
+
+  it("dedups sales by id across multiple calls (same page, different page, doesn't matter)", () => {
+    const seen = new Set<string>();
+    const sale = makeSale({ id: "dup-1" });
+    aggregateSalesToBuckets([sale], result, seen);
+    aggregateSalesToBuckets([sale], result, seen);
+    expect(result.salesDeduped).toBe(1);
   });
 
   it("chaos test: hostile QA dump doesn't crash the aggregator", () => {
