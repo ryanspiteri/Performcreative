@@ -18,6 +18,71 @@ import { sql } from "drizzle-orm";
 import * as db from "../../db";
 import { ENV } from "../../_core/env";
 import { UNATTRIBUTED_HYROS_AD_ID } from "../../integrations/hyros/hyrosSyncService";
+import { computeScores, PLATFORM_FALLBACK, type AccountBenchmarks, type ScoreInputs } from "./scoreEngine";
+
+/**
+ * Fetch the cached account benchmarks from the meta adSyncState row. The
+ * score recompute job computes these from a 90-day rolling window and writes
+ * them here. Fallback to PLATFORM_FALLBACK if the cache is empty (fresh
+ * install, or the recompute has never run).
+ */
+async function getCachedBenchmarks(): Promise<AccountBenchmarks> {
+  const state = await db.getSyncState("meta");
+  const cached = (state as any)?.benchmarksJson as AccountBenchmarks | null | undefined;
+  if (cached && cached.thumbstop && cached.holdRate && cached.ctr && cached.roas) {
+    return cached;
+  }
+  return PLATFORM_FALLBACK;
+}
+
+/**
+ * Compute scores on-the-fly from aggregated metrics over the displayed date range.
+ *
+ * We used to read scores from the latest per-day creativeScores row, which caused
+ * the displayed Hook/Watch/Click/Convert to reflect only ONE day out of the 7-day
+ * window — usually the most recent, which could be a partial/in-progress day with
+ * 0 clicks or 0 video50 watchers. That pinned Watch and Click near 0 on ads that
+ * actually had healthy 7-day averages. Computing from the same SUM() aggregates
+ * we display as Spend/Impressions keeps the score self-consistent with the row.
+ *
+ * creativeScores is still written per-day by scoreRecompute and used by the
+ * fatigue detector, pattern miner, and the time-series chart — those legitimately
+ * need per-day granularity.
+ */
+function scoresFromAggregates(
+  agg: {
+    impressions: number;
+    clicks: number;
+    videoPlayCount: number;
+    video50Count: number;
+    conversions: number;
+    spendCents: number;
+    revenueCents: number;
+  },
+  benchmarks: AccountBenchmarks,
+): { hookScore: number; watchScore: number; clickScore: number; convertScore: number } {
+  const inputs: ScoreInputs = {
+    // thumbstopBp / holdRateBp convention: fraction × 10000 (matches adDailyStats storage).
+    thumbstopBp: agg.impressions > 0 ? Math.round((agg.videoPlayCount / agg.impressions) * 10000) : 0,
+    holdRateBp: agg.impressions > 0 ? Math.round((agg.video50Count / agg.impressions) * 10000) : 0,
+    // ctrBp convention: percentage × 10000 (matches parseMetaRateToBp + adDailyStats.ctrBp).
+    // fraction × 1_000_000 = percentage × 10000 — see commit 525d81b for the scale fix.
+    ctrBp: agg.impressions > 0 ? Math.round((agg.clicks / agg.impressions) * 1_000_000) : 0,
+    outboundCtrBp: 0,
+    impressions: agg.impressions,
+    clicks: agg.clicks,
+    conversions: agg.conversions,
+    spendCents: agg.spendCents,
+    revenueCents: agg.revenueCents,
+  };
+  const r = computeScores(inputs, benchmarks);
+  return {
+    hookScore: r.hookScore,
+    watchScore: r.watchScore,
+    clickScore: r.clickScore,
+    convertScore: r.convertScore,
+  };
+}
 
 export type SortByField = "spendCents" | "revenueCents" | "roasBp" | "hookScore" | "watchScore" | "clickScore" | "convertScore" | "launchDate";
 export type SortDirection = "asc" | "desc";
@@ -147,11 +212,7 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
       COALESCE(SUM(d.cpmCents), 0) AS sumCpmCents,
       COALESCE(COUNT(DISTINCT d.id), 0) AS dailyStatRowCount,
       COALESCE(attr.revenueCents, 0) AS revenueCents,
-      COALESCE(attr.conversions, 0) AS conversions,
-      COALESCE(cs.hookScore, 0) AS hookScore,
-      COALESCE(cs.watchScore, 0) AS watchScore,
-      COALESCE(cs.clickScore, 0) AS clickScore,
-      COALESCE(cs.convertScore, 0) AS convertScore
+      COALESCE(attr.conversions, 0) AS conversions
     FROM creativeAssets ca
     JOIN ads a ON a.creativeAssetId = ca.id
     LEFT JOIN adDailyStats d ON d.adId = a.id
@@ -167,13 +228,6 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
         AND attr.attributionModel = ${ENV.hyrosAttributionModel}
       GROUP BY a2.creativeAssetId
     ) attr ON attr.creativeAssetId = ca.id
-    LEFT JOIN (
-      SELECT cs2.creativeAssetId, cs2.hookScore, cs2.watchScore, cs2.clickScore, cs2.convertScore,
-             ROW_NUMBER() OVER (PARTITION BY cs2.creativeAssetId ORDER BY cs2.date DESC) AS rn
-      FROM creativeScores cs2
-      WHERE cs2.date >= ${query.dateFrom}
-        AND cs2.date <= ${query.dateTo}
-    ) cs ON cs.creativeAssetId = ca.id AND cs.rn = 1
     ${needsTagJoin ? sql`INNER JOIN creativeAiTags t ON t.creativeAssetId = ca.id AND t.tagVersion = 1` : sql``}
     WHERE 1 = 1
       ${creativeTypeFilter}
@@ -182,8 +236,7 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
       ${angleFilter}
       ${tacticFilter}
     GROUP BY ca.id, ca.name, ca.thumbnailUrl, ca.creativeType, ca.pipelineRunId,
-             attr.revenueCents, attr.conversions,
-             cs.hookScore, cs.watchScore, cs.clickScore, cs.convertScore
+             attr.revenueCents, attr.conversions
     HAVING (spendCents > 0 OR revenueCents > 0)
       ${query.minSpendCents ? sql`AND spendCents >= ${query.minSpendCents}` : sql``}
     ORDER BY ${sql.raw(sortColumn)} ${sortDir}
@@ -192,8 +245,11 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
   `);
 
   const resultRows: any[] = Array.isArray(rows[0]) ? rows[0] : rows;
+  // Benchmarks are fetched once per request and reused for every row — they're
+  // global to the account, not per-creative.
+  const benchmarks = await getCachedBenchmarks();
 
-  return resultRows.map((row: any) => {
+  const mapped = resultRows.map((row: any) => {
     const impressions = Number(row.impressions) || 0;
     const spendCents = Number(row.spendCents) || 0;
     const clicks = Number(row.clicks) || 0;
@@ -211,6 +267,14 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
     const aovCents = conversions > 0 ? Math.round(revenueCents / conversions) : 0;
     const dailyStatRowCount = Number(row.dailyStatRowCount) || 0;
     const cpmCents = dailyStatRowCount > 0 ? Math.round(Number(row.sumCpmCents) / dailyStatRowCount) : 0;
+
+    // Scores computed from the same aggregates shown in the row — stays
+    // self-consistent with spend/impressions/clicks/etc. no matter what
+    // partial data sits in the latest creativeScores row.
+    const scores = scoresFromAggregates(
+      { impressions, clicks, videoPlayCount, video50Count, conversions, spendCents, revenueCents },
+      benchmarks,
+    );
 
     return {
       creativeAssetId: Number(row.creativeAssetId),
@@ -234,13 +298,25 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
       aovCents,
       roasBp,
       cpaCents,
-      hookScore: Number(row.hookScore) || 0,
-      watchScore: Number(row.watchScore) || 0,
-      clickScore: Number(row.clickScore) || 0,
-      convertScore: Number(row.convertScore) || 0,
+      hookScore: scores.hookScore,
+      watchScore: scores.watchScore,
+      clickScore: scores.clickScore,
+      convertScore: scores.convertScore,
       pipelineRunId: row.pipelineRunId ? Number(row.pipelineRunId) : null,
     };
   });
+
+  // When the user sorts by a score column, SQL can't order by the on-the-fly
+  // computed value — the DB query's ORDER BY hookScore is effectively a no-op
+  // now that we removed the creativeScores JOIN. Re-sort in memory. The list
+  // is capped to `query.limit` so the cost is bounded.
+  if (["hookScore", "watchScore", "clickScore", "convertScore"].includes(query.sortBy)) {
+    const key = query.sortBy as "hookScore" | "watchScore" | "clickScore" | "convertScore";
+    const dir = query.sortDirection === "asc" ? 1 : -1;
+    mapped.sort((a, b) => ((a[key] as number) - (b[key] as number)) * dir);
+  }
+
+  return mapped;
 }
 
 /**
@@ -371,11 +447,7 @@ export async function getCreativeRow(
       COALESCE(SUM(d.cpmCents), 0) AS sumCpmCents,
       COALESCE(COUNT(DISTINCT d.id), 0) AS dailyStatRowCount,
       COALESCE(attr.revenueCents, 0) AS revenueCents,
-      COALESCE(attr.conversions, 0) AS conversions,
-      COALESCE(cs.hookScore, 0) AS hookScore,
-      COALESCE(cs.watchScore, 0) AS watchScore,
-      COALESCE(cs.clickScore, 0) AS clickScore,
-      COALESCE(cs.convertScore, 0) AS convertScore
+      COALESCE(attr.conversions, 0) AS conversions
     FROM creativeAssets ca
     JOIN ads a ON a.creativeAssetId = ca.id
     LEFT JOIN adDailyStats d ON d.adId = a.id
@@ -394,17 +466,9 @@ export async function getCreativeRow(
         AND attr.attributionModel = ${ENV.hyrosAttributionModel}
       GROUP BY a3.creativeAssetId
     ) attr ON attr.creativeAssetId = ca.id
-    LEFT JOIN (
-      SELECT cs2.creativeAssetId, cs2.hookScore, cs2.watchScore, cs2.clickScore, cs2.convertScore,
-             ROW_NUMBER() OVER (PARTITION BY cs2.creativeAssetId ORDER BY cs2.date DESC) AS rn
-      FROM creativeScores cs2
-      WHERE cs2.date >= ${dateFrom}
-        AND cs2.date <= ${dateTo}
-    ) cs ON cs.creativeAssetId = ca.id AND cs.rn = 1
     WHERE ca.id = ${creativeAssetId}
     GROUP BY ca.id, ca.name, ca.thumbnailUrl, ca.creativeType, ca.pipelineRunId,
-             attr.revenueCents, attr.conversions,
-             cs.hookScore, cs.watchScore, cs.clickScore, cs.convertScore
+             attr.revenueCents, attr.conversions
     LIMIT 1
   `);
 
@@ -429,6 +493,14 @@ export async function getCreativeRow(
   const dailyStatRowCount = Number(row.dailyStatRowCount) || 0;
   const cpmCents = dailyStatRowCount > 0 ? Math.round(Number(row.sumCpmCents) / dailyStatRowCount) : 0;
 
+  // Compute scores on-the-fly from the aggregated metrics. See scoresFromAggregates
+  // for why this replaces the old "latest creativeScores row" lookup.
+  const benchmarks = await getCachedBenchmarks();
+  const scores = scoresFromAggregates(
+    { impressions, clicks, videoPlayCount, video50Count, conversions, spendCents, revenueCents },
+    benchmarks,
+  );
+
   return {
     creativeAssetId: Number(row.creativeAssetId),
     creativeName: row.creativeName ?? "",
@@ -451,10 +523,10 @@ export async function getCreativeRow(
     aovCents,
     roasBp,
     cpaCents,
-    hookScore: Number(row.hookScore) || 0,
-    watchScore: Number(row.watchScore) || 0,
-    clickScore: Number(row.clickScore) || 0,
-    convertScore: Number(row.convertScore) || 0,
+    hookScore: scores.hookScore,
+    watchScore: scores.watchScore,
+    clickScore: scores.clickScore,
+    convertScore: scores.convertScore,
     pipelineRunId: row.pipelineRunId ? Number(row.pipelineRunId) : null,
   };
 }

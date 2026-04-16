@@ -46,6 +46,9 @@ vi.mock("../../db", () => ({
       return [mockRows, {}];
     }),
   })),
+  // reportService now reads cached benchmarks from adSyncState via getSyncState.
+  // Returning null forces a PLATFORM_FALLBACK path, which is deterministic for tests.
+  getSyncState: vi.fn(async () => null),
 }));
 
 import {
