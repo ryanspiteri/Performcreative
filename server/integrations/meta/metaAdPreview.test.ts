@@ -239,3 +239,59 @@ describe("MetaAdsClient.getAdShareableLink", () => {
     await expect(client.getAdShareableLink("ad-404")).rejects.toBeDefined();
   });
 });
+
+describe("MetaAdsClient.getAdAccount", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("requests currency + timezone_name so the sync can gate by account currency", async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        id: "act_123",
+        name: "ONEST AU",
+        account_status: 1,
+        amount_spent: "1234.56",
+        currency: "AUD",
+        timezone_name: "Australia/Sydney",
+      },
+    });
+    const client = new MetaAdsClient();
+    const account = await client.getAdAccount("act_123");
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url, config] = mockGet.mock.calls[0];
+    expect(url).toBe("/act_123");
+    expect(config.params.fields).toContain("currency");
+    expect(config.params.fields).toContain("timezone_name");
+    expect(account?.currency).toBe("AUD");
+    expect(account?.timezone_name).toBe("Australia/Sydney");
+  });
+
+  it("returns null on 404 so callers can skip gracefully", async () => {
+    mockGet.mockRejectedValue({
+      response: { status: 404, data: { error: { message: "Not found" } } },
+      message: "Request failed",
+    });
+    const client = new MetaAdsClient();
+    expect(await client.getAdAccount("act_missing")).toBeNull();
+  });
+
+  it("returns null on 400 (Meta's typical response for bad account IDs)", async () => {
+    mockGet.mockRejectedValue({
+      response: { status: 400, data: { error: { message: "Invalid parameter" } } },
+      message: "Request failed",
+    });
+    const client = new MetaAdsClient();
+    expect(await client.getAdAccount("act_bad")).toBeNull();
+  });
+
+  it("rethrows on non-404/400 errors so the sync doesn't silently mask auth failures", async () => {
+    mockGet.mockRejectedValue({
+      response: { status: 500, data: { error: { message: "Server error" } } },
+      message: "Request failed",
+    });
+    const client = new MetaAdsClient();
+    await expect(client.getAdAccount("act_500")).rejects.toBeDefined();
+  });
+});

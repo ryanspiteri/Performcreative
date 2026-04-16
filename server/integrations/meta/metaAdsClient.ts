@@ -158,6 +158,8 @@ export interface MetaAdAccount {
   name: string;
   account_status: number;
   amount_spent: string;
+  currency?: string;
+  timezone_name?: string;
 }
 
 /** Extract the numeric value for action_type === "video_view" from an action array. */
@@ -300,11 +302,32 @@ export class MetaAdsClient {
   async listAdAccounts(): Promise<MetaAdAccount[]> {
     const res = await this.http.get("/me/adaccounts", {
       params: {
-        fields: "id,name,account_status,amount_spent",
+        fields: "id,name,account_status,amount_spent,currency,timezone_name",
         access_token: this.accessToken,
       },
     });
     return res.data?.data ?? [];
+  }
+
+  /**
+   * Fetch metadata for a single ad account (currency, timezone, name). Used by
+   * the sync pipeline to gate non-AUD accounts out before doing any work.
+   *
+   * Returns null on 404 or access denied so the caller can skip gracefully.
+   */
+  async getAdAccount(adAccountId: string): Promise<MetaAdAccount | null> {
+    try {
+      const res = await this.http.get(`/${adAccountId}`, {
+        params: {
+          fields: "id,name,account_status,amount_spent,currency,timezone_name",
+          access_token: this.accessToken,
+        },
+      });
+      return res.data as MetaAdAccount;
+    } catch (err: any) {
+      if (err.response?.status === 404 || err.response?.status === 400) return null;
+      throw err;
+    }
   }
 
   /**

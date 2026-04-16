@@ -41,6 +41,17 @@ import { runTaggingPass } from "../../services/creativeAnalytics/tagEngine";
 const TAG = "[MetaSync]";
 const LOCK_NAME = "perform_meta_sync_lock";
 
+/**
+ * Currency allowlist — V1 only syncs AUD ad accounts. Keeps the USA (USD) account
+ * configured in META_AD_ACCOUNT_IDS but skips it at sync time so its spend never
+ * lands in `adDailyStats`. Matches the Hyros-side AUD filter so both sides of the
+ * Creative Performance report are scoped to the same store.
+ *
+ * When multi-currency support is added, flip this to accept any known set and
+ * add per-currency reporting at the query layer.
+ */
+const ALLOWED_ACCOUNT_CURRENCIES = new Set(["AUD"]);
+
 let _syncTimer: ReturnType<typeof setInterval> | null = null;
 let _isSyncing = false;
 
@@ -50,6 +61,8 @@ export interface SyncResult {
   creativeAssetsUpserted: number;
   dailyStatsUpserted: number;
   errors: string[];
+  /** If set, the account was intentionally skipped (e.g. wrong currency) rather than failed. */
+  skippedReason?: string;
 }
 
 /** Compute the stable creativeHash for dedup. */
@@ -245,6 +258,28 @@ export async function syncAdAccount(adAccountId: string, lookbackDays: number): 
   }
   console.log(`${TAG} Token validated for account ${adAccountId} (user: ${tokenCheck.name})`);
 
+  // 1b. Currency gate — only sync AUD accounts in V1. The USD (USA) account can
+  // remain configured in META_AD_ACCOUNT_IDS; it just gets skipped here so its
+  // spend never enters `adDailyStats`. Keeps the report aligned with the Hyros
+  // AUD filter.
+  try {
+    const accountMeta = await client.getAdAccount(adAccountId);
+    const currency = accountMeta?.currency ?? "";
+    if (!currency) {
+      console.warn(`${TAG} ${adAccountId}: no currency returned from Meta — proceeding with sync`);
+    } else if (!ALLOWED_ACCOUNT_CURRENCIES.has(currency)) {
+      const reason = `skipped: account currency ${currency} not in allowlist (${Array.from(ALLOWED_ACCOUNT_CURRENCIES).join(",")})`;
+      console.log(`${TAG} ${adAccountId}: ${reason}`);
+      result.skippedReason = reason;
+      return result;
+    }
+  } catch (err: any) {
+    // Non-fatal: if we can't read the account metadata, fall through to the
+    // regular sync path rather than skipping silently. A real auth/permission
+    // issue will surface inside listAds below with a clearer error.
+    console.warn(`${TAG} ${adAccountId}: getAdAccount failed (${err?.message ?? err}) — continuing sync`);
+  }
+
   // 2. Fetch ACTIVE ads for the account (paginated). We skip PAUSED/ARCHIVED to avoid
   // pulling 20k+ historical ads — we only care about currently-spending creatives.
   // Uses includeCreative=false to avoid Meta's "reduce amount of data" error on large
@@ -409,7 +444,13 @@ export async function runFullSync(lookbackDays?: number): Promise<{ results: Syn
 
       const totalUpserted = result.adsUpserted + result.dailyStatsUpserted;
       const status = result.errors.length === 0 ? "success" : result.errors.length < 5 ? "partial" : "failed";
-      const errorSummary = result.errors.length > 0 ? result.errors.slice(0, 5).join("\n") : null;
+      // Surface intentional skips in lastSyncError so the admin UI distinguishes
+      // "ran and synced 0 rows" from "skipped due to currency gate". Doesn't
+      // affect status — a skip is a successful no-op, not a failure.
+      const errorSummary =
+        result.errors.length > 0
+          ? result.errors.slice(0, 5).join("\n")
+          : result.skippedReason ?? null;
 
       await db.updateSyncState("meta", accountId, {
         sourceName: "meta",
