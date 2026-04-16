@@ -34,6 +34,30 @@ const STYLE_TO_CATEGORY: Record<string, string> = {
   DEMO: "DR",
 };
 
+// Wave 1 preset mappings — translate tag engine vocab → form presets.
+// Used when "Apply winning patterns" is clicked (or auto-applied in winner mode).
+const HOOK_TACTIC_TO_STRUCTURE: Record<string, { scriptStyle: string; subStructureId: string }> = {
+  before_after:     { scriptStyle: "DR",      subStructureId: "DR-2" }, // Before→After→Bridge
+  question:         { scriptStyle: "DR",      subStructureId: "DR-5" }, // Contrarian
+  bold_claim:       { scriptStyle: "UGC",     subStructureId: "UGC-4" }, // Myth Bust / Hot Take
+  ugc_testimonial:  { scriptStyle: "UGC",     subStructureId: "UGC-1" }, // Talking Head Review
+  product_demo:     { scriptStyle: "DEMO",    subStructureId: "UGC-6" }, // Product Demo / Ingredient Ed
+  storytelling:     { scriptStyle: "DR",      subStructureId: "DR-7" }, // Story → Lesson → Product
+  controversy:      { scriptStyle: "DR",      subStructureId: "DR-4" }, // Enemy Framing
+  listicle:         { scriptStyle: "EDUCATION", subStructureId: "UGC-6" }, // Education / Ingredient
+};
+
+const MESSAGING_ANGLE_TO_STYLE: Record<string, string> = {
+  transformation:      "DR",
+  social_proof:        "UGC",
+  ingredient_science:  "DEMO",
+  urgency:             "DR",
+  lifestyle:           "LIFESTYLE",
+  problem_agitate:     "DR",
+  authority:           "FOUNDER",
+  emotional_appeal:    "UGC",
+};
+
 // ─── Inline editable text component ─────────────────────────────────────────
 
 function EditableText({
@@ -236,6 +260,49 @@ export default function ScriptGenerator() {
     return optionsQuery.data?.angles?.[product] || [];
   }, [optionsQuery.data?.angles, product]);
 
+  // Wave 1 presets — apply top winning patterns from the intelligence brief to the form
+  const applyWinningPatterns = (opts?: { silent?: boolean }) => {
+    if (!brief) return;
+    const tactic = brief.topHookTactic?.tactic;
+    const angleStr = brief.topMessagingAngle?.angle;
+
+    // Map hook tactic → script style + sub-structure
+    if (tactic && HOOK_TACTIC_TO_STRUCTURE[tactic]) {
+      const mapped = HOOK_TACTIC_TO_STRUCTURE[tactic];
+      setScriptStyle(mapped.scriptStyle);
+      setSubStructureId(mapped.subStructureId);
+    } else if (angleStr && MESSAGING_ANGLE_TO_STYLE[angleStr]) {
+      setScriptStyle(MESSAGING_ANGLE_TO_STYLE[angleStr]);
+    }
+
+    // Auto-pick the first sub-structure in the matched category if we don't have one
+    // Fall back: leave subStructure empty and user picks
+
+    // Angle: if not already set, use the top messaging angle as a custom angle
+    if (!angle && angleStr) {
+      setAngle("__custom__");
+      setCustomAngle(angleStr.replace(/_/g, " "));
+    }
+
+    // Audience: leave user to choose; we don't have a reliable mapping from tags
+
+    if (!opts?.silent) {
+      toast.success("Winning patterns applied");
+    }
+  };
+
+  // Auto-apply patterns once in winner mode (when brief loads)
+  const [patternsAutoApplied, setPatternsAutoApplied] = useState(false);
+  useEffect(() => {
+    if (patternsAutoApplied) return;
+    if (!winnerSource || !brief) return;
+    // Only auto-apply if the form is still in default state (avoids clobbering manual edits)
+    if (scriptStyle || subStructureId) return;
+    applyWinningPatterns({ silent: true });
+    setPatternsAutoApplied(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brief, winnerSource]);
+
   const conceptSuggestions = useMemo(() => {
     if (!product || !effectiveAngle || !archetype) return [];
     const audienceLabel = (optionsQuery.data?.audiences as any[])?.find(a => a.id === archetype)?.label || archetype;
@@ -423,9 +490,19 @@ export default function ScriptGenerator() {
             {/* Intelligence Brief */}
             {brief && (
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Performance Intelligence</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Performance Intelligence</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => applyWinningPatterns()}
+                    className="text-[10px] uppercase tracking-wider font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 px-2 py-1 rounded-md transition-colors"
+                    disabled={isRunning}
+                  >
+                    Apply patterns
+                  </button>
                 </div>
                 <p className="text-xs text-gray-400">
                   Based on {brief.creativeCount} creatives{brief.totalSpendCents > 0 ? ` and $${(brief.totalSpendCents / 100).toLocaleString()} spend` : ""} over 90 days:
