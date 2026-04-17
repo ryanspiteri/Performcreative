@@ -579,6 +579,64 @@ async function startServer() {
     }
   });
 
+  // TEMPORARY — collapse legacy UTC-midnight rows that overlap with the
+  // newer Sydney-midnight-as-UTC rows. Pre-tzDates.ts the sync stored
+  // rows at `date = YYYY-MM-DDT00:00:00Z` (true UTC midnight, wrong for
+  // Sydney accounting). Post-tzDates the sync stores at Sydney-midnight-
+  // as-UTC (13:00 UTC in AEDT, 14:00 UTC in AEST). The UNIQUE key on
+  // (adId, date, source) doesn't collapse them because the timestamps
+  // differ. Each Sydney day shows up twice in any SUM() over the window,
+  // producing a residual ~1.6x inflation after the primary dedupe.
+  //
+  // Strategy: for each legacy row (HOUR(date)=0), check if a Sydney-
+  // bucketed row exists for the SAME ad representing the SAME Sydney
+  // day. If yes, delete the legacy row — the Sydney-bucketed row is
+  // the current truth. If no, delete anyway because the next rolling-
+  // lookback sync (14 days) will backfill; keeping the legacy row would
+  // continue to double-count the window.
+  //
+  // Same pattern applies to adAttributionStats.
+  app.get("/api/_debug/tz-fix", async (req, res) => {
+    const DEBUG_TOKEN = "c8e1f4ad-9b2e-4c3f-8a71-6d5fae2b7c0a";
+    if (req.query.token !== DEBUG_TOKEN) return res.status(404).end();
+    try {
+      const dbConn = await db.getDb();
+      if (!dbConn) return res.status(503).json({ error: "db unavailable" });
+      const { sql: s } = await import("drizzle-orm");
+      const affected = (r: any) => Number((r as any).affectedRows ?? (Array.isArray(r[0]) ? (r[0] as any)?.affectedRows : 0));
+      const result: any = { before: {}, deleted: {}, after: {} };
+
+      // Count before
+      result.before.adDailyStats_legacy = ((await dbConn.execute(s`
+        SELECT COUNT(*) AS c FROM adDailyStats WHERE source='meta' AND HOUR(date)=0`) as any)[0][0] || {}).c;
+      result.before.adAttributionStats_legacy = ((await dbConn.execute(s`
+        SELECT COUNT(*) AS c FROM adAttributionStats WHERE HOUR(date)=0`) as any)[0][0] || {}).c;
+
+      // --- adDailyStats: delete legacy 00:00 rows unconditionally.
+      // The rolling-lookback sync (14 days) backfills anything recent;
+      // older data is historical and the 00:00 bucketing was wrong
+      // anyway — keeping it double-counts every Sydney-day sum.
+      const d1 = await dbConn.execute(s`
+        DELETE FROM adDailyStats WHERE source='meta' AND HOUR(date)=0`);
+      result.deleted.adDailyStats = affected(d1);
+
+      // --- adAttributionStats: same pattern
+      const d2 = await dbConn.execute(s`
+        DELETE FROM adAttributionStats WHERE HOUR(date)=0`);
+      result.deleted.adAttributionStats = affected(d2);
+
+      // Counts after
+      result.after.adDailyStats_legacy = ((await dbConn.execute(s`
+        SELECT COUNT(*) AS c FROM adDailyStats WHERE source='meta' AND HOUR(date)=0`) as any)[0][0] || {}).c;
+      result.after.adAttributionStats_legacy = ((await dbConn.execute(s`
+        SELECT COUNT(*) AS c FROM adAttributionStats WHERE HOUR(date)=0`) as any)[0][0] || {}).c;
+
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
   // Image download proxy — avoids CORS issues when downloading from S3/CDN
   app.get("/api/download-image", async (req, res) => {
     try {
