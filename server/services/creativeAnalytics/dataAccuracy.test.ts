@@ -66,7 +66,7 @@ import {
   type HyrosSyncResult,
 } from "../../integrations/hyros/hyrosSyncService";
 import type { HyrosSale } from "../../integrations/hyros/hyrosClient";
-import { computeScores, type AccountBenchmarks, type ScoreInputs } from "./scoreEngine";
+import { computeScores, PLATFORM_FALLBACK, type AccountBenchmarks, type ScoreInputs } from "./scoreEngine";
 
 function emptyHyrosResult(): HyrosSyncResult {
   return {
@@ -461,6 +461,53 @@ describe("Invariant: gross revenue matches Hyros dashboard Revenue card", () => 
 // =============================================================================
 // 12. Money + rate parsing: boundary values
 // =============================================================================
+
+// =============================================================================
+// 13. PLATFORM_FALLBACK scale matches adDailyStats storage (production regression)
+// =============================================================================
+
+describe("Invariant: PLATFORM_FALLBACK benchmarks match adDailyStats storage scale", () => {
+  it("thumbstop P50 is on the (fraction × 10_000) scale — 30% → 3000, not 30000", () => {
+    // Bug found on prod QA: fallback was 10× too high (e.g. p50=30000 "for 30%").
+    // Any real ad with 30% thumbstop (stored as 3000) fell below P25=20000 and
+    // scored ~12. Must match (videoPlayCount / impressions) × 10_000 storage.
+    expect(PLATFORM_FALLBACK.thumbstop.p50).toBe(3000);
+    expect(PLATFORM_FALLBACK.thumbstop.p90).toBeLessThanOrEqual(10_000); // max 100%
+  });
+
+  it("holdRate P50 is on the (fraction × 10_000) scale — 10% → 1000", () => {
+    expect(PLATFORM_FALLBACK.holdRate.p50).toBe(1000);
+    expect(PLATFORM_FALLBACK.holdRate.p90).toBeLessThanOrEqual(10_000);
+  });
+
+  it("ctr P50 is on the (% × 10_000) scale — 1% → 10000 (matches parseMetaRateToBp)", () => {
+    expect(PLATFORM_FALLBACK.ctr.p50).toBe(parseMetaRateToBp("1.0"));
+    expect(PLATFORM_FALLBACK.ctr.p90).toBe(parseMetaRateToBp("2.5"));
+  });
+
+  it("roas P50 is on the (x × 100) scale — 2.0x → 200", () => {
+    expect(PLATFORM_FALLBACK.roas.p50).toBe(200);
+  });
+
+  it("a 97% thumbstop ad scores at least 90 against fallback (no pinned-low regression)", () => {
+    const cold: AccountBenchmarks = { ...PLATFORM_FALLBACK };
+    const result = computeScores(
+      {
+        thumbstopBp: 9700, // 97% in storage scale
+        holdRateBp: 1500,
+        ctrBp: 15_000,
+        outboundCtrBp: 0,
+        impressions: 1_000_000,
+        clicks: 15_000,
+        conversions: 300,
+        spendCents: 1_000_000,
+        revenueCents: 3_000_000,
+      },
+      cold,
+    );
+    expect(result.hookScore).toBeGreaterThanOrEqual(90);
+  });
+});
 
 describe("Invariant: Meta money / rate parsers handle boundaries cleanly", () => {
   it("parseMetaMoneyToCents('0.01') = 1 cent (no rounding loss)", () => {
