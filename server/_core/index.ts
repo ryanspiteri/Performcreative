@@ -306,74 +306,67 @@ async function startServer() {
     try {
       const dbConn = await db.getDb();
       if (!dbConn) return res.status(503).json({ error: "db unavailable" });
+      const { sql: s } = await import("drizzle-orm");
       const now = new Date();
       const from = new Date(now.getTime() - 7 * 86400_000);
-      const run = async (sql: string, params: any[] = []) => {
-        const r: any = await (dbConn as any).execute(sql, params);
-        return Array.isArray(r[0]) ? r[0] : r;
-      };
-      const daily = (await run(
-        `SELECT COUNT(*) AS rows,
-                COUNT(DISTINCT adId, date, source) AS distinctKeys,
-                COALESCE(SUM(spendCents),0) AS spendCents,
-                COUNT(DISTINCT adId) AS distinctAds,
-                MIN(date) AS minDate, MAX(date) AS maxDate
-         FROM adDailyStats
-         WHERE source='meta' AND date >= ? AND date <= ?`,
-        [from, now],
-      ))[0];
-      const attr = (await run(
-        `SELECT COUNT(*) AS rows,
-                COUNT(DISTINCT hyrosAdId, date, attributionModel) AS distinctKeys,
-                COALESCE(SUM(revenueCents),0) AS revenueCents,
-                COALESCE(SUM(conversions),0) AS conversions,
-                COUNT(DISTINCT hyrosAdId) AS distinctHyrosAds,
-                MIN(date) AS minDate, MAX(date) AS maxDate
-         FROM adAttributionStats
-         WHERE date >= ? AND date <= ?`,
-        [from, now],
-      ))[0];
-      const adsTotals = (await run(
-        `SELECT COUNT(*) AS total, COUNT(DISTINCT platform, externalAdId) AS distinctExternal FROM ads`,
-      ))[0];
-      const caTotals = (await run(
-        `SELECT COUNT(*) AS total, COUNT(DISTINCT creativeHash) AS distinctHash FROM creativeAssets`,
-      ))[0];
-      const dupDaily = await run(
-        `SELECT adId, date, source, COUNT(*) AS dupes, SUM(spendCents) AS spend
-         FROM adDailyStats
-         WHERE source='meta' AND date >= ? AND date <= ?
-         GROUP BY adId, date, source
-         HAVING COUNT(*) > 1
-         ORDER BY COUNT(*) DESC LIMIT 10`,
-        [from, now],
-      );
-      const dupAttr = await run(
-        `SELECT hyrosAdId, date, attributionModel, COUNT(*) AS dupes, SUM(revenueCents) AS rev
-         FROM adAttributionStats
-         WHERE date >= ? AND date <= ?
-         GROUP BY hyrosAdId, date, attributionModel
-         HAVING COUNT(*) > 1
-         ORDER BY COUNT(*) DESC LIMIT 10`,
-        [from, now],
-      );
-      const indexes = await run(
-        `SELECT table_name, index_name, non_unique,
-                GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols
-         FROM information_schema.statistics
-         WHERE table_schema = DATABASE()
-           AND table_name IN ('adDailyStats','adAttributionStats','ads','creativeAssets')
-         GROUP BY table_name, index_name, non_unique
-         ORDER BY table_name, index_name`,
-      );
-      // Sanity — the exact per-ad-per-day spend list that summary SUMs
-      const spendByDay = await run(
-        `SELECT DATE(date) AS day, SUM(spendCents) AS spend, COUNT(*) AS rows, COUNT(DISTINCT adId) AS ads
-         FROM adDailyStats
-         WHERE source='meta' AND date >= ? AND date <= ?
-         GROUP BY DATE(date) ORDER BY day`,
-        [from, now],
-      );
+      const unwrap = (r: any) => Array.isArray(r[0]) ? r[0] : r;
+
+      const daily = unwrap(await dbConn.execute(s`
+        SELECT COUNT(*) AS rowCount,
+               COUNT(DISTINCT adId, date, source) AS distinctKeys,
+               COALESCE(SUM(spendCents),0) AS spendCents,
+               COUNT(DISTINCT adId) AS distinctAds,
+               MIN(date) AS minDate, MAX(date) AS maxDate
+        FROM adDailyStats
+        WHERE source='meta' AND date >= ${from} AND date <= ${now}`))[0];
+
+      const attr = unwrap(await dbConn.execute(s`
+        SELECT COUNT(*) AS rowCount,
+               COUNT(DISTINCT hyrosAdId, date, attributionModel) AS distinctKeys,
+               COALESCE(SUM(revenueCents),0) AS revenueCents,
+               COALESCE(SUM(conversions),0) AS conversions,
+               COUNT(DISTINCT hyrosAdId) AS distinctHyrosAds,
+               MIN(date) AS minDate, MAX(date) AS maxDate
+        FROM adAttributionStats
+        WHERE date >= ${from} AND date <= ${now}`))[0];
+
+      const adsTotals = unwrap(await dbConn.execute(s`
+        SELECT COUNT(*) AS total, COUNT(DISTINCT platform, externalAdId) AS distinctExternal FROM ads`))[0];
+
+      const caTotals = unwrap(await dbConn.execute(s`
+        SELECT COUNT(*) AS total, COUNT(DISTINCT creativeHash) AS distinctHash FROM creativeAssets`))[0];
+
+      const dupDaily = unwrap(await dbConn.execute(s`
+        SELECT adId, date, source, COUNT(*) AS dupes, SUM(spendCents) AS spend
+        FROM adDailyStats
+        WHERE source='meta' AND date >= ${from} AND date <= ${now}
+        GROUP BY adId, date, source
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC LIMIT 10`));
+
+      const dupAttr = unwrap(await dbConn.execute(s`
+        SELECT hyrosAdId, date, attributionModel, COUNT(*) AS dupes, SUM(revenueCents) AS rev
+        FROM adAttributionStats
+        WHERE date >= ${from} AND date <= ${now}
+        GROUP BY hyrosAdId, date, attributionModel
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC LIMIT 10`));
+
+      const indexes = unwrap(await dbConn.execute(s`
+        SELECT table_name AS tbl, index_name AS idx, non_unique AS nonUnique,
+               GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols
+        FROM information_schema.statistics
+        WHERE table_schema = DATABASE()
+          AND table_name IN ('adDailyStats','adAttributionStats','ads','creativeAssets')
+        GROUP BY table_name, index_name, non_unique
+        ORDER BY table_name, index_name`));
+
+      const spendByDay = unwrap(await dbConn.execute(s`
+        SELECT DATE(date) AS day, SUM(spendCents) AS spend, COUNT(*) AS rowCount, COUNT(DISTINCT adId) AS ads
+        FROM adDailyStats
+        WHERE source='meta' AND date >= ${from} AND date <= ${now}
+        GROUP BY DATE(date) ORDER BY day`));
+
       return res.json({
         window: { from, to: now },
         adDailyStats_7d: daily,
