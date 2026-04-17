@@ -367,6 +367,31 @@ async function startServer() {
         WHERE source='meta' AND date >= ${from} AND date <= ${now}
         GROUP BY DATE(date) ORDER BY day`));
 
+      // Distinct raw `date` timestamp values — if the same logical Sydney
+      // day is stored at multiple UTC hours (e.g., UTC-midnight vs
+      // Sydney-midnight-UTC), this reveals the bucketing inconsistency.
+      const distinctDates = unwrap(await dbConn.execute(s`
+        SELECT date, COUNT(*) AS c, COUNT(DISTINCT adId) AS ads
+        FROM adDailyStats
+        WHERE source='meta' AND date >= ${from} AND date <= ${now}
+        GROUP BY date ORDER BY date`));
+
+      // Raw rows for the single ad with the most entries — shows whether
+      // one ad has multiple rows on the same calendar day with different
+      // timestamps.
+      const topAd: any = unwrap(await dbConn.execute(s`
+        SELECT adId, COUNT(*) AS c FROM adDailyStats
+        WHERE source='meta' AND date >= ${from} AND date <= ${now}
+        GROUP BY adId ORDER BY COUNT(*) DESC LIMIT 1`))[0];
+      const sampleAdRows = topAd
+        ? unwrap(await dbConn.execute(s`
+            SELECT id, adId, date, spendCents, impressions, createdAt
+            FROM adDailyStats
+            WHERE source='meta' AND adId = ${topAd.adId}
+              AND date >= ${from} AND date <= ${now}
+            ORDER BY date, id`))
+        : [];
+
       return res.json({
         window: { from, to: now },
         adDailyStats_7d: daily,
@@ -374,6 +399,9 @@ async function startServer() {
         ads: adsTotals,
         creativeAssets: caTotals,
         spendByDay,
+        distinctDates,
+        sampleAdId: topAd?.adId,
+        sampleAdRows,
         dupDailyStatsKeys: dupDaily,
         dupAttributionKeys: dupAttr,
         indexes,
