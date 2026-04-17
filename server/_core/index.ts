@@ -294,6 +294,102 @@ async function startServer() {
     }
   });
 
+  // TEMPORARY — one-shot KPI audit for ~10x Creative Performance inflation
+  // investigation. Token-guarded so it can be hit without a session. REMOVE
+  // this entire handler in the follow-up cleanup commit once root cause
+  // is identified.
+  app.get("/api/_debug/kpi-audit", async (req, res) => {
+    const DEBUG_TOKEN = "c8e1f4ad-9b2e-4c3f-8a71-6d5fae2b7c0a";
+    if (req.query.token !== DEBUG_TOKEN) {
+      return res.status(404).end();
+    }
+    try {
+      const dbConn = await db.getDb();
+      if (!dbConn) return res.status(503).json({ error: "db unavailable" });
+      const now = new Date();
+      const from = new Date(now.getTime() - 7 * 86400_000);
+      const run = async (sql: string, params: any[] = []) => {
+        const r: any = await (dbConn as any).execute(sql, params);
+        return Array.isArray(r[0]) ? r[0] : r;
+      };
+      const daily = (await run(
+        `SELECT COUNT(*) AS rows,
+                COUNT(DISTINCT adId, date, source) AS distinctKeys,
+                COALESCE(SUM(spendCents),0) AS spendCents,
+                COUNT(DISTINCT adId) AS distinctAds,
+                MIN(date) AS minDate, MAX(date) AS maxDate
+         FROM adDailyStats
+         WHERE source='meta' AND date >= ? AND date <= ?`,
+        [from, now],
+      ))[0];
+      const attr = (await run(
+        `SELECT COUNT(*) AS rows,
+                COUNT(DISTINCT hyrosAdId, date, attributionModel) AS distinctKeys,
+                COALESCE(SUM(revenueCents),0) AS revenueCents,
+                COALESCE(SUM(conversions),0) AS conversions,
+                COUNT(DISTINCT hyrosAdId) AS distinctHyrosAds,
+                MIN(date) AS minDate, MAX(date) AS maxDate
+         FROM adAttributionStats
+         WHERE date >= ? AND date <= ?`,
+        [from, now],
+      ))[0];
+      const adsTotals = (await run(
+        `SELECT COUNT(*) AS total, COUNT(DISTINCT platform, externalAdId) AS distinctExternal FROM ads`,
+      ))[0];
+      const caTotals = (await run(
+        `SELECT COUNT(*) AS total, COUNT(DISTINCT creativeHash) AS distinctHash FROM creativeAssets`,
+      ))[0];
+      const dupDaily = await run(
+        `SELECT adId, date, source, COUNT(*) AS dupes, SUM(spendCents) AS spend
+         FROM adDailyStats
+         WHERE source='meta' AND date >= ? AND date <= ?
+         GROUP BY adId, date, source
+         HAVING COUNT(*) > 1
+         ORDER BY COUNT(*) DESC LIMIT 10`,
+        [from, now],
+      );
+      const dupAttr = await run(
+        `SELECT hyrosAdId, date, attributionModel, COUNT(*) AS dupes, SUM(revenueCents) AS rev
+         FROM adAttributionStats
+         WHERE date >= ? AND date <= ?
+         GROUP BY hyrosAdId, date, attributionModel
+         HAVING COUNT(*) > 1
+         ORDER BY COUNT(*) DESC LIMIT 10`,
+        [from, now],
+      );
+      const indexes = await run(
+        `SELECT table_name, index_name, non_unique,
+                GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols
+         FROM information_schema.statistics
+         WHERE table_schema = DATABASE()
+           AND table_name IN ('adDailyStats','adAttributionStats','ads','creativeAssets')
+         GROUP BY table_name, index_name, non_unique
+         ORDER BY table_name, index_name`,
+      );
+      // Sanity — the exact per-ad-per-day spend list that summary SUMs
+      const spendByDay = await run(
+        `SELECT DATE(date) AS day, SUM(spendCents) AS spend, COUNT(*) AS rows, COUNT(DISTINCT adId) AS ads
+         FROM adDailyStats
+         WHERE source='meta' AND date >= ? AND date <= ?
+         GROUP BY DATE(date) ORDER BY day`,
+        [from, now],
+      );
+      return res.json({
+        window: { from, to: now },
+        adDailyStats_7d: daily,
+        adAttributionStats_7d: attr,
+        ads: adsTotals,
+        creativeAssets: caTotals,
+        spendByDay,
+        dupDailyStatsKeys: dupDaily,
+        dupAttributionKeys: dupAttr,
+        indexes,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
   // Image download proxy — avoids CORS issues when downloading from S3/CDN
   app.get("/api/download-image", async (req, res) => {
     try {
