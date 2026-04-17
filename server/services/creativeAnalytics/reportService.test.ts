@@ -35,19 +35,27 @@ vi.mock("../../_core/env", () => ({
   },
 }));
 
-// Capture the SQL passed to dbConn.execute so we can assert on the query shape.
-const captured: { lastSql: any } = { lastSql: null };
+// Capture every SQL query passed to dbConn.execute so tests can inspect shape.
+// The summary path now runs 3 independent subqueries (spend, revenue, active
+// creatives) plus an optional 4th for the unattributed bucket, so tests that
+// care about per-query results queue one response per call via `mockResponses`.
+// Tests that only care about shape can use `mockRows` as a fallback applied
+// to every execute call when the queue is empty.
+const captured: { lastSql: any; allSql: any[] } = { lastSql: null, allSql: [] };
 let mockRows: any[] = [];
+let mockResponses: any[][] = [];
 
 vi.mock("../../db", () => ({
   getDb: vi.fn(async () => ({
     execute: vi.fn(async (sqlObj: any) => {
       captured.lastSql = sqlObj;
-      return [mockRows, {}];
+      captured.allSql.push(sqlObj);
+      const next = mockResponses.shift();
+      return [next ?? mockRows, {}];
     }),
   })),
-  // reportService now reads cached benchmarks from adSyncState via getSyncState.
-  // Returning null forces a PLATFORM_FALLBACK path, which is deterministic for tests.
+  // reportService reads cached benchmarks from adSyncState via getSyncState.
+  // Returning null forces a PLATFORM_FALLBACK path, deterministic for tests.
   getSyncState: vi.fn(async () => null),
 }));
 
@@ -190,19 +198,20 @@ describe("getCreativePerformance — row mapping", () => {
   });
 });
 
-describe("getCreativePerformanceSummary — codex critical #2 filter leak", () => {
+describe("getCreativePerformanceSummary — isolated-subquery KPIs", () => {
   beforeEach(() => {
     captured.lastSql = null;
+    captured.allSql = [];
+    mockResponses = [];
+    mockRows = [];
   });
 
-  it("REGRESSION: creativeType filter propagates into the revenue subquery", async () => {
-    mockRows = [
-      {
-        totalSpend: "5000",
-        totalRevenue: "10000",
-        totalConversions: "5",
-        activeCreatives: "3",
-      },
+  it("REGRESSION: creativeType filter propagates into every subquery", async () => {
+    // Three subqueries: spend, revenue, activeCreatives
+    mockResponses = [
+      [{ totalSpend: "5000" }],
+      [{ totalRevenue: "10000", totalConversions: "5" }],
+      [{ activeCreatives: "3" }],
     ];
 
     await getCreativePerformanceSummary({
@@ -211,22 +220,56 @@ describe("getCreativePerformanceSummary — codex critical #2 filter leak", () =
       creativeType: "video",
     });
 
-    // The Drizzle sql template is captured as a SQL object with .queryChunks.
-    // We walk its string content and assert it contains the scoped alias
-    // joins (ca2, a2) that the fix added — proof the revenue subquery is no
-    // longer joined on `1 = 1` with no filter.
-    expect(captured.lastSql).toBeTruthy();
-    const sqlStr = JSON.stringify(captured.lastSql);
-    expect(sqlStr).toContain("ca2");
-    expect(sqlStr).toContain("a2");
-    expect(sqlStr).toContain("creativeType");
+    expect(captured.allSql.length).toBeGreaterThanOrEqual(3);
+    // Every subquery must join through creativeAssets so the creativeType
+    // filter scopes it. Prior bug let revenue leak across types.
+    for (const sqlObj of captured.allSql) {
+      const sqlStr = JSON.stringify(sqlObj);
+      expect(sqlStr).toContain("creativeAssets");
+      expect(sqlStr).toContain("creativeType");
+    }
+  });
+
+  it("REGRESSION: active creatives counts only creatives with spend>0 in window", async () => {
+    mockResponses = [
+      [{ totalSpend: "0" }],
+      [{ totalRevenue: "0", totalConversions: "0" }],
+      [{ activeCreatives: "42" }],
+    ];
+    await getCreativePerformanceSummary({
+      dateFrom: new Date("2026-01-01"),
+      dateTo: new Date("2026-01-31"),
+    });
+    // The 3rd subquery is the activeCreatives one — must require spendCents > 0
+    // and filter by date, otherwise it counts every creative with any ad ever.
+    const activeSql = JSON.stringify(captured.allSql[2]);
+    expect(activeSql).toContain("spendCents");
+    expect(activeSql).toContain("date");
+  });
+
+  it("revenue subquery pins source='hyros' and the configured attribution model", async () => {
+    mockResponses = [
+      [{ totalSpend: "0" }],
+      [{ totalRevenue: "0", totalConversions: "0" }],
+      [{ activeCreatives: "0" }],
+    ];
+    await getCreativePerformanceSummary({
+      dateFrom: new Date("2026-01-01"),
+      dateTo: new Date("2026-01-31"),
+    });
+    const revenueSql = JSON.stringify(captured.allSql[1]);
+    expect(revenueSql).toContain("hyros");
+    expect(revenueSql).toContain("attributionModel");
   });
 
   it("returns zeros for an empty result set", async () => {
-    mockRows = [];
+    mockResponses = [[], [], []];
     const summary = await getCreativePerformanceSummary({
       dateFrom: new Date("2026-01-01"),
       dateTo: new Date("2026-01-31"),
+      // Pass a filter so the unattributed-bucket path is skipped — otherwise
+      // this empty-result test also has to stub a 4th response for it.
+      creativeType: "video",
     });
     expect(summary.totalSpendCents).toBe(0);
     expect(summary.totalRevenueCents).toBe(0);
@@ -236,20 +279,37 @@ describe("getCreativePerformanceSummary — codex critical #2 filter leak", () =
   });
 
   it("computes blended ROAS = revenue / spend * 100", async () => {
-    mockRows = [
-      {
-        totalSpend: "10000", // $100
-        totalRevenue: "30000", // $300
-        totalConversions: "10",
-        activeCreatives: "5",
-      },
+    mockResponses = [
+      [{ totalSpend: "10000" }],     // $100 spend
+      [{ totalRevenue: "30000", totalConversions: "10" }], // $300 revenue
+      [{ activeCreatives: "5" }],
+    ];
+    const summary = await getCreativePerformanceSummary({
+      dateFrom: new Date("2026-01-01"),
+      dateTo: new Date("2026-01-31"),
+      creativeType: "video", // skip unattributed
+    });
+    expect(summary.totalSpendCents).toBe(10000);
+    expect(summary.totalRevenueCents).toBe(30000);
+    expect(summary.blendedRoasBp).toBe(300); // 3.00x
+    expect(summary.activeCreativesCount).toBe(5);
+  });
+
+  it("adds unattributed bucket ONLY when no filters are active", async () => {
+    // No filters → unattributed bucket is added as a 4th query
+    mockResponses = [
+      [{ totalSpend: "10000" }],
+      [{ totalRevenue: "30000", totalConversions: "10" }],
+      [{ activeCreatives: "5" }],
+      [{ revenueCents: "5000", conversions: "3" }], // unattributed
     ];
     const summary = await getCreativePerformanceSummary({
       dateFrom: new Date("2026-01-01"),
       dateTo: new Date("2026-01-31"),
     });
-    // 30000 / 10000 * 100 = 300 (= 3.00x)
-    expect(summary.blendedRoasBp).toBe(300);
+    // attributed $300 + unattributed $50 = $350 total
+    expect(summary.totalRevenueCents).toBe(35000);
+    expect(summary.totalConversions).toBe(13);
   });
 });
 

@@ -322,12 +322,20 @@ export async function getCreativePerformance(query: CreativePerfQuery): Promise<
 /**
  * Get the KPI strip summary for the same date range + filters.
  *
- * Prior bug (codex critical #2): the revenue subquery joined on `1 = 1` with
- * no creativeType/campaign/account filter. Selecting "Video only" would show
- * video spend against total account revenue, silently lying about ROAS. Fixed
- * by mirroring the same filters inside the revenue subquery via a JOIN through
- * ads + creativeAssets. Both the outer query and the subquery now respect the
- * same WHERE clauses.
+ * Each KPI is computed in its OWN isolated subquery rather than one big
+ * multi-join, because the prior one-big-query approach could produce ~10x
+ * inflated totals when a creative had many (ads × days) join rows — the
+ * outer-level SUM(d.spendCents) + MAX(attr.*) relied on every (ca, a, d)
+ * combination being 1:1 with a distinct adDailyStats row, which is only
+ * true when the JOINs are tight. Any stray duplicate row downstream
+ * multiplied spend and revenue by the same factor. Isolating each KPI in
+ * its own SELECT makes the arithmetic inspectable and impossible to
+ * cross-join. See ground-truth check in the /investigate report for
+ * 2026-04-17 where dashboard was ~10x real.
+ *
+ * Also fixes activeCreatives — it used to COUNT(DISTINCT ca.id) across
+ * every creative with any ad ever, ignoring the date window. Now it only
+ * counts creatives with real spend in the window.
  */
 export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuery, "sortBy" | "sortDirection" | "limit" | "offset">): Promise<CreativePerfSummary> {
   const dbConn = await db.getDb();
@@ -335,70 +343,67 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
     return { totalSpendCents: 0, totalRevenueCents: 0, blendedRoasBp: 0, totalConversions: 0, activeCreativesCount: 0 };
   }
 
-  // Outer query filters
+  // Filters applied to every subquery via JOIN through ads + creativeAssets
+  // so outer filters (creativeType/campaign/account) scope all three KPIs.
   const creativeTypeFilter = query.creativeType ? sql`AND ca.creativeType = ${query.creativeType}` : sql``;
   const campaignFilter = query.campaignId ? sql`AND a.campaignId = ${query.campaignId}` : sql``;
   const accountFilter = query.adAccountId ? sql`AND a.adAccountId = ${query.adAccountId}` : sql``;
 
-  // Same filters reapplied inside the revenue subquery (aliased as ca2/a2)
-  const creativeTypeFilterAttr = query.creativeType ? sql`AND ca2.creativeType = ${query.creativeType}` : sql``;
-  const campaignFilterAttr = query.campaignId ? sql`AND a2.campaignId = ${query.campaignId}` : sql``;
-  const accountFilterAttr = query.adAccountId ? sql`AND a2.adAccountId = ${query.adAccountId}` : sql``;
-
-  // Why MAX() on attr.revenueCents / attr.conversions:
-  //
-  // The subquery is already aggregated — it returns a single row with SUM
-  // revenueCents and SUM conversions. We LEFT JOIN it ON 1 = 1 so that
-  // single-row total is pinned to every outer row. The outer SELECT mixes
-  // aggregates (SUM, COUNT) with attr.* references.
-  //
-  // MySQL 5.7+ runs in ONLY_FULL_GROUP_BY mode by default (DO App Platform's
-  // MySQL does too). In that mode, selecting a non-aggregate column alongside
-  // aggregates without a GROUP BY throws
-  //   "Expression #N of SELECT list is not in GROUP BY clause and contains
-  //    nonaggregated column which is not functionally dependent on columns in
-  //    GROUP BY clause"
-  // → entire query returns 500, KPI strip renders empty.
-  //
-  // Wrapping attr.* in MAX() makes them aggregates. Since the subquery yields
-  // exactly one row, MAX == that row — same numerical result, ONLY_FULL_GROUP_BY
-  // compliant. MIN() would also work.
-  const rows: any = await dbConn.execute(sql`
-    SELECT
-      COALESCE(SUM(d.spendCents), 0) AS totalSpend,
-      COALESCE(MAX(attr.revenueCents), 0) AS totalRevenue,
-      COALESCE(MAX(attr.conversions), 0) AS totalConversions,
-      COUNT(DISTINCT ca.id) AS activeCreatives
-    FROM creativeAssets ca
-    JOIN ads a ON a.creativeAssetId = ca.id
-    LEFT JOIN adDailyStats d ON d.adId = a.id
+  // KPI 1 — Total Meta spend in the window.
+  const spendRows: any = await dbConn.execute(sql`
+    SELECT COALESCE(SUM(d.spendCents), 0) AS totalSpend
+    FROM adDailyStats d
+    JOIN ads a ON a.id = d.adId
+    JOIN creativeAssets ca ON ca.id = a.creativeAssetId
+    WHERE d.source = 'meta'
       AND d.date >= ${query.dateFrom}
       AND d.date <= ${query.dateTo}
-      AND d.source = 'meta'
-    LEFT JOIN (
-      SELECT
-        SUM(attr.revenueCents) AS revenueCents,
-        SUM(attr.conversions) AS conversions
-      FROM adAttributionStats attr
-      JOIN ads a2 ON a2.id = attr.adId
-      JOIN creativeAssets ca2 ON ca2.id = a2.creativeAssetId
-      WHERE attr.date >= ${query.dateFrom}
-        AND attr.date <= ${query.dateTo}
-        AND attr.attributionModel = ${ENV.hyrosAttributionModel}
-        ${creativeTypeFilterAttr}
-        ${campaignFilterAttr}
-        ${accountFilterAttr}
-    ) attr ON 1 = 1
-    WHERE 1 = 1
       ${creativeTypeFilter}
       ${campaignFilter}
       ${accountFilter}
   `);
-  const row: any = (Array.isArray(rows[0]) ? rows[0][0] : rows[0]) ?? {};
+  const spendRow: any = (Array.isArray(spendRows[0]) ? spendRows[0][0] : spendRows[0]) ?? {};
+  const totalSpend = Number(spendRow.totalSpend) || 0;
 
-  const totalSpend = Number(row.totalSpend) || 0;
-  let totalRevenue = Number(row.totalRevenue) || 0;
-  let totalConversions = Number(row.totalConversions) || 0;
+  // KPI 2 — Total Hyros attributed revenue + conversions in the window.
+  // Explicit source='hyros' guard in case adAttributionStats ever holds
+  // non-Hyros rows (e.g., future Meta/TikTok attribution feeds).
+  const revenueRows: any = await dbConn.execute(sql`
+    SELECT
+      COALESCE(SUM(attr.revenueCents), 0) AS totalRevenue,
+      COALESCE(SUM(attr.conversions), 0) AS totalConversions
+    FROM adAttributionStats attr
+    JOIN ads a ON a.id = attr.adId
+    JOIN creativeAssets ca ON ca.id = a.creativeAssetId
+    WHERE attr.source = 'hyros'
+      AND attr.attributionModel = ${ENV.hyrosAttributionModel}
+      AND attr.date >= ${query.dateFrom}
+      AND attr.date <= ${query.dateTo}
+      ${creativeTypeFilter}
+      ${campaignFilter}
+      ${accountFilter}
+  `);
+  const revenueRow: any = (Array.isArray(revenueRows[0]) ? revenueRows[0][0] : revenueRows[0]) ?? {};
+  let totalRevenue = Number(revenueRow.totalRevenue) || 0;
+  let totalConversions = Number(revenueRow.totalConversions) || 0;
+
+  // KPI 3 — Active creatives = creatives with real spend in the window.
+  // (Old query counted every creative with any ad ever, ignoring the date.)
+  const activeRows: any = await dbConn.execute(sql`
+    SELECT COUNT(DISTINCT ca.id) AS activeCreatives
+    FROM creativeAssets ca
+    JOIN ads a ON a.creativeAssetId = ca.id
+    JOIN adDailyStats d ON d.adId = a.id
+    WHERE d.source = 'meta'
+      AND d.date >= ${query.dateFrom}
+      AND d.date <= ${query.dateTo}
+      AND d.spendCents > 0
+      ${creativeTypeFilter}
+      ${campaignFilter}
+      ${accountFilter}
+  `);
+  const activeRow: any = (Array.isArray(activeRows[0]) ? activeRows[0][0] : activeRows[0]) ?? {};
+  const activeCreativesCount = Number(activeRow.activeCreatives) || 0;
 
   // Add the UNATTRIBUTED bucket to totals when no per-creative filters are
   // active. Unattributed rows have no adId → no campaign, no creativeType, no
@@ -428,7 +433,7 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
     totalRevenueCents: totalRevenue,
     blendedRoasBp,
     totalConversions,
-    activeCreativesCount: Number(row.activeCreatives) || 0,
+    activeCreativesCount,
   };
 }
 
