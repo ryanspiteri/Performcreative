@@ -45,6 +45,83 @@ const creativePerfQuerySchema = z.object({
 });
 
 export const analyticsRouter = router({
+  /**
+   * TEMPORARY diagnostic — admin-only. Returns row counts + sums from
+   * adDailyStats + adAttributionStats + ads + creativeAssets for the
+   * last 7 days, so we can spot duplicate-row inflation in prod DB
+   * without needing direct SQL access. Remove once the KPI root cause
+   * is identified.
+   */
+  _debugAuditKpi: adminProcedure.query(async () => {
+    const dbConn = await db.getDb();
+    if (!dbConn) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "no db" });
+    const { sql: s } = await import("drizzle-orm");
+    const to = new Date();
+    const from = new Date(to.getTime() - 7 * 86400_000);
+    const unwrap = (r: any) => (Array.isArray(r[0]) ? r[0][0] : r[0]) ?? {};
+    const unwrapAll = (r: any): any[] => (Array.isArray(r[0]) ? r[0] : r);
+
+    const dailyRaw = await dbConn.execute(s`
+      SELECT COUNT(*) AS rows,
+             COUNT(DISTINCT adId, date, source) AS distinctKeys,
+             COALESCE(SUM(spendCents),0) AS spendCents,
+             COUNT(DISTINCT adId) AS distinctAds,
+             MIN(date) AS minDate, MAX(date) AS maxDate
+      FROM adDailyStats
+      WHERE source='meta' AND date >= ${from} AND date <= ${to}`);
+    const attrRaw = await dbConn.execute(s`
+      SELECT COUNT(*) AS rows,
+             COUNT(DISTINCT hyrosAdId, date, attributionModel) AS distinctKeys,
+             COALESCE(SUM(revenueCents),0) AS revenueCents,
+             COALESCE(SUM(conversions),0) AS conversions,
+             COUNT(DISTINCT hyrosAdId) AS distinctHyrosAds,
+             MIN(date) AS minDate, MAX(date) AS maxDate
+      FROM adAttributionStats
+      WHERE date >= ${from} AND date <= ${to}`);
+    const adsTotals = await dbConn.execute(s`
+      SELECT COUNT(*) AS total,
+             COUNT(DISTINCT platform, externalAdId) AS distinctExternal
+      FROM ads`);
+    const caTotals = await dbConn.execute(s`
+      SELECT COUNT(*) AS total,
+             COUNT(DISTINCT creativeHash) AS distinctHash
+      FROM creativeAssets`);
+    const topDupAds = await dbConn.execute(s`
+      SELECT adId, date, source, COUNT(*) AS dupes, SUM(spendCents) AS spend
+      FROM adDailyStats
+      WHERE source='meta' AND date >= ${from} AND date <= ${to}
+      GROUP BY adId, date, source
+      HAVING COUNT(*) > 1
+      ORDER BY COUNT(*) DESC
+      LIMIT 20`);
+    const topDupAttr = await dbConn.execute(s`
+      SELECT hyrosAdId, date, attributionModel, COUNT(*) AS dupes, SUM(revenueCents) AS rev
+      FROM adAttributionStats
+      WHERE date >= ${from} AND date <= ${to}
+      GROUP BY hyrosAdId, date, attributionModel
+      HAVING COUNT(*) > 1
+      ORDER BY COUNT(*) DESC
+      LIMIT 20`);
+    const indexes = await dbConn.execute(s`
+      SELECT table_name, index_name, non_unique, GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols
+      FROM information_schema.statistics
+      WHERE table_schema = DATABASE()
+        AND table_name IN ('adDailyStats','adAttributionStats','ads','creativeAssets')
+      GROUP BY table_name, index_name, non_unique
+      ORDER BY table_name, index_name`);
+
+    return {
+      window: { from, to },
+      adDailyStats_7d: unwrap(dailyRaw),
+      adAttributionStats_7d: unwrap(attrRaw),
+      ads: unwrap(adsTotals),
+      creativeAssets: unwrap(caTotals),
+      dupDailyStatsKeys: unwrapAll(topDupAds).slice(0, 20),
+      dupAttributionKeys: unwrapAll(topDupAttr).slice(0, 20),
+      indexes: unwrapAll(indexes),
+    };
+  }),
+
   getCreativePerformance: protectedProcedure
     .input(creativePerfQuerySchema)
     .query(async ({ input }) => {
