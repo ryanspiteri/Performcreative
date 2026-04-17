@@ -90,17 +90,31 @@ describe("computeScores — cold start", () => {
   const cold: AccountBenchmarks = { ...PLATFORM_FALLBACK };
 
   it("uses platform fallback when coverage = cold_start", () => {
-    // With P50 thumbstop in PLATFORM_FALLBACK = 30000, value of 30000 should give ~50
-    const result = computeScores(baseInputs({ thumbstopBp: 30000 }), cold);
+    // PLATFORM_FALLBACK.thumbstop.p50 = 3000 (= 30% on the fraction × 10000 scale).
+    // A value of 3000 lands exactly at P50 → score = 50.
+    const result = computeScores(baseInputs({ thumbstopBp: 3000 }), cold);
     expect(result.hookScore).toBe(50);
     expect(result.coverage).toBe("cold_start");
+  });
+
+  it("REGRESSION: fallback thumbstop scale matches adDailyStats storage (fraction × 10_000)", () => {
+    // A 97.58% thumbstop (stored as 9758) against the fallback should clamp high,
+    // not score near 0 like it did when the fallback was scaled as % × 1000.
+    const result = computeScores(baseInputs({ thumbstopBp: 9758 }), cold);
+    expect(result.hookScore).toBeGreaterThanOrEqual(90);
   });
 });
 
 describe("computeScores — partial coverage blending", () => {
   it("blends 70% account + 30% fallback", () => {
-    // Account and fallback are identical in this test so the blend equals either.
-    const result = computeScores(baseInputs({ thumbstopBp: 30000 }), PARTIAL_BENCHMARKS);
+    // Build partial benchmarks whose account P50 thumbstop = fallback P50 thumbstop
+    // so we can isolate the blending math. New fallback p50=3000; we mirror it
+    // in the account benchmarks so both legs score the same → blend equals either.
+    const matchedPartial: AccountBenchmarks = {
+      ...PARTIAL_BENCHMARKS,
+      thumbstop: { p25: 2000, p50: 3000, p75: 4000, p90: 5000 },
+    };
+    const result = computeScores(baseInputs({ thumbstopBp: 3000 }), matchedPartial);
     expect(result.hookScore).toBe(50);
   });
 });

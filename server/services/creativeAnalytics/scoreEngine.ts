@@ -60,12 +60,26 @@ export interface ScoreResult {
   breakdown: ScoreBreakdownEntry[];
 }
 
-/** Platform fallback benchmarks (industry averages for DTC on Meta). */
+/**
+ * Platform fallback benchmarks (industry averages for DTC on Meta).
+ *
+ * Scale reference — MUST match `adDailyStats` storage exactly:
+ *   thumbstopBp = (videoPlayCount / impressions) × 10_000  →  30% stored as 3000
+ *   holdRateBp  = (video50Count   / impressions) × 10_000  →  10% stored as 1000
+ *   ctrBp       = parseMetaRateToBp(ctr_percent) = % × 10_000  →  1% stored as 10000
+ *   roasBp      = (revenue / spend) × 100                   →  2.0x stored as 200
+ *
+ * Prior bug: thumbstop + holdRate fallbacks were in a "% × 1000" scale (e.g.
+ * p50 thumbstop = 30000 "for 30%"), so when coverage === "cold_start" every
+ * ad's Hook and Watch scores were pinned near zero because even a 97% thumbstop
+ * (stored as 9758) was WAY below the fallback P25 of 20000. Fixed to match
+ * stored scale.
+ */
 export const PLATFORM_FALLBACK: AccountBenchmarks = {
-  thumbstop: { p25: 20000, p50: 30000, p75: 40000, p90: 50000 }, // 20%, 30%, 40%, 50%
-  holdRate: { p25: 5000, p50: 10000, p75: 15000, p90: 20000 }, // 5%, 10%, 15%, 20%
-  ctr: { p25: 5000, p50: 10000, p75: 15000, p90: 25000 }, // 0.5%, 1%, 1.5%, 2.5% → basis points x100
-  roas: { p25: 100, p50: 200, p75: 300, p90: 500 }, // 1.00x, 2.00x, 3.00x, 5.00x
+  thumbstop: { p25: 2000, p50: 3000, p75: 4000, p90: 5000 }, // 20%, 30%, 40%, 50% in (fraction × 10_000)
+  holdRate: { p25: 500, p50: 1000, p75: 1500, p90: 2000 }, // 5%, 10%, 15%, 20% in (fraction × 10_000)
+  ctr: { p25: 5000, p50: 10000, p75: 15000, p90: 25000 }, // 0.5%, 1%, 1.5%, 2.5% in (% × 10_000)
+  roas: { p25: 100, p50: 200, p75: 300, p90: 500 }, // 1.00x, 2.00x, 3.00x, 5.00x in (x × 100)
   coverage: "cold_start",
   sampleSize: { ads: 0, days: 0 },
 };

@@ -345,11 +345,29 @@ export async function getCreativePerformanceSummary(query: Omit<CreativePerfQuer
   const campaignFilterAttr = query.campaignId ? sql`AND a2.campaignId = ${query.campaignId}` : sql``;
   const accountFilterAttr = query.adAccountId ? sql`AND a2.adAccountId = ${query.adAccountId}` : sql``;
 
+  // Why MAX() on attr.revenueCents / attr.conversions:
+  //
+  // The subquery is already aggregated — it returns a single row with SUM
+  // revenueCents and SUM conversions. We LEFT JOIN it ON 1 = 1 so that
+  // single-row total is pinned to every outer row. The outer SELECT mixes
+  // aggregates (SUM, COUNT) with attr.* references.
+  //
+  // MySQL 5.7+ runs in ONLY_FULL_GROUP_BY mode by default (DO App Platform's
+  // MySQL does too). In that mode, selecting a non-aggregate column alongside
+  // aggregates without a GROUP BY throws
+  //   "Expression #N of SELECT list is not in GROUP BY clause and contains
+  //    nonaggregated column which is not functionally dependent on columns in
+  //    GROUP BY clause"
+  // → entire query returns 500, KPI strip renders empty.
+  //
+  // Wrapping attr.* in MAX() makes them aggregates. Since the subquery yields
+  // exactly one row, MAX == that row — same numerical result, ONLY_FULL_GROUP_BY
+  // compliant. MIN() would also work.
   const rows: any = await dbConn.execute(sql`
     SELECT
       COALESCE(SUM(d.spendCents), 0) AS totalSpend,
-      COALESCE(attr.revenueCents, 0) AS totalRevenue,
-      COALESCE(attr.conversions, 0) AS totalConversions,
+      COALESCE(MAX(attr.revenueCents), 0) AS totalRevenue,
+      COALESCE(MAX(attr.conversions), 0) AS totalConversions,
       COUNT(DISTINCT ca.id) AS activeCreatives
     FROM creativeAssets ca
     JOIN ads a ON a.creativeAssetId = ca.id
