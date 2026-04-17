@@ -383,6 +383,174 @@ async function startServer() {
     }
   });
 
+  // TEMPORARY — one-shot duplicate cleanup + UNIQUE-constraint install.
+  // Migration 0023 declared UNIQUE KEYs on adDailyStats/adAttributionStats/ads
+  // but prod only has plain (non-unique) indexes with the same columns, so
+  // every `onDuplicateKeyUpdate` has silently been a plain INSERT. Result:
+  // 11-18x duplicate rows per key, which is why KPIs showed ~10x real.
+  //
+  // This endpoint runs in a predictable idempotent order:
+  //   1. DELETE duplicates keeping MIN(id) per business-unique key
+  //   2. ADD UNIQUE KEY with the name migration 0023 used
+  // If the UNIQUE already exists (second run, or was just added) the
+  // CREATE is swallowed so the handler stays idempotent.
+  //
+  // Gated by a hardcoded token so it can't be hit in error. Remove this
+  // entire handler (and /api/_debug/kpi-audit above) in the cleanup commit
+  // after the KPI strip is verified correct.
+  app.get("/api/_debug/kpi-fix", async (req, res) => {
+    const DEBUG_TOKEN = "c8e1f4ad-9b2e-4c3f-8a71-6d5fae2b7c0a";
+    if (req.query.token !== DEBUG_TOKEN) return res.status(404).end();
+    try {
+      const dbConn = await db.getDb();
+      if (!dbConn) return res.status(503).json({ error: "db unavailable" });
+      const { sql: s } = await import("drizzle-orm");
+      const unwrap = (r: any) => (Array.isArray(r[0]) ? r[0] : r) as any[];
+      const affectedRows = (r: any) => Number((Array.isArray(r[0]) ? r[0]?.affectedRows : r[0]?.affectedRows ?? (r as any).affectedRows) ?? 0);
+
+      const result: any = { dedup: {}, uniqueAdded: {}, errors: [] as string[] };
+
+      // --- 1. adDailyStats: dedupe on (adId, date, source) keep MIN(id) ---
+      try {
+        const del = await dbConn.execute(s`
+          DELETE d1 FROM adDailyStats d1
+          INNER JOIN adDailyStats d2
+            ON d1.adId = d2.adId
+           AND d1.date = d2.date
+           AND d1.source = d2.source
+           AND d1.id > d2.id
+        `);
+        result.dedup.adDailyStats = affectedRows(del);
+      } catch (err: any) {
+        result.errors.push(`adDailyStats dedupe: ${err?.message ?? err}`);
+      }
+      try {
+        await dbConn.execute(s`
+          ALTER TABLE adDailyStats
+          ADD UNIQUE KEY ad_daily_stats_ad_date_source_unique (adId, date, source)
+        `);
+        result.uniqueAdded.adDailyStats = "added";
+      } catch (err: any) {
+        const m = String(err?.message ?? err);
+        if (m.includes("Duplicate key name") || m.includes("already exists")) {
+          result.uniqueAdded.adDailyStats = "exists";
+        } else {
+          result.errors.push(`adDailyStats alter: ${m}`);
+        }
+      }
+
+      // --- 2. adAttributionStats: dedupe on (hyrosAdId, date, attributionModel) ---
+      try {
+        const del = await dbConn.execute(s`
+          DELETE a1 FROM adAttributionStats a1
+          INNER JOIN adAttributionStats a2
+            ON a1.hyrosAdId = a2.hyrosAdId
+           AND a1.date = a2.date
+           AND a1.attributionModel = a2.attributionModel
+           AND a1.id > a2.id
+        `);
+        result.dedup.adAttributionStats = affectedRows(del);
+      } catch (err: any) {
+        result.errors.push(`adAttributionStats dedupe: ${err?.message ?? err}`);
+      }
+      try {
+        await dbConn.execute(s`
+          ALTER TABLE adAttributionStats
+          ADD UNIQUE KEY attr_hyros_date_model_unique (hyrosAdId, date, attributionModel)
+        `);
+        result.uniqueAdded.adAttributionStats = "added";
+      } catch (err: any) {
+        const m = String(err?.message ?? err);
+        if (m.includes("Duplicate key name") || m.includes("already exists")) {
+          result.uniqueAdded.adAttributionStats = "exists";
+        } else {
+          result.errors.push(`adAttributionStats alter: ${m}`);
+        }
+      }
+
+      // --- 3. ads: dedupe on (platform, externalAdId) keep MIN(id) ---
+      // This is trickier because child rows (adDailyStats.adId, adAttributionStats.adId)
+      // point at specific ads.id values. Before deleting dupe ads rows, repoint
+      // any child rows from the soon-to-be-deleted ads.id to the surviving MIN(id).
+      try {
+        // Repoint adDailyStats.adId to the surviving ad row
+        await dbConn.execute(s`
+          UPDATE adDailyStats d
+          INNER JOIN ads dup ON dup.id = d.adId
+          INNER JOIN ads keep
+            ON keep.platform = dup.platform
+           AND keep.externalAdId = dup.externalAdId
+           AND keep.id < dup.id
+          SET d.adId = keep.id
+          WHERE dup.id <> keep.id
+        `);
+        // Repoint adAttributionStats.adId to the surviving ad row
+        await dbConn.execute(s`
+          UPDATE adAttributionStats a
+          INNER JOIN ads dup ON dup.id = a.adId
+          INNER JOIN ads keep
+            ON keep.platform = dup.platform
+           AND keep.externalAdId = dup.externalAdId
+           AND keep.id < dup.id
+          SET a.adId = keep.id
+          WHERE dup.id <> keep.id
+        `);
+        // Now the dup ads rows have no children pointing at them — safe to delete
+        const del = await dbConn.execute(s`
+          DELETE a1 FROM ads a1
+          INNER JOIN ads a2
+            ON a1.platform = a2.platform
+           AND a1.externalAdId = a2.externalAdId
+           AND a1.id > a2.id
+        `);
+        result.dedup.ads = affectedRows(del);
+      } catch (err: any) {
+        result.errors.push(`ads dedupe: ${err?.message ?? err}`);
+      }
+      try {
+        await dbConn.execute(s`
+          ALTER TABLE ads
+          ADD UNIQUE KEY ads_platform_external_unique (platform, externalAdId)
+        `);
+        result.uniqueAdded.ads = "added";
+      } catch (err: any) {
+        const m = String(err?.message ?? err);
+        if (m.includes("Duplicate key name") || m.includes("already exists")) {
+          result.uniqueAdded.ads = "exists";
+        } else {
+          result.errors.push(`ads alter: ${m}`);
+        }
+      }
+
+      // Dedupe the redundant repointing now that ads.id is clean:
+      // after the ads dedupe+repoint, child tables may have new duplicate
+      // keys (two rows with same adId/date because they were pointing at
+      // different dupe ads that got collapsed). Re-run the dedupe.
+      try {
+        const del = await dbConn.execute(s`
+          DELETE d1 FROM adDailyStats d1
+          INNER JOIN adDailyStats d2
+            ON d1.adId = d2.adId AND d1.date = d2.date AND d1.source = d2.source
+           AND d1.id > d2.id
+        `);
+        result.dedup.adDailyStats_afterRepoint = affectedRows(del);
+      } catch {}
+      try {
+        const del = await dbConn.execute(s`
+          DELETE a1 FROM adAttributionStats a1
+          INNER JOIN adAttributionStats a2
+            ON a1.hyrosAdId = a2.hyrosAdId AND a1.date = a2.date AND a1.attributionModel = a2.attributionModel
+           AND a1.id > a2.id
+        `);
+        result.dedup.adAttributionStats_afterRepoint = affectedRows(del);
+      } catch {}
+
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
   // Image download proxy — avoids CORS issues when downloading from S3/CDN
   app.get("/api/download-image", async (req, res) => {
     try {
