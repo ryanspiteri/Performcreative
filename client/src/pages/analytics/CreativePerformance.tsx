@@ -690,6 +690,18 @@ function GenerateFromWinnerDialog({
     onClose();
   };
 
+  // Navigate to /iterate prefilled with this winner. Only the creative ID is
+  // passed in the URL — IterateWinners fetches the current thumbnailUrl
+  // server-side, so bookmarks/refreshes survive Meta CDN token expiry.
+  const handleIterateImage = () => {
+    const params = new URLSearchParams();
+    if (inferredProduct) params.set("product", inferredProduct);
+    params.set("winnerName", target.name);
+    params.set("sourceCreativeAssetId", String(target.id));
+    setLocation(`/iterate?${params.toString()}`);
+    onClose();
+  };
+
   return (
     <Dialog open={!!target} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="bg-[#0D0F12] border-white/10 text-white max-w-lg">
@@ -774,6 +786,16 @@ function GenerateFromWinnerDialog({
             <Sparkles className="w-3.5 h-3.5 mr-1.5" />
             Generate Scripts
           </Button>
+          {target.creativeType === "image" && (
+            <Button
+              onClick={handleIterateImage}
+              disabled={detailQuery.isLoading}
+              className="bg-[#FF3838] hover:bg-[#FF5555] text-white"
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              Iterate image
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

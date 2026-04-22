@@ -1442,14 +1442,31 @@ export interface WinningScript {
 
 /**
  * Fetch the top-performing scripts by composite score (hookScore + convertScore).
- * Joins pipeline_runs → creativeAssets → creativeScores to find scripts whose
- * deployed ads actually performed well. Returns up to `limit` results.
+ *
+ * Ranks by window-aggregate scores computed from the same raw inputs the
+ * Creative Performance dashboard uses (summed impressions, clicks, video*Count,
+ * spend from adDailyStats; summed revenue/conversions from adAttributionStats
+ * as a SEPARATE subquery to avoid spend × attribution-row multiplication).
+ *
+ * Why not MAX(cs.hookScore)? That picks a single outlier day per creative. A
+ * creative with one 95-hook day + six 30-hook days ranks above one with a
+ * steady 70-hook week — noise wins over signal. Window-aggregate recompute
+ * fixes this. See reportService.ts:197 for the same separated-attribution
+ * pattern + commit 525d81b for the spend/revenue multiplication fix.
+ *
+ * KNOWN BUG (not fixed here, flagged by codex): this function groups by
+ * pr.id — one run → one script — but a run can produce multiple assets or
+ * scripts; fetchWinningExamples blindly uses scriptsJson[0]. If the winning
+ * asset isn't the first-index script, the wrong script gets injected. Fix
+ * requires returning (runId, scriptIndex) tuples keyed to the winning asset.
+ * Separate TODO.
  */
 export async function getWinningScriptsByContext(
   product: string,
   funnelStage?: string,
   scriptStyle?: string,
-  limit = 3
+  limit = 3,
+  windowDays = 30
 ): Promise<WinningScript[]> {
   const db = await getDb();
   if (!db) return [];
@@ -1462,6 +1479,11 @@ export async function getWinningScriptsByContext(
       ? sql`AND pr.scriptStyle = ${scriptStyle}`
       : sql``;
 
+    const dateFrom = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+    // Separated-attribution pattern: SUM(adDailyStats) and SUM(adAttributionStats)
+    // computed in independent subqueries, joined on creativeAssetId. Mixing
+    // both in one FROM clause multiplies spend by attribution-row count.
     const rows = await db.execute(sql`
       SELECT
         pr.id AS runId,
@@ -1470,32 +1492,98 @@ export async function getWinningScriptsByContext(
         pr.scriptFunnelStage,
         pr.scriptAngle,
         pr.product,
-        MAX(cs.hookScore) AS hookScore,
-        MAX(cs.convertScore) AS convertScore
+        ca.id AS creativeAssetId,
+        COALESCE(daily.impressions, 0) AS impressions,
+        COALESCE(daily.clicks, 0) AS clicks,
+        COALESCE(daily.videoPlayCount, 0) AS videoPlayCount,
+        COALESCE(daily.video50Count, 0) AS video50Count,
+        COALESCE(daily.spendCents, 0) AS spendCents,
+        COALESCE(attr.revenueCents, 0) AS revenueCents,
+        COALESCE(attr.conversions, 0) AS conversions
       FROM ${pipelineRuns} pr
       JOIN ${creativeAssets} ca ON ca.pipelineRunId = pr.id
-      JOIN ${creativeScores} cs ON cs.creativeAssetId = ca.id
+      LEFT JOIN (
+        SELECT
+          a.creativeAssetId,
+          SUM(d.impressions) AS impressions,
+          SUM(d.clicks) AS clicks,
+          SUM(d.videoPlayCount) AS videoPlayCount,
+          SUM(d.video50Count) AS video50Count,
+          SUM(d.spendCents) AS spendCents
+        FROM adDailyStats d
+        JOIN ads a ON a.id = d.adId
+        WHERE d.date >= ${dateFrom}
+          AND d.source = 'meta'
+        GROUP BY a.creativeAssetId
+      ) daily ON daily.creativeAssetId = ca.id
+      LEFT JOIN (
+        SELECT
+          a.creativeAssetId,
+          SUM(attr.revenueCents) AS revenueCents,
+          SUM(attr.conversions) AS conversions
+        FROM adAttributionStats attr
+        JOIN ads a ON a.id = attr.adId
+        WHERE attr.date >= ${dateFrom}
+          AND attr.attributionModel = ${ENV.hyrosAttributionModel}
+        GROUP BY a.creativeAssetId
+      ) attr ON attr.creativeAssetId = ca.id
       WHERE pr.product = ${product}
         AND pr.pipelineType IN ('script', 'video')
         AND pr.status = 'completed'
-        AND cs.aggregatedImpressions >= 100
+        AND COALESCE(daily.impressions, 0) >= 100
         ${funnelFilter}
         ${styleFilter}
-      GROUP BY pr.id
-      ORDER BY (MAX(cs.hookScore) + MAX(cs.convertScore)) DESC
-      LIMIT ${limit}
+      ORDER BY daily.spendCents DESC
+      LIMIT 200
     `);
 
-    return (rows as any)[0]?.map((r: any) => ({
-      runId: r.runId,
-      scriptsJson: typeof r.scriptsJson === "string" ? JSON.parse(r.scriptsJson) : r.scriptsJson,
-      scriptStyle: r.scriptStyle,
-      scriptFunnelStage: r.scriptFunnelStage,
-      scriptAngle: r.scriptAngle,
-      product: r.product,
-      hookScore: Number(r.hookScore) || 0,
-      convertScore: Number(r.convertScore) || 0,
-    })) || [];
+    const { scoresFromAggregates, getCachedBenchmarks } = await import("./services/creativeAnalytics/reportService");
+    const benchmarks = await getCachedBenchmarks();
+    const rawRows: any[] = (rows as any)[0] ?? [];
+
+    // Compute window-aggregate scores per row, then sort by (hook + convert) desc.
+    const scored = rawRows.map((r: any) => {
+      const impressions = Number(r.impressions) || 0;
+      const clicks = Number(r.clicks) || 0;
+      const videoPlayCount = Number(r.videoPlayCount) || 0;
+      const video50Count = Number(r.video50Count) || 0;
+      const spendCents = Number(r.spendCents) || 0;
+      const revenueCents = Number(r.revenueCents) || 0;
+      const conversions = Number(r.conversions) || 0;
+
+      const scores = scoresFromAggregates(
+        { impressions, clicks, videoPlayCount, video50Count, conversions, spendCents, revenueCents },
+        benchmarks,
+      );
+
+      return {
+        runId: Number(r.runId),
+        scriptsJson: typeof r.scriptsJson === "string" ? JSON.parse(r.scriptsJson) : r.scriptsJson,
+        scriptStyle: r.scriptStyle,
+        scriptFunnelStage: r.scriptFunnelStage,
+        scriptAngle: r.scriptAngle,
+        product: r.product,
+        hookScore: scores.hookScore,
+        convertScore: scores.convertScore,
+      };
+    });
+
+    scored.sort((a, b) => (b.hookScore + b.convertScore) - (a.hookScore + a.convertScore));
+
+    // Dedupe by runId — a run can produce multiple creativeAssets, each
+    // scored independently here. Without dedup, `slice(limit)` can return
+    // the same run multiple times with identical scriptsJson, burning slots
+    // that should go to distinct winners. Keep the highest-scoring asset
+    // per run.
+    const seenRunIds = new Set<number>();
+    const deduped: typeof scored = [];
+    for (const row of scored) {
+      if (seenRunIds.has(row.runId)) continue;
+      seenRunIds.add(row.runId);
+      deduped.push(row);
+      if (deduped.length >= limit) break;
+    }
+    return deduped;
   } catch (err: any) {
     console.error("[DB] getWinningScriptsByContext failed:", err.message);
     return [];

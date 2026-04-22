@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info } from "lucide-react";
+import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info, X } from "lucide-react";
 import { toast } from "sonner";
 import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 
@@ -49,10 +49,29 @@ export default function IterateWinners() {
   const [selectedAudience, setSelectedAudience] = useState<string>("");
   const [customAudience, setCustomAudience] = useState(false);
 
+  // Winner handoff: set when navigated here from CreativePerformance's
+  // "Iterate image" button with URL params (?sourceCreativeAssetId=N&...).
+  // Drives the top banner + provenance fields on the iteration mutation.
+  // Auto-cleared if the user modifies the source (competitor mode, new upload,
+  // etc.) so we never submit `ai-winner` provenance with a stale asset ID.
+  const [winnerSource, setWinnerSource] = useState<{ name: string; creativeAssetId: number } | null>(null);
+
   const triggerIteration = trpc.pipeline.triggerIteration.useMutation();
   const uploadRender = trpc.renders.upload.useMutation();
   const staticsQuery = trpc.pipeline.fetchForeplayStatics.useQuery(undefined, { enabled: sourceType === "competitor_ad" });
   const productInfoQuery = trpc.productInfo.get.useQuery({ product }, { enabled: !!product });
+  // Fetch the winner's current thumbnail server-side. Intentionally NOT passing
+  // sourceImageUrl via URL params — Meta CDN URLs have signed-token expiry and
+  // break on bookmark/refresh. Fetching by ID always returns a fresh URL.
+  const winnerAssetQuery = trpc.analytics.getCreativeDetail.useQuery(
+    { creativeAssetId: winnerSource?.creativeAssetId ?? 0 },
+    { enabled: !!winnerSource?.creativeAssetId },
+  );
+  // getCreativeDetail returns `null` (not `{ asset: null }`) when the asset
+  // no longer exists. Detect via isFetched + data === null, then show the
+  // banner with an inline "preview unavailable" fallback.
+  const isDeletedWinner = winnerAssetQuery.isFetched && winnerAssetQuery.data === null;
+  const fetchedWinnerAsset = winnerAssetQuery.data?.asset ?? null;
   const rendersForFlavour = trpc.renders.listByFlavour.useQuery(
     { product, flavour: selectedFlavour || "" },
     { enabled: !!product && !!selectedFlavour }
@@ -85,6 +104,63 @@ export default function IterateWinners() {
       return newArray;
     });
   }, [variationCount]);
+
+  // Hydrate from URL params when navigated here via "Iterate image" on
+  // CreativePerformance. Product is only applied if valid (guards against
+  // ?product=FakeName). sourceCreativeAssetId is validated (positive int)
+  // before setting winnerSource. sourceImageUrl is NOT accepted via URL —
+  // fetched fresh from getCreativeDetail to survive CDN token expiry.
+  //
+  // Depends on window.location.search so SPA navigation from /iterate to
+  // /iterate?sourceCreativeAssetId=X re-hydrates. Wouter keeps the
+  // component mounted for same-route query-string changes.
+  const locationSearch = typeof window !== "undefined" ? window.location.search : "";
+  useEffect(() => {
+    if (runId) return; // Don't override an in-progress run
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(locationSearch);
+    const p = params.get("product");
+    const assetIdParam = params.get("sourceCreativeAssetId");
+    const name = params.get("winnerName");
+
+    if (p && (ACTIVE_PRODUCTS as readonly string[]).includes(p)) {
+      setProduct(p);
+    }
+    if (assetIdParam) {
+      const parsed = parseInt(assetIdParam, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        setWinnerSource({ name: name || "Unknown winner", creativeAssetId: parsed });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationSearch]);
+
+  // Populate the source image from the fetched winner asset once it lands.
+  // Only sets uploadedImageUrl if the user hasn't already uploaded something
+  // themselves — respects a manual override.
+  useEffect(() => {
+    if (fetchedWinnerAsset?.thumbnailUrl && !uploadedImageUrl) {
+      setUploadedImageUrl(fetchedWinnerAsset.thumbnailUrl);
+      setUploadedImageName(winnerSource?.name || "Winner");
+    }
+  }, [fetchedWinnerAsset, uploadedImageUrl, winnerSource?.name]);
+
+  // Auto-clear winner context when the user modifies the source. Prevents
+  // provenance leaks like: hydrate from winner → switch to competitor_ad →
+  // submit with creativeSource='ai-winner' + sourceCreativeAssetId={original}
+  // even though the uploaded image is a different creative entirely.
+  //
+  // Also scrubs URL params via history.replaceState so bookmarks/refresh
+  // don't re-hydrate the stale winner context. Matches the pattern in
+  // ScriptGenerator.tsx:462.
+  const clearWinnerContext = useCallback(() => {
+    setWinnerSource(null);
+    setUploadedImageUrl(null);
+    setUploadedImageName("");
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", "/iterate");
+    }
+  }, []);
 
   // File upload handler
   const handleFileUpload = useCallback(async (file: File) => {
@@ -123,6 +199,14 @@ export default function IterateWinners() {
 
       setUploadedImageUrl(result.url);
       setUploadedImageName(file.name);
+      // User uploaded their own image → downgrade provenance to manual.
+      // The URL param handoff is no longer a source of truth.
+      if (winnerSource) {
+        setWinnerSource(null);
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, "", "/iterate");
+        }
+      }
       toast.success("Image uploaded successfully");
     } catch (err: any) {
       toast.error(`Upload failed: ${err.message}`);
@@ -192,6 +276,15 @@ export default function IterateWinners() {
         selectedFlavour: selectedFlavour || undefined,
         selectedPersonId: selectedPersonId || undefined,
         selectedAudience: selectedAudience || undefined,
+        // Winner provenance. winnerSource is auto-cleared on any source
+        // modification (competitor switch, new upload, etc.), and we also
+        // gate on sourceType === "own_ad" here as belt-and-braces —
+        // competitor-mode iterations can never carry ai-winner provenance,
+        // even if a race left winnerSource set.
+        ...(winnerSource && sourceType === "own_ad" && {
+          sourceCreativeAssetId: winnerSource.creativeAssetId,
+          creativeSource: "ai-winner" as const,
+        }),
       });
       setRunId(result.runId);
       setLocation(`/results/${result.runId}`);
@@ -216,6 +309,46 @@ export default function IterateWinners() {
           </div>
         </div>
       </div>
+
+      {/* Winner handoff banner — visible when the page was opened with
+          ?sourceCreativeAssetId=N from the "Iterate image" button on
+          CreativePerformance. Banner auto-disappears when the user modifies
+          the source (upload a different file, switch to competitor mode,
+          pick a competitor, or click the X). */}
+      {winnerSource && (
+        <section
+          role="region"
+          aria-label="Winner context"
+          className="max-w-4xl mx-auto mb-4 bg-[#15171B] border border-[#FF3838]/30 rounded-xl p-4 flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2 text-sm text-white">
+            {winnerAssetQuery.isLoading ? (
+              <Loader2 className="w-4 h-4 text-[#FF3838] animate-spin" aria-hidden="true" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-[#FF3838]" aria-hidden="true" />
+            )}
+            <span>
+              Iterating winner: <strong>{winnerSource.name}</strong>
+              {isDeletedWinner && (
+                <>
+                  {" "}
+                  <span className="text-[#F59E0B]">
+                    · Preview unavailable — upload manually below
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearWinnerContext}
+            className="text-gray-400 hover:text-white transition-colors p-1 rounded"
+            aria-label="Clear winner context"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </section>
+      )}
 
       <div className="max-w-4xl mx-auto">
         {/* Step 1: Upload & Configure */}
@@ -317,7 +450,14 @@ export default function IterateWinners() {
               </button>
               <button
                 type="button"
-                onClick={() => { setSourceType("competitor_ad"); setUploadedImageUrl(null); setUploadedImageName(""); }}
+                onClick={() => {
+                  setSourceType("competitor_ad");
+                  setUploadedImageUrl(null);
+                  setUploadedImageName("");
+                  // Switching to competitor mode invalidates winner provenance
+                  // (the winner was an own_ad). Clear + scrub URL.
+                  if (winnerSource) clearWinnerContext();
+                }}
                 className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                   sourceType === "competitor_ad"
                     ? "bg-[#FF3838] text-white"
@@ -367,7 +507,11 @@ export default function IterateWinners() {
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => { setSelectedCompetitor(c); }}
+                        onClick={() => {
+                          setSelectedCompetitor(c);
+                          // Picking a competitor invalidates winner provenance.
+                          if (winnerSource) clearWinnerContext();
+                        }}
                         className={`rounded-xl overflow-hidden border-2 text-left transition-all ${
                           selectedCompetitor?.id === c.id ? "border-[#FF3838] ring-2 ring-[#FF3838]/30" : "border-white/10 hover:border-white/20"
                         }`}

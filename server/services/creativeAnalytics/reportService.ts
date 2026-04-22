@@ -26,7 +26,7 @@ import { computeScores, PLATFORM_FALLBACK, type AccountBenchmarks, type ScoreInp
  * them here. Fallback to PLATFORM_FALLBACK if the cache is empty (fresh
  * install, or the recompute has never run).
  */
-async function getCachedBenchmarks(): Promise<AccountBenchmarks> {
+export async function getCachedBenchmarks(): Promise<AccountBenchmarks> {
   const state = await db.getSyncState("meta");
   const cached = (state as any)?.benchmarksJson as AccountBenchmarks | null | undefined;
   if (cached && cached.thumbstop && cached.holdRate && cached.ctr && cached.roas) {
@@ -49,7 +49,7 @@ async function getCachedBenchmarks(): Promise<AccountBenchmarks> {
  * fatigue detector, pattern miner, and the time-series chart — those legitimately
  * need per-day granularity.
  */
-function scoresFromAggregates(
+export function scoresFromAggregates(
   agg: {
     impressions: number;
     clicks: number;
