@@ -17,6 +17,7 @@
  */
 import { storagePut } from "server/storage";
 import { ENV } from "./env";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -50,7 +51,7 @@ export async function generateImage(
     baseUrl
   ).toString();
 
-  const response = await fetch(fullUrl, {
+  const response = await fetchWithTimeout(fullUrl, {
     method: "POST",
     headers: {
       accept: "application/json",
@@ -62,6 +63,9 @@ export async function generateImage(
       prompt: options.prompt,
       original_images: options.originalImages || [],
     }),
+    // 5 min ceiling — single image generation should never take longer.
+    timeoutMs: 5 * 60 * 1000,
+    label: "generateImage",
   });
 
   if (!response.ok) {
