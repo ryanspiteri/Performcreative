@@ -10,6 +10,7 @@ import { serveStatic, setupVite } from "./vite";
 import { startAutoSync } from "../services/foreplaySync";
 import { startAutoMetaSync } from "../integrations/meta/metaAdsSyncService";
 import { startAutoHyrosSync } from "../integrations/hyros/hyrosSyncService";
+import { startPipelineTimeoutSweeper } from "../services/pipelineTimeoutSweeper";
 import { handleCanvaCallback, handleCanvaWebhook } from "../routers/canva";
 import { handleMetaCallback } from "../routers/meta";
 import multer from "multer";
@@ -511,6 +512,10 @@ async function startServer() {
     } else {
       console.log("[Startup] Hyros sync skipped (HYROS_API_KEY not set)");
     }
+    // Auto-stop pipeline runs that have been "running" with no DB activity
+    // for too long. Prevents orphaned rows from a crashed worker showing as
+    // forever-running and stops any background API loops that lost their owner.
+    startPipelineTimeoutSweeper();
   });
 }
 

@@ -81,4 +81,12 @@ export const ENV = {
   analyticsSyncIntervalMinutes: parseInt(process.env.ANALYTICS_SYNC_INTERVAL_MINUTES ?? "60", 10),
   analyticsBackfillLookbackDays: parseInt(process.env.ANALYTICS_BACKFILL_LOOKBACK_DAYS ?? "90", 10),
   analyticsRollingLookbackDays: parseInt(process.env.ANALYTICS_ROLLING_LOOKBACK_DAYS ?? "14", 10),
+  /**
+   * Pipeline idle timeout — runs left in "running" with no DB writes for this
+   * long are auto-stopped (marked completed, no ClickUp push). Prevents
+   * orphaned rows from a crashed worker from showing as forever-running and
+   * stops any background API loops that lost their owner.
+   */
+  pipelineIdleTimeoutMinutes: parseInt(process.env.PIPELINE_IDLE_TIMEOUT_MINUTES ?? "60", 10),
+  pipelineSweepIntervalMinutes: parseInt(process.env.PIPELINE_SWEEP_INTERVAL_MINUTES ?? "10", 10),
 };

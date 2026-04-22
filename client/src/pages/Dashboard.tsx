@@ -1,6 +1,10 @@
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Play, Image, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Play, Image, Clock, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react";
+
+function isAutoStopped(run: { status: string; errorMessage?: string | null }) {
+  return run.status === "completed" && !!run.errorMessage && run.errorMessage.startsWith("Auto-stopped:");
+}
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -68,7 +72,7 @@ export default function Dashboard() {
               className="w-full bg-[#191B1F] border border-white/5 rounded-lg p-4 flex items-center justify-between hover:border-white/10 transition-colors text-left"
             >
               <div className="flex items-center gap-4">
-                <StatusIcon status={run.status} />
+                <StatusIcon status={run.status} autoStopped={isAutoStopped(run)} />
                 <div>
                   <div className="text-white text-sm font-medium">
                     {run.foreplayAdTitle || `${run.pipelineType} Pipeline`}
@@ -76,15 +80,21 @@ export default function Dashboard() {
                   <div className="text-gray-500 text-xs mt-0.5">
                     {run.pipelineType.toUpperCase()} · {run.product} · {run.priority} · {new Date(run.createdAt).toLocaleString()}
                   </div>
+                  {isAutoStopped(run) && (
+                    <div className="text-amber-400/80 text-xs mt-1">
+                      Auto-stopped — idle too long. ClickUp not pushed.
+                    </div>
+                  )}
                 </div>
               </div>
               <span className={`text-xs px-2 py-1 rounded-full ${
+                isAutoStopped(run) ? "bg-amber-500/20 text-amber-400" :
                 run.status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
                 run.status === "running" ? "bg-orange-500/20 text-orange-400" :
                 run.status === "failed" ? "bg-red-500/20 text-red-400" :
                 "bg-gray-500/20 text-gray-400"
               }`}>
-                {run.status}
+                {isAutoStopped(run) ? "auto-stopped" : run.status}
               </span>
             </button>
           ))}
@@ -106,7 +116,8 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
   );
 }
 
-function StatusIcon({ status }: { status: string }) {
+function StatusIcon({ status, autoStopped }: { status: string; autoStopped?: boolean }) {
+  if (autoStopped) return <AlertCircle className="w-5 h-5 text-amber-400" />;
   if (status === "completed") return <CheckCircle className="w-5 h-5 text-emerald-400" />;
   if (status === "running") return <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />;
   if (status === "failed") return <XCircle className="w-5 h-5 text-red-400" />;
