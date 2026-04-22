@@ -110,10 +110,15 @@ export default function IterateWinners() {
   // ?product=FakeName). sourceCreativeAssetId is validated (positive int)
   // before setting winnerSource. sourceImageUrl is NOT accepted via URL —
   // fetched fresh from getCreativeDetail to survive CDN token expiry.
+  //
+  // Depends on window.location.search so SPA navigation from /iterate to
+  // /iterate?sourceCreativeAssetId=X re-hydrates. Wouter keeps the
+  // component mounted for same-route query-string changes.
+  const locationSearch = typeof window !== "undefined" ? window.location.search : "";
   useEffect(() => {
     if (runId) return; // Don't override an in-progress run
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(locationSearch);
     const p = params.get("product");
     const assetIdParam = params.get("sourceCreativeAssetId");
     const name = params.get("winnerName");
@@ -128,7 +133,7 @@ export default function IterateWinners() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [locationSearch]);
 
   // Populate the source image from the fetched winner asset once it lands.
   // Only sets uploadedImageUrl if the user hasn't already uploaded something
@@ -272,9 +277,11 @@ export default function IterateWinners() {
         selectedPersonId: selectedPersonId || undefined,
         selectedAudience: selectedAudience || undefined,
         // Winner provenance. winnerSource is auto-cleared on any source
-        // modification, so if it's still set at submit time, the uploaded
-        // image is still the winner's thumbnail → safe to attribute.
-        ...(winnerSource && {
+        // modification (competitor switch, new upload, etc.), and we also
+        // gate on sourceType === "own_ad" here as belt-and-braces —
+        // competitor-mode iterations can never carry ai-winner provenance,
+        // even if a race left winnerSource set.
+        ...(winnerSource && sourceType === "own_ad" && {
           sourceCreativeAssetId: winnerSource.creativeAssetId,
           creativeSource: "ai-winner" as const,
         }),

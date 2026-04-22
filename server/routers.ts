@@ -1042,6 +1042,18 @@ Return JSON in this exact format:
             throw new TRPCError({ code: "BAD_REQUEST", message: "Selected render does not exist or does not belong to this product" });
           }
         }
+        // Validate winner provenance FK: reject ai-winner submissions with
+        // a bogus sourceCreativeAssetId. Keeps pipeline_runs FK pointing at
+        // real rows for downstream outcome measurement.
+        if (input.creativeSource === "ai-winner" && input.sourceCreativeAssetId) {
+          const asset = await db.getCreativeAssetById(input.sourceCreativeAssetId);
+          if (!asset) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `sourceCreativeAssetId ${input.sourceCreativeAssetId} does not exist`,
+            });
+          }
+        }
         const isAiWinner = input.creativeSource === "ai-winner";
         const runId = await db.createPipelineRun({
           pipelineType: "iteration",

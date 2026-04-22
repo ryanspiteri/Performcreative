@@ -1530,10 +1530,10 @@ export async function getWinningScriptsByContext(
       WHERE pr.product = ${product}
         AND pr.pipelineType IN ('script', 'video')
         AND pr.status = 'completed'
+        AND COALESCE(daily.impressions, 0) >= 100
         ${funnelFilter}
         ${styleFilter}
-      HAVING impressions >= 100
-      ORDER BY spendCents DESC
+      ORDER BY daily.spendCents DESC
       LIMIT 200
     `);
 
@@ -1569,7 +1569,21 @@ export async function getWinningScriptsByContext(
     });
 
     scored.sort((a, b) => (b.hookScore + b.convertScore) - (a.hookScore + a.convertScore));
-    return scored.slice(0, limit);
+
+    // Dedupe by runId — a run can produce multiple creativeAssets, each
+    // scored independently here. Without dedup, `slice(limit)` can return
+    // the same run multiple times with identical scriptsJson, burning slots
+    // that should go to distinct winners. Keep the highest-scoring asset
+    // per run.
+    const seenRunIds = new Set<number>();
+    const deduped: typeof scored = [];
+    for (const row of scored) {
+      if (seenRunIds.has(row.runId)) continue;
+      seenRunIds.add(row.runId);
+      deduped.push(row);
+      if (deduped.length >= limit) break;
+    }
+    return deduped;
   } catch (err: any) {
     console.error("[DB] getWinningScriptsByContext failed:", err.message);
     return [];
