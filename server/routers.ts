@@ -1024,6 +1024,11 @@ Return JSON in this exact format:
         selectedPersonId: z.number().optional(),
         selectedAudience: z.string().optional(),
         resolution: z.enum(["2K", "4K"]).optional(),
+        // Provenance — set when iteration is triggered from a winner via
+        // CreativePerformance → IterateWinners URL handoff. Enables outcome
+        // measurement: child iteration run → parent winner creative asset.
+        sourceCreativeAssetId: z.number().int().positive().optional(),
+        creativeSource: z.enum(["human", "ai-winner"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const sourceType = input.sourceType ?? "own_ad";
@@ -1037,12 +1042,13 @@ Return JSON in this exact format:
             throw new TRPCError({ code: "BAD_REQUEST", message: "Selected render does not exist or does not belong to this product" });
           }
         }
+        const isAiWinner = input.creativeSource === "ai-winner";
         const runId = await db.createPipelineRun({
           pipelineType: "iteration",
           status: "running",
           product: input.product,
           priority: input.priority,
-          triggerSource: "manual",
+          triggerSource: isAiWinner ? "iterate_from_winner" : "manual",
           foreplayAdId: input.foreplayAdId ?? "iteration-" + Date.now(),
           foreplayAdTitle: input.foreplayAdTitle ?? input.sourceImageName ?? (sourceType === "competitor_ad" ? "Competitor Ad" : "Winning Ad Iteration"),
           foreplayAdBrand: input.foreplayAdBrand ?? (sourceType === "own_ad" ? "ONEST Health" : undefined),
@@ -1060,6 +1066,9 @@ Return JSON in this exact format:
           selectedPersonId: input.selectedPersonId ?? null,
           selectedAudience: input.selectedAudience ?? null,
           resolution: input.resolution ?? "2K",
+          // Winner provenance (added for winner → iteration handoff).
+          creativeSource: isAiWinner ? "ai-winner" : "human",
+          sourceCreativeAssetId: input.sourceCreativeAssetId ?? null,
         });
         runIterationStages1to2(runId, input).catch(err => {
           console.error("[Pipeline] Iteration pipeline stages 1-2 failed:", err);
