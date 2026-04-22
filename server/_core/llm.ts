@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -312,13 +313,16 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
+  const response = await fetchWithTimeout(resolveApiUrl(), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
+    // 10 min ceiling — well past the slowest legit completion, hard cap for hangs.
+    timeoutMs: 10 * 60 * 1000,
+    label: "invokeLLM",
   });
 
   if (!response.ok) {
