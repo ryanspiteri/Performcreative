@@ -4,7 +4,82 @@ import { pushIterationVariationToClickUp } from "./iterationClickUp";
 import { generateProductAdWithNanoBananaPro, type ImageModel, type NanoBananaProResult } from "./nanoBananaPro";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
+import {
+  iterationBriefV1Schema,
+  VISUAL_DESCRIPTION_MAX,
+  type IterationBriefV1,
+  type VariationType as BriefVariationType,
+} from "../../shared/iterationBriefSchema";
 import axios from "axios";
+
+/** Result of brief generation — caller writes briefQualityWarning to the run when true. */
+export interface BriefGenerationResult {
+  brief: string;
+  qualityWarning: boolean;
+}
+
+function stripMarkdownFences(text: string): string {
+  return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+}
+
+function validateBriefJson(text: string): IterationBriefV1 | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const result = iterationBriefV1Schema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
+/** Deterministic fallback when Claude returns invalid JSON twice. Produces a minimal valid v1 brief. */
+function buildFallbackBrief(
+  variationCount: number,
+  variationTypes: string[] | undefined,
+  analysis: string,
+): IterationBriefV1 {
+  const firstHeadlineMatch = analysis.match(/headline[^:]*:\s*["']?([^"'\n]+)["']?/i);
+  const originalHeadline = (firstHeadlineMatch?.[1] || "UPDATE ME").trim().slice(0, 120);
+  const validTypes: BriefVariationType[] = [
+    "headline_only",
+    "background_only",
+    "layout_only",
+    "benefit_callouts_only",
+    "props_only",
+    "talent_swap",
+    "full_remix",
+  ];
+  const defaultType: BriefVariationType = "full_remix";
+  const variations = Array.from({ length: Math.max(1, variationCount) }, (_, i) => {
+    const requested = variationTypes?.[i] ?? variationTypes?.[0];
+    const variationType: BriefVariationType =
+      requested && (validTypes as string[]).includes(requested)
+        ? (requested as BriefVariationType)
+        : defaultType;
+    return {
+      number: i + 1,
+      variationType,
+      angle: "Benefit-Driven",
+      angleDescription: "Fallback variation — please edit before approving.",
+      headline: originalHeadline,
+      subheadline: "",
+      visualDescription: "",
+      backgroundNote: "",
+      benefitCallouts: [],
+    };
+  });
+  return {
+    version: 1,
+    originalHeadline,
+    originalAngle: "",
+    preserveElements: [],
+    targetAudience: "",
+    referenceFxPresent: false,
+    detectedFxTypes: [],
+    variations,
+  };
+}
 
 /**
  * Generate a single variation with timeout + automatic fallback to nano_banana_pro if nano_banana_2 fails.
@@ -124,7 +199,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     const runSourceType = (run?.iterationSourceType as IterationSourceType) ?? sourceType;
     const runAdaptationMode = run?.iterationAdaptationMode as IterationAdaptationMode | null | undefined;
 
-    const brief = await withTimeout(
+    const briefResult = await withTimeout(
       runSourceType === "competitor_ad"
         ? generateCompetitorIterationBrief(analysis, input.product, productInfoContext, runAdaptationMode ?? "concept", input.foreplayAdBrand)
         : generateIterationBrief(
@@ -139,9 +214,13 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     );
 
     await db.updatePipelineRun(runId, {
-      iterationBrief: brief,
+      iterationBrief: briefResult.brief,
       iterationStage: "stage_2b_approval",
+      briefQualityWarning: briefResult.qualityWarning ? 1 : 0,
     });
+    if (briefResult.qualityWarning) {
+      console.warn(`[Iteration] Stage 2 used fallback brief — user must edit before approval`);
+    }
     console.log(`[Iteration] Stage 2 complete. Paused at approval gate.`);
   } catch (err: any) {
     console.error(`[Iteration] Stage 2 failed:`, err.message);
@@ -710,8 +789,10 @@ Output a structured analysis so we can brief image generation to MATCH this styl
 }
 
 /**
- * Generate an iteration brief — 3 new copy angles that keep the visual DNA
- * but test different headlines, subheadlines, and angles.
+ * Generate an iteration brief — N new copy angles that keep the visual DNA
+ * but test different headlines, subheadlines, and visual descriptions.
+ * Returns a valid v1 brief. Retries once on malformed JSON, then falls back
+ * to a deterministic skeleton with qualityWarning=true.
  */
 async function generateIterationBrief(
   analysis: string,
@@ -719,8 +800,14 @@ async function generateIterationBrief(
   productInfo: string,
   variationCount: number = 3,
   variationTypes?: string[]
-): Promise<string> {
+): Promise<BriefGenerationResult> {
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
+
+IMPORTANT VISUAL RULE:
+- The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
+- Only include dramatic visual effects (fire, smoke, lightning, ice, explosions, glows) in visualDescription or backgroundNote if the REFERENCE AD'S ANALYSIS above explicitly describes them. If the reference is clean/minimal, keep the variations clean/minimal.
+- Set referenceFxPresent to true ONLY if the analysis text clearly says the reference uses dramatic FX. Otherwise false.
+- Populate detectedFxTypes only with FX types the analysis actually mentions. Empty array or ["none"] if the reference has none.
 
 Return ONLY valid JSON. No markdown, no code blocks, no explanation.`;
 
@@ -817,12 +904,15 @@ The ${variationCount} variations should test DIFFERENT angles across these categ
 - Transformation (before to after)
 - Urgency/scarcity (limited time, don't miss out)
 
-Return JSON in this exact format with ${variationCount} variations:
+Return JSON in this EXACT format with ${variationCount} variations. All fields required:
 {
+  "version": 1,
   "originalHeadline": "exact headline from the winning ad",
   "originalAngle": "description of the original ad's angle",
   "preserveElements": ["list of visual elements to keep exactly the same"],
   "targetAudience": "description of target audience",
+  "referenceFxPresent": false,
+  "detectedFxTypes": [],
   "variations": [
     {
       "number": 1,
@@ -831,40 +921,58 @@ Return JSON in this exact format with ${variationCount} variations:
       "angleDescription": "Why this angle works and what it tests",
       "headline": "NEW HEADLINE TEXT (3-8 words, all caps)",
       "subheadline": "Supporting subheadline (5-12 words)",
-      "benefitCallouts": ["Benefit 1", "Benefit 2", "Benefit 3"],
-      "backgroundNote": "Specific instructions for background/layout/props based on variation type"
+      "visualDescription": "3-4 concrete sentences describing composition, subject, lighting, props, background, typography. MAX ${VISUAL_DESCRIPTION_MAX} CHARACTERS. No dramatic FX unless reference has them.",
+      "backgroundNote": "One-line specific instruction for background/layout/props based on variation type",
+      "benefitCallouts": ["Benefit 1", "Benefit 2", "Benefit 3"]
     }
     ... (generate ${variationCount} total variations, distributed across selected types)
   ]
-}`;
+}
 
-  const body = {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
-  };
+Set referenceFxPresent to true ONLY if the analysis clearly describes fire/smoke/lightning/ice/explosion/glow in the reference ad. Otherwise false.
+Populate detectedFxTypes only with FX types the analysis mentions (fire, smoke, lightning, ice, explosion, glow). Use ["none"] or [] if the reference has no dramatic effects.
+visualDescription MUST be ${VISUAL_DESCRIPTION_MAX} characters or fewer.`;
 
-  const res = await claudeClient.post("/messages", body);
-  const resContent = res.data?.content;
-  let text = "";
-  if (Array.isArray(resContent)) {
-    text = resContent.map((c: any) => c.text || "").join("\n");
-  } else {
-    text = resContent?.text || JSON.stringify(resContent);
+  async function callClaude(userContent: string): Promise<string> {
+    const body = {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      system,
+      messages: [{ role: "user", content: userContent }],
+    };
+    const res = await claudeClient.post("/messages", body);
+    const resContent = res.data?.content;
+    const text = Array.isArray(resContent)
+      ? resContent.map((c: any) => c.text || "").join("\n")
+      : resContent?.text || JSON.stringify(resContent);
+    return stripMarkdownFences(text);
   }
 
-  // Clean up any markdown code blocks
-  text = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  const firstText = await callClaude(userPrompt);
+  const firstValid = validateBriefJson(firstText);
+  if (firstValid) {
+    return { brief: JSON.stringify(firstValid), qualityWarning: false };
+  }
+  console.warn("[Iteration] Brief-gen first attempt invalid, retrying with stricter prompt");
 
-  // Validate it's valid JSON — fail explicitly so the caller can retry or surface the error
+  const retryPrompt = `${userPrompt}
+
+Your previous response did not match the required schema. Common failures: missing "version": 1, missing referenceFxPresent/detectedFxTypes, missing visualDescription on one or more variations, visualDescription over ${VISUAL_DESCRIPTION_MAX} characters, invalid variationType value. Return STRICT JSON matching every field exactly as specified above. Every variation needs every field. Do not omit anything.`;
+
+  let secondText = "";
   try {
-    JSON.parse(text);
-  } catch {
-    throw new Error(`[Iteration] Claude returned invalid JSON for brief. Raw response: ${text.substring(0, 500)}`);
+    secondText = await callClaude(retryPrompt);
+  } catch (err: any) {
+    console.warn("[Iteration] Brief-gen retry call failed:", err?.message);
+  }
+  const secondValid = secondText ? validateBriefJson(secondText) : null;
+  if (secondValid) {
+    return { brief: JSON.stringify(secondValid), qualityWarning: false };
   }
 
-  return text;
+  console.error("[Iteration] Brief-gen failed validation twice, using deterministic fallback");
+  const fallback = buildFallbackBrief(variationCount, variationTypes, analysis);
+  return { brief: JSON.stringify(fallback), qualityWarning: true };
 }
 
 /**
@@ -878,9 +986,18 @@ async function generateCompetitorIterationBrief(
   productInfo: string,
   adaptationMode: IterationAdaptationMode,
   competitorBrand?: string
-): Promise<string> {
+): Promise<BriefGenerationResult> {
   const isConcept = adaptationMode === "concept";
-  const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."} Return ONLY valid JSON. No markdown, no code blocks.`;
+  const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."}
+
+IMPORTANT VISUAL RULE:
+- The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
+- Only include dramatic visual effects (fire, smoke, lightning, ice, explosions, glows) in visualDescription/backgroundNote if the competitor analysis above explicitly describes them.
+- Set referenceFxPresent to true ONLY if the analysis clearly describes FX in the reference.
+
+Return ONLY valid JSON. No markdown, no code blocks.`;
+
+  const variationCount = 3;
 
   const userPrompt = `Based on this analysis of a COMPETITOR ad (${competitorBrand || "other brand"}):
 
@@ -888,46 +1005,70 @@ ${analysis}
 
 ${productInfo ? `\nONEST Product Information for ${product}:\n${productInfo}` : ""}
 
-Generate an iteration brief with 3 variations for ONEST Health's ${product}.
-${isConcept ? "Each variation should ADAPT the competitor's concept/angle for ONEST — our visual style, our messaging, our product. Test different ways to execute the same conceptual hook." : "Each variation should REPLICATE the competitor's visual style (layout, colours, typography, mood) but with ONEST product and ONEST-only copy. Test different headline/angle within that style."}
+Generate an iteration brief with ${variationCount} variations for ONEST Health's ${product}.
+${isConcept ? "Each variation should ADAPT the competitor's concept/angle for ONEST — our visual style, our messaging, our product." : "Each variation should REPLICATE the competitor's visual style (layout, colours, typography, mood) but with ONEST product and ONEST-only copy."}
 
-Return JSON in this exact format:
+Return JSON in this EXACT format:
 {
+  "version": 1,
   "originalHeadline": "headline or concept from competitor ad",
   "originalAngle": "description of competitor's angle",
   "preserveElements": ["elements we are preserving or adapting"],
   "targetAudience": "target audience",
+  "referenceFxPresent": false,
+  "detectedFxTypes": [],
   "variations": [
     {
       "number": 1,
+      "variationType": "full_remix",
       "angle": "Angle name",
       "angleDescription": "Why this angle",
       "headline": "ONEST HEADLINE (3-8 words, all caps)",
       "subheadline": "Supporting subheadline",
-      "benefitCallouts": ["Benefit 1", "Benefit 2"],
-      "backgroundNote": "Background/style note for this variation"
+      "visualDescription": "3-4 concrete sentences on composition, subject, lighting, props, background. MAX ${VISUAL_DESCRIPTION_MAX} characters.",
+      "backgroundNote": "One-line background/style note",
+      "benefitCallouts": ["Benefit 1", "Benefit 2"]
     },
     { "number": 2, ... },
     { "number": 3, ... }
   ]
-}`;
+}
 
-  const res = await claudeClient.post("/messages", {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
-  });
-  let text = "";
-  const resContent = res.data?.content;
-  if (Array.isArray(resContent)) text = resContent.map((c: any) => c.text || "").join("\n");
-  else text = resContent?.text || JSON.stringify(resContent);
-  text = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  try {
-    JSON.parse(text);
-  } catch {
-    text = JSON.stringify({ raw: text, variations: [] });
+visualDescription MUST be ${VISUAL_DESCRIPTION_MAX} characters or fewer. Every variation needs every field.`;
+
+  async function callClaude(userContent: string): Promise<string> {
+    const res = await claudeClient.post("/messages", {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      system,
+      messages: [{ role: "user", content: userContent }],
+    });
+    const resContent = res.data?.content;
+    const text = Array.isArray(resContent)
+      ? resContent.map((c: any) => c.text || "").join("\n")
+      : resContent?.text || JSON.stringify(resContent);
+    return stripMarkdownFences(text);
   }
-  return text;
+
+  const firstText = await callClaude(userPrompt);
+  const firstValid = validateBriefJson(firstText);
+  if (firstValid) return { brief: JSON.stringify(firstValid), qualityWarning: false };
+
+  console.warn("[Iteration] Competitor brief-gen first attempt invalid, retrying");
+  const retryPrompt = `${userPrompt}
+
+Your previous response did not match the schema. Return strict JSON with every field present, visualDescription under ${VISUAL_DESCRIPTION_MAX} chars, and version: 1.`;
+  let secondText = "";
+  try {
+    secondText = await callClaude(retryPrompt);
+  } catch (err: any) {
+    console.warn("[Iteration] Competitor brief-gen retry failed:", err?.message);
+  }
+  const secondValid = secondText ? validateBriefJson(secondText) : null;
+  if (secondValid) return { brief: JSON.stringify(secondValid), qualityWarning: false };
+
+  console.error("[Iteration] Competitor brief-gen failed twice, using fallback");
+  const fallback = buildFallbackBrief(variationCount, undefined, analysis);
+  return { brief: JSON.stringify(fallback), qualityWarning: true };
 }
 
