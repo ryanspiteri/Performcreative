@@ -1,7 +1,11 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
-import { generateProductAdWithNanoBananaPro, type ImageModel, type NanoBananaProResult } from "./nanoBananaPro";
+import { generateProductAdWithNanoBananaPro, type ImageModel as GeminiImageModel, type NanoBananaProResult } from "./nanoBananaPro";
+import { generateWithOpenAI } from "./openaiImage";
+import type { ImageGenerateOptions } from "./imageGenerator";
+
+export type ImageModel = GeminiImageModel | "openai_gpt_image";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
 import {
@@ -107,6 +111,44 @@ async function generateVariationWithFallback(
     }
     throw err;
   }
+}
+
+/**
+ * Route a single variation generation to the right backend (Gemini via Nano Banana
+ * or OpenAI gpt-image-1) based on the model field. Returns a NanoBananaProResult
+ * shape so downstream code stays model-agnostic.
+ */
+type DispatchOptions = Omit<Parameters<typeof generateProductAdWithNanoBananaPro>[0], "model"> & {
+  model?: ImageModel;
+};
+
+async function dispatchVariationGeneration(
+  options: DispatchOptions,
+  variationIndex: number,
+): Promise<NanoBananaProResult> {
+  const label = `Variation ${variationIndex + 1}`;
+  if (options.model === "openai_gpt_image") {
+    const openaiOpts: ImageGenerateOptions = {
+      prompt: options.prompt,
+      controlImageUrl: options.controlImageUrl,
+      productRenderUrl: options.productRenderUrl,
+      personImageUrl: options.personImageUrl,
+      aspectRatio: options.aspectRatio,
+      resolution: options.resolution,
+      useCompositing: options.useCompositing,
+      productPosition: options.productPosition,
+      productScale: options.productScale,
+    };
+    const result = await withTimeout(
+      generateWithOpenAI(openaiOpts),
+      VARIATION_TIMEOUT,
+      `${label} (OpenAI gpt-image-1)`,
+    );
+    return { imageUrl: result.imageUrl, s3Key: result.s3Key };
+  }
+  // Narrow to Gemini models for the Nano Banana path.
+  const geminiModel: GeminiImageModel = options.model === "nano_banana_2" ? "nano_banana_2" : "nano_banana_pro";
+  return generateVariationWithFallback({ ...options, model: geminiModel }, variationIndex);
 }
 
 // ============================================================
@@ -257,7 +299,9 @@ export async function runIterationStage3(runId: number, run: any) {
     // Read image model from run config (defaults to Nano Banana Pro for backwards compat)
     const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
     const { MODEL_LABELS } = await import("./nanoBananaPro");
-    console.log(`[Iteration] Using image model: ${MODEL_LABELS[imageModel]}`);
+    const modelLabel =
+      imageModel === "openai_gpt_image" ? "OpenAI gpt-image-1" : MODEL_LABELS[imageModel];
+    console.log(`[Iteration] Using image model: ${modelLabel}`);
 
     // Get product render: use selectedRenderId if set, otherwise fallback to default
     let productRender;
@@ -367,7 +411,7 @@ export async function runIterationStage3(runId: number, run: any) {
 
         console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
 
-        const result = await generateVariationWithFallback({
+        const result = await dispatchVariationGeneration({
           prompt: geminiPrompt,
           controlImageUrl: sourceUrl,
           productRenderUrl: productRender.url,
@@ -424,7 +468,7 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
         });
 
-        const result = await generateVariationWithFallback({
+        const result = await dispatchVariationGeneration({
           prompt: fallbackPrompt,
           controlImageUrl: sourceUrl,
           productRenderUrl: productRender.url,
@@ -621,16 +665,19 @@ export async function regenerateIterationVariation(
     console.log(`[Iteration] Full regeneration for variation ${variationIndex + 1}`);
   }
 
-  const result = await generateProductAdWithNanoBananaPro({
-    prompt: geminiPrompt,
-    controlImageUrl,
-    productRenderUrl: productRender.url,
-    aspectRatio: aspectRatio as any,
-    model: imageModel,
-    useCompositing: true,
-    productPosition: "center",
-    productScale: 0.45,
-  });
+  const result = await dispatchVariationGeneration(
+    {
+      prompt: geminiPrompt,
+      controlImageUrl,
+      productRenderUrl: productRender.url,
+      aspectRatio: aspectRatio as any,
+      model: imageModel,
+      useCompositing: true,
+      productPosition: "center",
+      productScale: 0.45,
+    },
+    variationIndex,
+  );
 
   const finalUrl = result.imageUrl;
 
