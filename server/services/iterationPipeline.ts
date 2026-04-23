@@ -307,6 +307,13 @@ export async function runIterationStage3(runId: number, run: any) {
     console.log(`[Iteration] Aspect ratio: ${aspectRatio}`);
     console.log(`[Iteration] Generating ${variationCount} variations`);
 
+    // Structured FX flag + style mode from the run + brief (Day 2 fix for fire/ice slop)
+    const runStyleMode = (run.styleMode as import("../../shared/iterationBriefSchema").StyleMode | null) || undefined;
+    const briefFxPresent = briefData?.referenceFxPresent === true;
+    const briefDetectedFx = Array.isArray(briefData?.detectedFxTypes)
+      ? (briefData.detectedFxTypes as import("../../shared/iterationBriefSchema").DetectedFxType[])
+      : [];
+
     if (briefData?.variations && Array.isArray(briefData.variations)) {
       // Generate variations concurrently (2 at a time to avoid API rate limits)
       const tasks = Array.from({ length: variationCount }, (_, i) => async () => {
@@ -316,7 +323,11 @@ export async function runIterationStage3(runId: number, run: any) {
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: v.subheadline || undefined,
           productName: `ONEST Health ${product}`,
-          backgroundStyleDescription: v.backgroundNote || "Dramatic lighting with premium aesthetic",
+          visualDescription: v.visualDescription || undefined,
+          backgroundStyleDescription: v.backgroundNote || undefined,
+          referenceFxPresent: briefFxPresent,
+          detectedFxTypes: briefDetectedFx,
+          styleMode: runStyleMode,
           aspectRatio: aspectRatio as any,
           targetAudience: run.selectedAudience || briefData.targetAudience || undefined,
           hasPersonReference: !!personImageUrl,
@@ -333,7 +344,7 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
-          useCompositing: false,
+          useCompositing: true,
           productPosition: "center",
           productScale: 0.45,
           personImageUrl,
@@ -390,7 +401,7 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
-          useCompositing: false,
+          useCompositing: true,
           productPosition: "center",
           productScale: 0.45,
         }, i);
@@ -546,11 +557,21 @@ export async function regenerateIterationVariation(
   const aspectRatio = run.aspectRatio || "1:1";
   const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
 
+  const regenStyleMode = (run.styleMode as import("../../shared/iterationBriefSchema").StyleMode | null) || undefined;
+  const regenFxPresent = briefData?.referenceFxPresent === true;
+  const regenDetectedFx = Array.isArray(briefData?.detectedFxTypes)
+    ? (briefData.detectedFxTypes as import("../../shared/iterationBriefSchema").DetectedFxType[])
+    : [];
+
   const geminiPrompt = buildReferenceBasedPrompt({
     headline,
     subheadline: subheadline || undefined,
     productName: `ONEST Health ${product}`,
+    visualDescription: v.visualDescription || undefined,
     backgroundStyleDescription: bgPrompt,
+    referenceFxPresent: regenFxPresent,
+    detectedFxTypes: regenDetectedFx,
+    styleMode: regenStyleMode,
     aspectRatio: aspectRatio as any,
     targetAudience: run.selectedAudience || briefData?.targetAudience || "fitness-conscious adults",
   });
@@ -576,7 +597,7 @@ export async function regenerateIterationVariation(
     productRenderUrl: productRender.url,
     aspectRatio: aspectRatio as any,
     model: imageModel,
-    useCompositing: false,
+    useCompositing: true,
     productPosition: "center",
     productScale: 0.45,
   });
