@@ -21,6 +21,7 @@ import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
 import { storagePut } from "./storage";
 import { ACTIVE_PRODUCTS } from "../drizzle/schema";
+import { iterationBriefV1Schema } from "../shared/iterationBriefSchema";
 import { canvaRouter } from "./routers/canva";
 import { metaRouter } from "./routers/meta";
 import { organicRouter } from "./routers/organic";
@@ -1106,7 +1107,9 @@ Return JSON in this exact format:
           await db.updatePipelineRun(input.runId, {
             iterationStage: "stage_3_generation",
           });
-          runIterationStage3(input.runId, run).catch(err => {
+          // Re-read the run so Stage 3 sees any brief edits made via updateIterationBrief.
+          const freshRun = await db.getPipelineRun(input.runId);
+          runIterationStage3(input.runId, freshRun ?? run).catch(err => {
             console.error("[Pipeline] Iteration stage 3 failed:", err);
             db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
           });
@@ -1118,6 +1121,30 @@ Return JSON in this exact format:
           });
         }
 
+        return { success: true };
+      }),
+
+    // Save user edits to the iteration brief during the stage_2b_approval gate.
+    // Refuses to write if the run has moved past approval (race guard).
+    updateIterationBrief: protectedProcedure
+      .input(z.object({
+        runId: z.number(),
+        brief: iterationBriefV1Schema,
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.iterationStage !== "stage_2b_approval") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Brief can only be edited before approval. This run is already in stage: " + run.iterationStage,
+          });
+        }
+        await db.updatePipelineRun(input.runId, {
+          iterationBrief: JSON.stringify(input.brief),
+          // User edited = explicitly acknowledged; clear the fallback warning.
+          briefQualityWarning: 0,
+        });
         return { success: true };
       }),
 
