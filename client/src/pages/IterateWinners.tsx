@@ -64,6 +64,9 @@ export default function IterateWinners() {
   const [selectedFlavour, setSelectedFlavour] = useState<string | null>(null);
   const [selectedRenderId, setSelectedRenderId] = useState<number | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  // Per-variation person overrides when Custom Per Variation mode is active.
+  // Length tracks variationCount; null = "use global" / "no one".
+  const [perVariationPersonIds, setPerVariationPersonIds] = useState<(number | null)[]>(Array(5).fill(null));
   const [selectedAudience, setSelectedAudience] = useState<string>("");
   const [customAudience, setCustomAudience] = useState(false);
 
@@ -116,6 +119,13 @@ export default function IterateWinners() {
     setPerVariationStrategies(prev => {
       const newArray = Array(variationCount).fill('full_remix');
       // Preserve existing selections up to the new count
+      for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
+        newArray[i] = prev[i];
+      }
+      return newArray;
+    });
+    setPerVariationPersonIds(prev => {
+      const newArray: (number | null)[] = Array(variationCount).fill(null);
       for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
         newArray[i] = prev[i];
       }
@@ -288,6 +298,7 @@ export default function IterateWinners() {
         adAngle,
         variationTypes: usePerVariationMode ? perVariationStrategies : [variationType],
         variationCount,
+        ...(usePerVariationMode && { selectedPersonIds: perVariationPersonIds }),
         aspectRatio,
         imageModel,
         resolution,
@@ -676,6 +687,17 @@ export default function IterateWinners() {
                     <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('headline_only'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Headlines</button>
                     <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('background_only'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Backgrounds</button>
                   </div>
+                  {peopleQuery.data && peopleQuery.data.length > 0 && (
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Each variation can use a different person — pick below.</span>
+                      <button
+                        onClick={() => setPerVariationPersonIds(Array(variationCount).fill(perVariationPersonIds[0] ?? null))}
+                        className="px-2 py-1 rounded text-[11px] text-gray-400 hover:text-white hover:bg-white/5"
+                      >
+                        Apply first to all
+                      </button>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     {Array.from({ length: variationCount }).map((_, index) => (
                       <div key={index} className="bg-white/5 rounded-lg p-4">
@@ -689,6 +711,45 @@ export default function IterateWinners() {
                           <option value="props_only">Props Only</option>
                           <option value="talent_swap">Talent Swap</option>
                         </select>
+                        {peopleQuery.data && peopleQuery.data.length > 0 && (
+                          <div className="mt-3">
+                            <label className="block text-[11px] font-medium text-gray-500 mb-2">Person (optional)</label>
+                            <div className="flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label={`Person for variation ${index + 1}`}>
+                              <button
+                                onClick={() => {
+                                  const next = [...perVariationPersonIds];
+                                  next[index] = null;
+                                  setPerVariationPersonIds(next);
+                                }}
+                                role="radio"
+                                aria-checked={perVariationPersonIds[index] === null}
+                                className={`flex-shrink-0 w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
+                                  perVariationPersonIds[index] === null ? "border-[#FF3838] bg-[#FF3838]/10" : "border-white/10 bg-white/5 hover:border-white/20"
+                                }`}
+                              >
+                                <span className="text-[9px] text-gray-400">None</span>
+                              </button>
+                              {peopleQuery.data.map((person: any) => (
+                                <button
+                                  key={person.id}
+                                  onClick={() => {
+                                    const next = [...perVariationPersonIds];
+                                    next[index] = person.id;
+                                    setPerVariationPersonIds(next);
+                                  }}
+                                  role="radio"
+                                  aria-checked={perVariationPersonIds[index] === person.id}
+                                  className={`flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 transition-all ${
+                                    perVariationPersonIds[index] === person.id ? "border-[#FF3838] shadow-lg shadow-red-500/20" : "border-white/10 hover:border-white/20"
+                                  }`}
+                                  title={person.name}
+                                >
+                                  <img src={person.url} alt={person.name} className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -885,6 +946,11 @@ export default function IterateWinners() {
             ) : (
               <p className="text-gray-500 text-xs">
                 No people uploaded yet. <a href="/people" className="text-[#FF3838] hover:underline">Add reference photos in People Library</a>
+              </p>
+            )}
+            {!usePerVariationMode && peopleQuery.data && peopleQuery.data.length > 0 && (
+              <p className="text-[11px] text-gray-500 mt-3">
+                Applied to all variations. Switch to <span className="text-gray-300">Custom Per Variation</span> above to assign different people.
               </p>
             )}
           </div>

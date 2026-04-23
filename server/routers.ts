@@ -1026,6 +1026,8 @@ Return JSON in this exact format:
         selectedRenderId: z.number().optional(),
         selectedFlavour: z.string().optional(),
         selectedPersonId: z.number().optional(),
+        /** Per-variation person overrides (Custom Per Variation mode). null = no person for that variation. */
+        selectedPersonIds: z.array(z.number().nullable()).optional(),
         selectedAudience: z.string().optional(),
         resolution: z.enum(["2K", "4K"]).optional(),
         // Provenance — set when iteration is triggered from a winner via
@@ -1081,7 +1083,15 @@ Return JSON in this exact format:
           imageModel: input.imageModel || "nano_banana_pro",
           selectedRenderId: input.selectedRenderId ?? null,
           selectedFlavour: input.selectedFlavour ?? null,
-          selectedPersonId: input.selectedPersonId ?? null,
+          // Legacy scalar: populated with first non-null from selectedPersonIds if present, else input.selectedPersonId
+          selectedPersonId:
+            input.selectedPersonIds?.find((id) => id != null) ??
+            input.selectedPersonId ??
+            null,
+          // New plural: JSON-encoded array of (number | null) for Custom Per Variation
+          selectedPersonIds: input.selectedPersonIds
+            ? JSON.stringify(input.selectedPersonIds)
+            : null,
           selectedAudience: input.selectedAudience ?? null,
           resolution: input.resolution ?? "2K",
           // Winner provenance (added for winner → iteration handoff).

@@ -274,12 +274,40 @@ export async function runIterationStage3(runId: number, run: any) {
       throw new Error(`No product render found for ${product}`);
     }
 
-    // Get person type reference if selected
-    let personImageUrl: string | undefined;
-    if (run.selectedPersonId) {
+    // Resolve person references. Two modes:
+    //  - Custom Per Variation: selectedPersonIds is a JSON array `(number | null)[]` of length N.
+    //    Each slot overrides the person for that variation. null = no person.
+    //  - All Same: selectedPersonId is a scalar applied to every variation.
+    let globalPersonImageUrl: string | undefined;
+    let perVariationPersonUrls: (string | undefined)[] = [];
+    let parsedPersonIds: (number | null)[] = [];
+    if (typeof run.selectedPersonIds === "string" && run.selectedPersonIds.length > 0) {
+      try {
+        const raw = JSON.parse(run.selectedPersonIds);
+        if (Array.isArray(raw)) {
+          parsedPersonIds = raw.map((v) => (typeof v === "number" ? v : null));
+        }
+      } catch {
+        console.warn(`[Iteration] selectedPersonIds is not valid JSON, ignoring`);
+      }
+    }
+    if (parsedPersonIds.length > 0) {
+      const uniqueIds = Array.from(new Set(parsedPersonIds.filter((id): id is number => id != null)));
+      const idToUrl = new Map<number, string>();
+      await Promise.all(
+        uniqueIds.map(async (id) => {
+          const p = await db.getPerson(id);
+          if (p) idToUrl.set(id, p.url);
+          else console.warn(`[Iteration] Per-variation person #${id} not found`);
+        }),
+      );
+      perVariationPersonUrls = parsedPersonIds.map((id) => (id != null ? idToUrl.get(id) : undefined));
+      const firstUrl = perVariationPersonUrls.find((u) => !!u);
+      if (firstUrl) globalPersonImageUrl = firstUrl;
+    } else if (run.selectedPersonId) {
       const person = await db.getPerson(run.selectedPersonId);
       if (person) {
-        personImageUrl = person.url;
+        globalPersonImageUrl = person.url;
         console.log(`[Iteration] Using person type reference: ${person.name}`);
       } else {
         console.warn(`[Iteration] Selected person #${run.selectedPersonId} not found or deleted, proceeding without`);
@@ -318,6 +346,8 @@ export async function runIterationStage3(runId: number, run: any) {
       // Generate variations concurrently (2 at a time to avoid API rate limits)
       const tasks = Array.from({ length: variationCount }, (_, i) => async () => {
         const v = briefData.variations[i] || {};
+        // Per-variation person override > global person > none
+        const variationPersonUrl = perVariationPersonUrls[i] ?? globalPersonImageUrl;
 
         const basePrompt = buildReferenceBasedPrompt({
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
@@ -330,7 +360,7 @@ export async function runIterationStage3(runId: number, run: any) {
           styleMode: runStyleMode,
           aspectRatio: aspectRatio as any,
           targetAudience: run.selectedAudience || briefData.targetAudience || undefined,
-          hasPersonReference: !!personImageUrl,
+          hasPersonReference: !!variationPersonUrl,
         });
 
         const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
@@ -347,7 +377,7 @@ export async function runIterationStage3(runId: number, run: any) {
           useCompositing: true,
           productPosition: "center",
           productScale: 0.45,
-          personImageUrl,
+          personImageUrl: variationPersonUrl,
         }, i);
 
         return {
