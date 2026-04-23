@@ -8,10 +8,27 @@ import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 const AUDIENCE_PRESETS = ["Gym-goers", "Busy professionals", "Athletes", "Health-conscious parents", "Biohackers", "Weight loss seekers"];
 const ANGLE_OPTIONS = ["front", "side", "45-degree", "top-down", "back"];
 
-type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
 type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
-type ImageModel = "nano_banana_pro" | "nano_banana_2";
+type ImageModel = "nano_banana_pro" | "nano_banana_2" | "openai_gpt_image";
+type StyleMode = "MATCH_REFERENCE" | "EVOLVE_REFERENCE" | "DEPART_FROM_REFERENCE";
+type AdAngle = "auto" | "claim_led" | "before_after" | "testimonial" | "ugc_organic" | "product_hero" | "lifestyle";
+
+const AD_ANGLE_OPTIONS: { value: AdAngle; label: string; desc: string }[] = [
+  { value: "auto", label: "Auto", desc: "Claude picks from the winning ad" },
+  { value: "claim_led", label: "Claim-Led", desc: "Bold promise, product hero" },
+  { value: "before_after", label: "Before / After", desc: "Transformation framing" },
+  { value: "testimonial", label: "Testimonial", desc: "First-person social proof" },
+  { value: "ugc_organic", label: "UGC / Organic", desc: "Unpolished, real-user feel" },
+  { value: "product_hero", label: "Product Hero", desc: "Product as star, clean" },
+  { value: "lifestyle", label: "Lifestyle", desc: "Scene or setting with person" },
+];
+
+const STYLE_MODE_OPTIONS: { value: StyleMode; label: string; desc: string }[] = [
+  { value: "MATCH_REFERENCE", label: "Match", desc: "Hug the reference tightly" },
+  { value: "EVOLVE_REFERENCE", label: "Evolve", desc: "Vary only what the brief calls for" },
+  { value: "DEPART_FROM_REFERENCE", label: "Depart", desc: "Reinvent composition and props" },
+];
 type SourceType = "own_ad" | "competitor_ad";
 type AdaptationMode = "concept" | "style";
 
@@ -34,7 +51,8 @@ export default function IterateWinners() {
   const [uploadedImageName, setUploadedImageName] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
-  const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
+  const [styleMode, setStyleMode] = useState<StyleMode>("EVOLVE_REFERENCE");
+  const [adAngle, setAdAngle] = useState<AdAngle>("auto");
   const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Legacy single selection
   const [variationCount, setVariationCount] = useState(5);
   const [perVariationStrategies, setPerVariationStrategies] = useState<VariationType[]>(Array(5).fill('full_remix'));
@@ -46,6 +64,9 @@ export default function IterateWinners() {
   const [selectedFlavour, setSelectedFlavour] = useState<string | null>(null);
   const [selectedRenderId, setSelectedRenderId] = useState<number | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  // Per-variation person overrides when Custom Per Variation mode is active.
+  // Length tracks variationCount; null = "use global" / "no one".
+  const [perVariationPersonIds, setPerVariationPersonIds] = useState<(number | null)[]>(Array(5).fill(null));
   const [selectedAudience, setSelectedAudience] = useState<string>("");
   const [customAudience, setCustomAudience] = useState(false);
 
@@ -98,6 +119,13 @@ export default function IterateWinners() {
     setPerVariationStrategies(prev => {
       const newArray = Array(variationCount).fill('full_remix');
       // Preserve existing selections up to the new count
+      for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
+        newArray[i] = prev[i];
+      }
+      return newArray;
+    });
+    setPerVariationPersonIds(prev => {
+      const newArray: (number | null)[] = Array(variationCount).fill(null);
       for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
         newArray[i] = prev[i];
       }
@@ -231,7 +259,11 @@ export default function IterateWinners() {
   // Nano Banana 2:   $0.04/image (1:1/4:5), $0.08 (9:16/16:9) — ~3x cheaper
   const perImageCostPro = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.12 : 0.24;
   const perImageCostNB2 = aspectRatio === '1:1' || aspectRatio === '4:5' ? 0.04 : 0.08;
-  const perImageCost = imageModel === 'nano_banana_2' ? perImageCostNB2 : perImageCostPro;
+  const perImageCostOpenAI = 0.15; // gpt-image-1 estimate, refine after bakeoff
+  const perImageCost =
+    imageModel === 'nano_banana_2' ? perImageCostNB2
+    : imageModel === 'openai_gpt_image' ? perImageCostOpenAI
+    : perImageCostPro;
   const estimatedCost = variationCount * perImageCost; // Single-pass generation (useCompositing: false)
 
   const sourceImageUrl = sourceType === "competitor_ad" ? (selectedCompetitor?.imageUrl || null) : uploadedImageUrl;
@@ -266,9 +298,11 @@ export default function IterateWinners() {
           foreplayAdTitle: selectedCompetitor?.title,
           foreplayAdBrand: selectedCompetitor?.brandName,
         }),
-        creativityLevel,
+        styleMode,
+        adAngle,
         variationTypes: usePerVariationMode ? perVariationStrategies : [variationType],
         variationCount,
+        ...(usePerVariationMode && { selectedPersonIds: perVariationPersonIds }),
         aspectRatio,
         imageModel,
         resolution,
@@ -657,6 +691,17 @@ export default function IterateWinners() {
                     <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('headline_only'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Headlines</button>
                     <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('background_only'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Backgrounds</button>
                   </div>
+                  {peopleQuery.data && peopleQuery.data.length > 0 && (
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Each variation can use a different person — pick below.</span>
+                      <button
+                        onClick={() => setPerVariationPersonIds(Array(variationCount).fill(perVariationPersonIds[0] ?? null))}
+                        className="px-2 py-1 rounded text-[11px] text-gray-400 hover:text-white hover:bg-white/5"
+                      >
+                        Apply first to all
+                      </button>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     {Array.from({ length: variationCount }).map((_, index) => (
                       <div key={index} className="bg-white/5 rounded-lg p-4">
@@ -670,6 +715,45 @@ export default function IterateWinners() {
                           <option value="props_only">Props Only</option>
                           <option value="talent_swap">Talent Swap</option>
                         </select>
+                        {peopleQuery.data && peopleQuery.data.length > 0 && (
+                          <div className="mt-3">
+                            <label className="block text-[11px] font-medium text-gray-500 mb-2">Person (optional)</label>
+                            <div className="flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label={`Person for variation ${index + 1}`}>
+                              <button
+                                onClick={() => {
+                                  const next = [...perVariationPersonIds];
+                                  next[index] = null;
+                                  setPerVariationPersonIds(next);
+                                }}
+                                role="radio"
+                                aria-checked={perVariationPersonIds[index] === null}
+                                className={`flex-shrink-0 w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
+                                  perVariationPersonIds[index] === null ? "border-[#FF3838] bg-[#FF3838]/10" : "border-white/10 bg-white/5 hover:border-white/20"
+                                }`}
+                              >
+                                <span className="text-[9px] text-gray-400">None</span>
+                              </button>
+                              {peopleQuery.data.map((person: any) => (
+                                <button
+                                  key={person.id}
+                                  onClick={() => {
+                                    const next = [...perVariationPersonIds];
+                                    next[index] = person.id;
+                                    setPerVariationPersonIds(next);
+                                  }}
+                                  role="radio"
+                                  aria-checked={perVariationPersonIds[index] === person.id}
+                                  className={`flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 transition-all ${
+                                    perVariationPersonIds[index] === person.id ? "border-[#FF3838] shadow-lg shadow-red-500/20" : "border-white/10 hover:border-white/20"
+                                  }`}
+                                  title={person.name}
+                                >
+                                  <img src={person.url} alt={person.name} className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -678,39 +762,55 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* Risk Level (renamed from Creativity) */}
+          {/* Ad Angle — what format of ad Claude should write */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Risk Level</label>
+            <label className="block text-sm font-medium text-gray-300 mb-3">Ad Angle</label>
             <div className="bg-white/5 rounded-xl p-6">
-              <div className="flex gap-2 mb-4">
-                {(['SAFE', 'BOLD', 'WILD'] as CreativityLevel[]).map((level) => (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {AD_ANGLE_OPTIONS.map((opt) => (
                   <button
-                    key={level}
-                    onClick={() => setCreativityLevel(level)}
-                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
-                      creativityLevel === level
-                        ? level === 'SAFE'
-                          ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 focus:ring-blue-400"
-                          : level === 'BOLD'
-                          ? "bg-[#A78BFA] text-white shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
-                          : "bg-red-500 text-white shadow-lg shadow-red-500/20 focus:ring-red-400"
-                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
+                    key={opt.value}
+                    onClick={() => setAdAngle(opt.value)}
+                    role="radio"
+                    aria-checked={adAngle === opt.value}
+                    className={`px-3 py-2 rounded-lg text-left border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                      adAngle === opt.value
+                        ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
                     }`}
                   >
-                    {level}
+                    <div className="font-semibold text-xs">{opt.label}</div>
+                    <div className="text-[11px] opacity-75 mt-0.5">{opt.desc}</div>
                   </button>
                 ))}
               </div>
-              <div className="text-sm text-gray-300 leading-relaxed">
-                {creativityLevel === 'SAFE' && (
-                  <p><span className="font-semibold text-blue-400">SAFE:</span> Minor headline tweaks, same visual style. Low risk, proven patterns. Example: "30 Days to Shredded" → "Transform in 30 Days"</p>
-                )}
-                {creativityLevel === 'BOLD' && (
-                  <p><span className="font-semibold text-purple-400">BOLD:</span> New headlines + background variations. Moderate risk, higher upside. Example: Fire background → Ice/transformation theme. <span className="text-purple-300">(Recommended)</span></p>
-                )}
-                {creativityLevel === 'WILD' && (
-                  <p><span className="font-semibold text-red-400">WILD:</span> Completely different concepts. High risk, moonshot potential. Example: Product-focused → Lifestyle/aspirational scene. May polarise but deeply resonate.</p>
-                )}
+              {adAngle === "auto" && (
+                <p className="text-[11px] text-gray-500 italic mt-3">Claude will infer the angle from the winning ad's structure.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Style Mode — how tightly to hug the reference */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Style Fidelity</label>
+            <div className="bg-white/5 rounded-xl p-6">
+              <div className="flex gap-2">
+                {STYLE_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setStyleMode(opt.value)}
+                    role="radio"
+                    aria-checked={styleMode === opt.value}
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                      styleMode === opt.value
+                        ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
+                    }`}
+                  >
+                    <div className="font-semibold">{opt.label}</div>
+                    <div className="text-[11px] opacity-75 mt-0.5">{opt.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -739,48 +839,75 @@ export default function IterateWinners() {
           {/* Image Model Selector */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Image Generation Model</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <button
                 onClick={() => setImageModel('nano_banana_pro')}
-                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                role="radio"
+                aria-checked={imageModel === 'nano_banana_pro'}
+                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
                   imageModel === 'nano_banana_pro'
-                    ? 'bg-purple-500/10 border-purple-500 focus:ring-purple-500'
-                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8 focus:ring-white/20'
+                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-base">🍌</span>
                   <span className="font-semibold text-sm text-white">Nano Banana Pro</span>
                   {imageModel === 'nano_banana_pro' && (
-                    <span className="ml-auto text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">Selected</span>
+                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
                   )}
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed">Highest quality. Advanced reasoning, perfect text rendering. ~$0.12/image, 2–3 min per variation.</p>
-                <div className="mt-2 flex gap-2">
-                  <span className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">Best quality</span>
-                  <span className="text-xs bg-white/5 text-gray-400 px-2 py-0.5 rounded">Slower</span>
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded">Recommended</span>
+                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded">Best quality</span>
                 </div>
               </button>
 
               <button
                 onClick={() => setImageModel('nano_banana_2')}
-                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                role="radio"
+                aria-checked={imageModel === 'nano_banana_2'}
+                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
                   imageModel === 'nano_banana_2'
-                    ? 'bg-green-500/10 border-green-500 focus:ring-green-500'
-                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8 focus:ring-white/20'
+                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-base">⚡</span>
                   <span className="font-semibold text-sm text-white">Nano Banana 2</span>
                   {imageModel === 'nano_banana_2' && (
-                    <span className="ml-auto text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">Selected</span>
+                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
                   )}
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed">4× faster, ~3× cheaper. Ranked #1 in Image Arena. ~$0.04/image, 30–60 sec per variation.</p>
-                <div className="mt-2 flex gap-2">
-                  <span className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">#1 Image Arena</span>
-                  <span className="text-xs bg-white/5 text-gray-400 px-2 py-0.5 rounded">4× faster</span>
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded">4× faster</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setImageModel('openai_gpt_image')}
+                role="radio"
+                aria-checked={imageModel === 'openai_gpt_image'}
+                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                  imageModel === 'openai_gpt_image'
+                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-gray-300" />
+                  <span className="font-semibold text-sm text-white">OpenAI Image</span>
+                  {imageModel === 'openai_gpt_image' && (
+                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">gpt-image-1 edits with multiple reference images. ~$0.15/image, 30–90 sec per variation.</p>
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded">Experimental</span>
+                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded">A/B bakeoff</span>
                 </div>
               </button>
             </div>
@@ -852,6 +979,11 @@ export default function IterateWinners() {
                 No people uploaded yet. <a href="/people" className="text-[#FF3838] hover:underline">Add reference photos in People Library</a>
               </p>
             )}
+            {!usePerVariationMode && peopleQuery.data && peopleQuery.data.length > 0 && (
+              <p className="text-[11px] text-gray-500 mt-3">
+                Applied to all variations. Switch to <span className="text-gray-300">Custom Per Variation</span> above to assign different people.
+              </p>
+            )}
           </div>
 
           {/* Audience Type */}
@@ -908,13 +1040,13 @@ export default function IterateWinners() {
                   <div className="text-sm text-gray-400 mb-1">Estimated Cost</div>
                   <div className="text-3xl font-bold text-white">${estimatedCost.toFixed(2)}</div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {variationCount} variation{variationCount === 1 ? '' : 's'} x ${perImageCost.toFixed(2)} per image ({imageModel === 'nano_banana_2' ? 'Nano Banana 2' : 'Nano Banana Pro'})
+                    {variationCount} variation{variationCount === 1 ? '' : 's'} x ${perImageCost.toFixed(2)} per image ({imageModel === 'nano_banana_2' ? 'Nano Banana 2' : imageModel === 'openai_gpt_image' ? 'OpenAI Image' : 'Nano Banana Pro'})
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-400 mb-2">Estimated Time</div>
-                  <div className={`px-3 py-2 rounded-lg text-sm font-semibold ${imageModel === 'nano_banana_2' ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'}`}>
-                    {imageModel === 'nano_banana_2' ? `${Math.ceil(variationCount * 0.5)}-${variationCount} min` : `${variationCount * 2}-${variationCount * 3} min`}
+                  <div className={`px-3 py-2 rounded-lg text-sm font-semibold ${imageModel === 'nano_banana_2' ? 'bg-green-500/10 border border-green-500/30 text-green-300' : imageModel === 'openai_gpt_image' ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'}`}>
+                    {imageModel === 'nano_banana_2' ? `${Math.ceil(variationCount * 0.5)}-${variationCount} min` : imageModel === 'openai_gpt_image' ? `${Math.ceil(variationCount * 0.5)}-${Math.ceil(variationCount * 1.5)} min` : `${variationCount * 2}-${variationCount * 3} min`}
                   </div>
                 </div>
               </div>
@@ -975,8 +1107,16 @@ export default function IterateWinners() {
                 <span className="text-white font-medium capitalize">{variationType.replace('_', ' ')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Creativity Level:</span>
-                <span className="text-white font-medium">{creativityLevel}</span>
+                <span className="text-gray-400">Ad Angle:</span>
+                <span className="text-white font-medium">{AD_ANGLE_OPTIONS.find(o => o.value === adAngle)?.label ?? adAngle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Style Fidelity:</span>
+                <span className="text-white font-medium">{STYLE_MODE_OPTIONS.find(o => o.value === styleMode)?.label ?? styleMode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Image Model:</span>
+                <span className="text-white font-medium">{imageModel === 'nano_banana_2' ? 'Nano Banana 2' : imageModel === 'openai_gpt_image' ? 'OpenAI Image (experimental)' : 'Nano Banana Pro'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Aspect Ratio:</span>

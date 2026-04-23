@@ -74,7 +74,16 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   iterationBrief: text("iterationBrief"),
   iterationStage: varchar("iterationStage", { length: 64 }),
   iterationVariations: json("iterationVariations"),
+  /** @deprecated — Risk Level cut in favour of styleMode + adAngle. Kept for backward-compat reads. */
   creativityLevel: mysqlEnum("creativityLevel", ["SAFE", "BOLD", "WILD"]).default("BOLD"),
+  /** Style preservation mode for Gemini prompt — see shared/iterationBriefSchema.ts STYLE_MODES */
+  styleMode: varchar("styleMode", { length: 32 }),
+  /** Ad angle (single value for All Same Strategy; per-variation override lives in brief JSON) */
+  adAngle: varchar("adAngle", { length: 32 }),
+  /** Per-variation person IDs (JSON-encoded `(number | null)[]`) for Custom Per Variation mode */
+  selectedPersonIds: text("selectedPersonIds"),
+  /** True when the brief fell back to a deterministic skeleton (Claude returned invalid JSON twice) */
+  briefQualityWarning: int("briefQualityWarning").default(0).notNull(),
   aspectRatio: varchar("aspectRatio", { length: 16 }),
   variationTypes: text("variationTypes"),
   variationCount: int("variationCount"),
@@ -87,7 +96,7 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   videoUploadUrl: text("videoUploadUrl"),
   videoFunnelStage: mysqlEnum("videoFunnelStage", ["cold", "warm", "retargeting", "retention"]).default("cold"),
   videoArchetypes: json("videoArchetypes"),
-  imageModel: mysqlEnum("imageModel", ["nano_banana_pro", "nano_banana_2"]).default("nano_banana_pro"),
+  imageModel: mysqlEnum("imageModel", ["nano_banana_pro", "nano_banana_2", "openai_gpt_image"]).default("nano_banana_pro"),
   /** Iteration pipeline: selected product render ID for this run */
   selectedRenderId: int("selectedRenderId"),
   /** Iteration pipeline: selected flavour for this run */

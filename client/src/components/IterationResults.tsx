@@ -1,10 +1,13 @@
-import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle, Upload, Download } from "lucide-react";
+import { ArrowLeft, Eye, FileText, ImageIcon, Loader2, CheckCircle, ChevronRight, Copy, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, ListChecks, RefreshCw, Send, X, XCircle, Upload, Download, Pencil, Save, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ChildGenerationControls } from "./ChildGenerationControls";
+import { VISUAL_DESCRIPTION_MAX, iterationBriefV1Schema, type IterationBriefV1, type IterationBriefVariationV1 } from "../../../shared/iterationBriefSchema";
+
+type EditableFields = Pick<IterationBriefVariationV1, "headline" | "subheadline" | "visualDescription" | "backgroundNote" | "angle" | "benefitCallouts">;
 
 export function IterationResults({ run }: { run: any }) {
   const isRunning = run.status === "running" || run.status === "pending";
@@ -85,15 +88,123 @@ export function IterationResults({ run }: { run: any }) {
     },
   });
 
-  // Parse brief JSON for structured display
+  // Parse brief JSON for structured display. v1 briefs are Zod-validated;
+  // older runs without version field are rendered read-only as "legacy".
   let briefData: any = null;
+  let briefV1: IterationBriefV1 | null = null;
+  let briefIsLegacy = false;
   if (run.iterationBrief) {
     try {
       briefData = JSON.parse(run.iterationBrief);
     } catch {
       briefData = null;
     }
+    if (briefData && briefData.version === 1) {
+      const result = iterationBriefV1Schema.safeParse(briefData);
+      if (result.success) briefV1 = result.data;
+    } else if (briefData && briefData.variations) {
+      briefIsLegacy = true;
+    }
   }
+
+  // Per-variation edit state — buffers hold unsaved edits, null means "not in edit mode".
+  const [editBuffers, setEditBuffers] = useState<Record<number, EditableFields>>({});
+  const [savingIndex, setSavingIndex] = useState<number | null>(null);
+  const [savedFlash, setSavedFlash] = useState<Record<number, number>>({});
+  const editingIndices = Object.keys(editBuffers).map((k) => Number(k));
+  const hasUnsavedEdits = editingIndices.length > 0;
+
+  const updateBriefMutation = trpc.pipeline.updateIterationBrief.useMutation({
+    onSuccess: (_data, variables) => {
+      utils.pipeline.get.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Save failed: ${err.message}`);
+      setSavingIndex(null);
+    },
+  });
+
+  const openEdit = (i: number) => {
+    if (!briefV1) return;
+    const v = briefV1.variations[i];
+    if (!v) return;
+    setEditBuffers((prev) => ({
+      ...prev,
+      [i]: {
+        headline: v.headline,
+        subheadline: v.subheadline ?? "",
+        visualDescription: v.visualDescription ?? "",
+        backgroundNote: v.backgroundNote ?? "",
+        angle: v.angle,
+        benefitCallouts: [...(v.benefitCallouts ?? [])],
+      },
+    }));
+  };
+
+  const cancelEdit = (i: number) => {
+    setEditBuffers((prev) => {
+      const next = { ...prev };
+      delete next[i];
+      return next;
+    });
+  };
+
+  const editAll = () => {
+    if (!briefV1) return;
+    const buffers: Record<number, EditableFields> = {};
+    briefV1.variations.forEach((v, i) => {
+      buffers[i] = {
+        headline: v.headline,
+        subheadline: v.subheadline ?? "",
+        visualDescription: v.visualDescription ?? "",
+        backgroundNote: v.backgroundNote ?? "",
+        angle: v.angle,
+        benefitCallouts: [...(v.benefitCallouts ?? [])],
+      };
+    });
+    setEditBuffers(buffers);
+  };
+
+  const saveEdit = async (i: number) => {
+    if (!briefV1) return;
+    const buf = editBuffers[i];
+    if (!buf) return;
+    if ((buf.visualDescription || "").length > VISUAL_DESCRIPTION_MAX) {
+      toast.error(`Visual description must be ${VISUAL_DESCRIPTION_MAX} characters or fewer`);
+      return;
+    }
+    setSavingIndex(i);
+    const nextBrief: IterationBriefV1 = {
+      ...briefV1,
+      variations: briefV1.variations.map((v, idx) =>
+        idx === i
+          ? {
+              ...v,
+              headline: buf.headline,
+              subheadline: buf.subheadline,
+              visualDescription: buf.visualDescription,
+              backgroundNote: buf.backgroundNote,
+              angle: buf.angle,
+              benefitCallouts: buf.benefitCallouts,
+            }
+          : v,
+      ),
+    };
+    try {
+      await updateBriefMutation.mutateAsync({ runId: run.id, brief: nextBrief });
+      cancelEdit(i);
+      setSavedFlash((prev) => ({ ...prev, [i]: Date.now() }));
+      setTimeout(() => {
+        setSavedFlash((prev) => {
+          const next = { ...prev };
+          if (next[i] && Date.now() - next[i] >= 2000) delete next[i];
+          return next;
+        });
+      }, 2500);
+    } finally {
+      setSavingIndex(null);
+    }
+  };
 
   // Parse variations
   const variations: Array<{ url: string; variation: string }> = Array.isArray(run.iterationVariations) ? run.iterationVariations : [];
@@ -278,14 +389,36 @@ export function IterationResults({ run }: { run: any }) {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#FF3838]" /> Stage 2: Iteration Brief
+              {briefIsLegacy && (
+                <span className="text-[10px] font-medium bg-white/10 text-gray-300 px-2 py-0.5 rounded-full">Legacy format — read-only</span>
+              )}
             </h2>
-            <button
-              onClick={() => { navigator.clipboard.writeText(run.iterationBrief || ""); toast.success("Brief copied!"); }}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
-            >
-              <Copy className="w-3.5 h-3.5" /> Copy
-            </button>
+            <div className="flex items-center gap-2">
+              {briefV1 && iterationStage === "stage_2b_approval" && editingIndices.length === 0 && (
+                <button
+                  onClick={editAll}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit all
+                </button>
+              )}
+              <button
+                onClick={() => { navigator.clipboard.writeText(run.iterationBrief || ""); toast.success("Brief copied!"); }}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/5"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copy
+              </button>
+            </div>
           </div>
+
+          {run.briefQualityWarning === 1 && iterationStage === "stage_2b_approval" && (
+            <div className="mb-4 flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-200 leading-relaxed">
+                <strong className="font-semibold text-amber-300">Brief quality warning.</strong> Claude returned invalid JSON twice, so the system wrote a minimal skeleton. Please edit each variation before approving, or reject and regenerate.
+              </div>
+            </div>
+          )}
 
           {/* Structured brief display */}
           {briefData && briefData.variations ? (
@@ -332,28 +465,147 @@ export function IterationResults({ run }: { run: any }) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {briefData.variations.map((v: any, i: number) => (
-                  <div key={i} className="bg-[#01040A] rounded-lg p-4 border border-white/10">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-bold text-[#FF3838] bg-[#FF3838]/10 px-2 py-1 rounded">
-                        V{v.number || i + 1}
-                      </span>
-                      <span className="text-xs text-gray-400">{v.angle}</span>
-                    </div>
-                    <p className="text-white font-bold text-sm mb-1">{v.headline}</p>
-                    {v.subheadline && <p className="text-gray-400 text-xs mb-2">{v.subheadline}</p>}
-                    {v.angleDescription && <p className="text-gray-500 text-xs italic">{v.angleDescription}</p>}
-                    {v.benefitCallouts && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {v.benefitCallouts.map((b: string, j: number) => (
-                          <span key={j} className="text-[10px] bg-white/5 text-gray-300 px-1.5 py-0.5 rounded">
-                            {b}
-                          </span>
-                        ))}
+                {briefData.variations.map((v: any, i: number) => {
+                  const buf = editBuffers[i];
+                  const isEditing = !!buf;
+                  const canEdit = !!briefV1 && iterationStage === "stage_2b_approval";
+                  const visualLen = (buf?.visualDescription ?? "").length;
+                  const visualColor =
+                    visualLen > VISUAL_DESCRIPTION_MAX
+                      ? "text-red-400"
+                      : visualLen >= 380
+                      ? "text-amber-400"
+                      : "text-gray-500";
+                  const justSaved = savedFlash[i] && Date.now() - savedFlash[i] < 2000;
+                  return (
+                    <div
+                      key={i}
+                      className={`${isEditing ? "bg-[#15171B] border-[#FF3838]/40" : "bg-[#01040A] border-white/10"} rounded-lg p-4 border relative`}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-bold text-[#FF3838] bg-[#FF3838]/10 px-2 py-1 rounded">
+                          V{v.number || i + 1}
+                        </span>
+                        <span className="text-xs text-gray-400 flex-1 truncate">{isEditing ? buf.angle : v.angle}</span>
+                        {isEditing ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Unsaved edits" />
+                        ) : justSaved ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Saved" />
+                        ) : null}
+                        {canEdit && !isEditing && (
+                          <button
+                            onClick={() => openEdit(i)}
+                            className="p-2 -m-2 text-gray-400 hover:text-white rounded hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-[#FF3838]/50"
+                            aria-label={`Edit variation ${v.number || i + 1}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {!isEditing && (
+                        <>
+                          <p className="text-white font-bold text-sm mb-1">{v.headline}</p>
+                          {v.subheadline && <p className="text-gray-400 text-xs mb-2">{v.subheadline}</p>}
+                          {v.visualDescription && (
+                            <p className="text-gray-500 text-xs leading-relaxed mb-2">{v.visualDescription}</p>
+                          )}
+                          {v.angleDescription && <p className="text-gray-500 text-xs italic">{v.angleDescription}</p>}
+                          {v.benefitCallouts && v.benefitCallouts.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {v.benefitCallouts.map((b: string, j: number) => (
+                                <span key={j} className="text-[10px] bg-white/5 text-gray-300 px-1.5 py-0.5 rounded">
+                                  {b}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {isEditing && buf && (
+                        <div className="space-y-2 text-xs" onKeyDown={(e) => { if (e.key === "Escape") cancelEdit(i); }}>
+                          <label className="block">
+                            <span className="text-gray-400">Headline</span>
+                            <input
+                              autoFocus
+                              value={buf.headline}
+                              onChange={(e) => setEditBuffers((p) => ({ ...p, [i]: { ...buf, headline: e.target.value } }))}
+                              className="mt-1 w-full bg-[#01040A] border border-white/10 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-[#FF3838]"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-gray-400">Subheadline</span>
+                            <input
+                              value={buf.subheadline}
+                              onChange={(e) => setEditBuffers((p) => ({ ...p, [i]: { ...buf, subheadline: e.target.value } }))}
+                              className="mt-1 w-full bg-[#01040A] border border-white/10 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-[#FF3838]"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-gray-400">Angle</span>
+                            <input
+                              value={buf.angle}
+                              onChange={(e) => setEditBuffers((p) => ({ ...p, [i]: { ...buf, angle: e.target.value } }))}
+                              className="mt-1 w-full bg-[#01040A] border border-white/10 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-[#FF3838]"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-gray-400">Visual description</span>
+                            <textarea
+                              rows={4}
+                              value={buf.visualDescription}
+                              onChange={(e) => setEditBuffers((p) => ({ ...p, [i]: { ...buf, visualDescription: e.target.value } }))}
+                              className="mt-1 w-full bg-[#01040A] border border-white/10 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-[#FF3838] resize-none"
+                            />
+                            <span className={`block mt-1 font-mono tabular-nums ${visualColor}`} aria-live="polite">
+                              {visualLen} / {VISUAL_DESCRIPTION_MAX}
+                            </span>
+                          </label>
+                          <label className="block">
+                            <span className="text-gray-400">Background note</span>
+                            <textarea
+                              rows={2}
+                              value={buf.backgroundNote}
+                              onChange={(e) => setEditBuffers((p) => ({ ...p, [i]: { ...buf, backgroundNote: e.target.value } }))}
+                              className="mt-1 w-full bg-[#01040A] border border-white/10 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-[#FF3838] resize-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-gray-400">Benefits (comma-separated)</span>
+                            <input
+                              value={buf.benefitCallouts.join(", ")}
+                              onChange={(e) =>
+                                setEditBuffers((p) => ({
+                                  ...p,
+                                  [i]: { ...buf, benefitCallouts: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) },
+                                }))
+                              }
+                              className="mt-1 w-full bg-[#01040A] border border-white/10 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-[#FF3838]"
+                            />
+                          </label>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => saveEdit(i)}
+                              disabled={savingIndex === i || visualLen > VISUAL_DESCRIPTION_MAX}
+                              className="flex items-center gap-1.5 bg-[#FF3838] hover:bg-[#FF3838]/90 text-white px-3 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {savingIndex === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                              Save
+                            </button>
+                            <button
+                              onClick={() => cancelEdit(i)}
+                              disabled={savingIndex === i}
+                              className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-gray-300 px-3 py-1.5 rounded text-xs font-medium"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -366,6 +618,12 @@ export function IterationResults({ run }: { run: any }) {
           {iterationStage === "stage_2b_approval" && run.status !== "failed" && (
             <div className="mt-6 border-t border-white/10 pt-4">
               <h3 className="text-white font-medium mb-3">Approve this brief to generate variations</h3>
+              {hasUnsavedEdits && (
+                <div className="mb-3 flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Save or cancel {editingIndices.length} unsaved edit{editingIndices.length === 1 ? "" : "s"} before approving.
+                </div>
+              )}
               <textarea
                 value={approvalNotes}
                 onChange={(e) => setApprovalNotes(e.target.value)}
@@ -376,8 +634,9 @@ export function IterationResults({ run }: { run: any }) {
               <div className="flex gap-3">
                 <button
                   onClick={() => approveBrief.mutate({ runId: run.id, approved: true, notes: approvalNotes || undefined })}
-                  disabled={approveBrief.isPending}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                  disabled={approveBrief.isPending || hasUnsavedEdits}
+                  title={hasUnsavedEdits ? "Save or discard unsaved edits first" : undefined}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {approveBrief.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
                   Approve & Generate

@@ -1,10 +1,89 @@
 import * as db from "../db";
 import { analyzeStaticAd } from "./claude";
 import { pushIterationVariationToClickUp } from "./iterationClickUp";
-import { generateProductAdWithNanoBananaPro, type ImageModel, type NanoBananaProResult } from "./nanoBananaPro";
+import { generateProductAdWithNanoBananaPro, type ImageModel as GeminiImageModel, type NanoBananaProResult } from "./nanoBananaPro";
+import { generateWithOpenAI } from "./openaiImage";
+import type { ImageGenerateOptions } from "./imageGenerator";
+
+export type ImageModel = GeminiImageModel | "openai_gpt_image";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
+import {
+  iterationBriefV1Schema,
+  VISUAL_DESCRIPTION_MAX,
+  type IterationBriefV1,
+  type VariationType as BriefVariationType,
+} from "../../shared/iterationBriefSchema";
 import axios from "axios";
+
+/** Result of brief generation — caller writes briefQualityWarning to the run when true. */
+export interface BriefGenerationResult {
+  brief: string;
+  qualityWarning: boolean;
+}
+
+function stripMarkdownFences(text: string): string {
+  return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+}
+
+function validateBriefJson(text: string): IterationBriefV1 | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const result = iterationBriefV1Schema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
+/** Deterministic fallback when Claude returns invalid JSON twice. Produces a minimal valid v1 brief. */
+function buildFallbackBrief(
+  variationCount: number,
+  variationTypes: string[] | undefined,
+  analysis: string,
+): IterationBriefV1 {
+  const firstHeadlineMatch = analysis.match(/headline[^:]*:\s*["']?([^"'\n]+)["']?/i);
+  const originalHeadline = (firstHeadlineMatch?.[1] || "UPDATE ME").trim().slice(0, 120);
+  const validTypes: BriefVariationType[] = [
+    "headline_only",
+    "background_only",
+    "layout_only",
+    "benefit_callouts_only",
+    "props_only",
+    "talent_swap",
+    "full_remix",
+  ];
+  const defaultType: BriefVariationType = "full_remix";
+  const variations = Array.from({ length: Math.max(1, variationCount) }, (_, i) => {
+    const requested = variationTypes?.[i] ?? variationTypes?.[0];
+    const variationType: BriefVariationType =
+      requested && (validTypes as string[]).includes(requested)
+        ? (requested as BriefVariationType)
+        : defaultType;
+    return {
+      number: i + 1,
+      variationType,
+      angle: "Benefit-Driven",
+      angleDescription: "Fallback variation — please edit before approving.",
+      headline: originalHeadline,
+      subheadline: "",
+      visualDescription: "",
+      backgroundNote: "",
+      benefitCallouts: [],
+    };
+  });
+  return {
+    version: 1,
+    originalHeadline,
+    originalAngle: "",
+    preserveElements: [],
+    targetAudience: "",
+    referenceFxPresent: false,
+    detectedFxTypes: [],
+    variations,
+  };
+}
 
 /**
  * Generate a single variation with timeout + automatic fallback to nano_banana_pro if nano_banana_2 fails.
@@ -32,6 +111,44 @@ async function generateVariationWithFallback(
     }
     throw err;
   }
+}
+
+/**
+ * Route a single variation generation to the right backend (Gemini via Nano Banana
+ * or OpenAI gpt-image-1) based on the model field. Returns a NanoBananaProResult
+ * shape so downstream code stays model-agnostic.
+ */
+type DispatchOptions = Omit<Parameters<typeof generateProductAdWithNanoBananaPro>[0], "model"> & {
+  model?: ImageModel;
+};
+
+async function dispatchVariationGeneration(
+  options: DispatchOptions,
+  variationIndex: number,
+): Promise<NanoBananaProResult> {
+  const label = `Variation ${variationIndex + 1}`;
+  if (options.model === "openai_gpt_image") {
+    const openaiOpts: ImageGenerateOptions = {
+      prompt: options.prompt,
+      controlImageUrl: options.controlImageUrl,
+      productRenderUrl: options.productRenderUrl,
+      personImageUrl: options.personImageUrl,
+      aspectRatio: options.aspectRatio,
+      resolution: options.resolution,
+      useCompositing: options.useCompositing,
+      productPosition: options.productPosition,
+      productScale: options.productScale,
+    };
+    const result = await withTimeout(
+      generateWithOpenAI(openaiOpts),
+      VARIATION_TIMEOUT,
+      `${label} (OpenAI gpt-image-1)`,
+    );
+    return { imageUrl: result.imageUrl, s3Key: result.s3Key };
+  }
+  // Narrow to Gemini models for the Nano Banana path.
+  const geminiModel: GeminiImageModel = options.model === "nano_banana_2" ? "nano_banana_2" : "nano_banana_pro";
+  return generateVariationWithFallback({ ...options, model: geminiModel }, variationIndex);
 }
 
 // ============================================================
@@ -124,7 +241,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     const runSourceType = (run?.iterationSourceType as IterationSourceType) ?? sourceType;
     const runAdaptationMode = run?.iterationAdaptationMode as IterationAdaptationMode | null | undefined;
 
-    const brief = await withTimeout(
+    const briefResult = await withTimeout(
       runSourceType === "competitor_ad"
         ? generateCompetitorIterationBrief(analysis, input.product, productInfoContext, runAdaptationMode ?? "concept", input.foreplayAdBrand)
         : generateIterationBrief(
@@ -139,9 +256,13 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     );
 
     await db.updatePipelineRun(runId, {
-      iterationBrief: brief,
+      iterationBrief: briefResult.brief,
       iterationStage: "stage_2b_approval",
+      briefQualityWarning: briefResult.qualityWarning ? 1 : 0,
     });
+    if (briefResult.qualityWarning) {
+      console.warn(`[Iteration] Stage 2 used fallback brief — user must edit before approval`);
+    }
     console.log(`[Iteration] Stage 2 complete. Paused at approval gate.`);
   } catch (err: any) {
     console.error(`[Iteration] Stage 2 failed:`, err.message);
@@ -178,7 +299,9 @@ export async function runIterationStage3(runId: number, run: any) {
     // Read image model from run config (defaults to Nano Banana Pro for backwards compat)
     const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
     const { MODEL_LABELS } = await import("./nanoBananaPro");
-    console.log(`[Iteration] Using image model: ${MODEL_LABELS[imageModel]}`);
+    const modelLabel =
+      imageModel === "openai_gpt_image" ? "OpenAI gpt-image-1" : MODEL_LABELS[imageModel];
+    console.log(`[Iteration] Using image model: ${modelLabel}`);
 
     // Get product render: use selectedRenderId if set, otherwise fallback to default
     let productRender;
@@ -195,12 +318,40 @@ export async function runIterationStage3(runId: number, run: any) {
       throw new Error(`No product render found for ${product}`);
     }
 
-    // Get person type reference if selected
-    let personImageUrl: string | undefined;
-    if (run.selectedPersonId) {
+    // Resolve person references. Two modes:
+    //  - Custom Per Variation: selectedPersonIds is a JSON array `(number | null)[]` of length N.
+    //    Each slot overrides the person for that variation. null = no person.
+    //  - All Same: selectedPersonId is a scalar applied to every variation.
+    let globalPersonImageUrl: string | undefined;
+    let perVariationPersonUrls: (string | undefined)[] = [];
+    let parsedPersonIds: (number | null)[] = [];
+    if (typeof run.selectedPersonIds === "string" && run.selectedPersonIds.length > 0) {
+      try {
+        const raw = JSON.parse(run.selectedPersonIds);
+        if (Array.isArray(raw)) {
+          parsedPersonIds = raw.map((v) => (typeof v === "number" ? v : null));
+        }
+      } catch {
+        console.warn(`[Iteration] selectedPersonIds is not valid JSON, ignoring`);
+      }
+    }
+    if (parsedPersonIds.length > 0) {
+      const uniqueIds = Array.from(new Set(parsedPersonIds.filter((id): id is number => id != null)));
+      const idToUrl = new Map<number, string>();
+      await Promise.all(
+        uniqueIds.map(async (id) => {
+          const p = await db.getPerson(id);
+          if (p) idToUrl.set(id, p.url);
+          else console.warn(`[Iteration] Per-variation person #${id} not found`);
+        }),
+      );
+      perVariationPersonUrls = parsedPersonIds.map((id) => (id != null ? idToUrl.get(id) : undefined));
+      const firstUrl = perVariationPersonUrls.find((u) => !!u);
+      if (firstUrl) globalPersonImageUrl = firstUrl;
+    } else if (run.selectedPersonId) {
       const person = await db.getPerson(run.selectedPersonId);
       if (person) {
-        personImageUrl = person.url;
+        globalPersonImageUrl = person.url;
         console.log(`[Iteration] Using person type reference: ${person.name}`);
       } else {
         console.warn(`[Iteration] Selected person #${run.selectedPersonId} not found or deleted, proceeding without`);
@@ -228,36 +379,49 @@ export async function runIterationStage3(runId: number, run: any) {
     console.log(`[Iteration] Aspect ratio: ${aspectRatio}`);
     console.log(`[Iteration] Generating ${variationCount} variations`);
 
+    // Structured FX flag + style mode from the run + brief (Day 2 fix for fire/ice slop)
+    const runStyleMode = (run.styleMode as import("../../shared/iterationBriefSchema").StyleMode | null) || undefined;
+    const briefFxPresent = briefData?.referenceFxPresent === true;
+    const briefDetectedFx = Array.isArray(briefData?.detectedFxTypes)
+      ? (briefData.detectedFxTypes as import("../../shared/iterationBriefSchema").DetectedFxType[])
+      : [];
+
     if (briefData?.variations && Array.isArray(briefData.variations)) {
       // Generate variations concurrently (2 at a time to avoid API rate limits)
       const tasks = Array.from({ length: variationCount }, (_, i) => async () => {
         const v = briefData.variations[i] || {};
+        // Per-variation person override > global person > none
+        const variationPersonUrl = perVariationPersonUrls[i] ?? globalPersonImageUrl;
 
         const basePrompt = buildReferenceBasedPrompt({
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: v.subheadline || undefined,
           productName: `ONEST Health ${product}`,
-          backgroundStyleDescription: v.backgroundNote || "Dramatic lighting with premium aesthetic",
+          visualDescription: v.visualDescription || undefined,
+          backgroundStyleDescription: v.backgroundNote || undefined,
+          referenceFxPresent: briefFxPresent,
+          detectedFxTypes: briefDetectedFx,
+          styleMode: runStyleMode,
           aspectRatio: aspectRatio as any,
           targetAudience: run.selectedAudience || briefData.targetAudience || undefined,
-          hasPersonReference: !!personImageUrl,
+          hasPersonReference: !!variationPersonUrl,
         });
 
         const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
 
         console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
 
-        const result = await generateVariationWithFallback({
+        const result = await dispatchVariationGeneration({
           prompt: geminiPrompt,
           controlImageUrl: sourceUrl,
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
-          useCompositing: false,
+          useCompositing: true,
           productPosition: "center",
           productScale: 0.45,
-          personImageUrl,
+          personImageUrl: variationPersonUrl,
         }, i);
 
         return {
@@ -304,14 +468,14 @@ export async function runIterationStage3(runId: number, run: any) {
           aspectRatio: aspectRatio as any,
         });
 
-        const result = await generateVariationWithFallback({
+        const result = await dispatchVariationGeneration({
           prompt: fallbackPrompt,
           controlImageUrl: sourceUrl,
           productRenderUrl: productRender.url,
           aspectRatio: aspectRatio as any,
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
-          useCompositing: false,
+          useCompositing: true,
           productPosition: "center",
           productScale: 0.45,
         }, i);
@@ -467,11 +631,21 @@ export async function regenerateIterationVariation(
   const aspectRatio = run.aspectRatio || "1:1";
   const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
 
+  const regenStyleMode = (run.styleMode as import("../../shared/iterationBriefSchema").StyleMode | null) || undefined;
+  const regenFxPresent = briefData?.referenceFxPresent === true;
+  const regenDetectedFx = Array.isArray(briefData?.detectedFxTypes)
+    ? (briefData.detectedFxTypes as import("../../shared/iterationBriefSchema").DetectedFxType[])
+    : [];
+
   const geminiPrompt = buildReferenceBasedPrompt({
     headline,
     subheadline: subheadline || undefined,
     productName: `ONEST Health ${product}`,
+    visualDescription: v.visualDescription || undefined,
     backgroundStyleDescription: bgPrompt,
+    referenceFxPresent: regenFxPresent,
+    detectedFxTypes: regenDetectedFx,
+    styleMode: regenStyleMode,
     aspectRatio: aspectRatio as any,
     targetAudience: run.selectedAudience || briefData?.targetAudience || "fitness-conscious adults",
   });
@@ -491,16 +665,19 @@ export async function regenerateIterationVariation(
     console.log(`[Iteration] Full regeneration for variation ${variationIndex + 1}`);
   }
 
-  const result = await generateProductAdWithNanoBananaPro({
-    prompt: geminiPrompt,
-    controlImageUrl,
-    productRenderUrl: productRender.url,
-    aspectRatio: aspectRatio as any,
-    model: imageModel,
-    useCompositing: false,
-    productPosition: "center",
-    productScale: 0.45,
-  });
+  const result = await dispatchVariationGeneration(
+    {
+      prompt: geminiPrompt,
+      controlImageUrl,
+      productRenderUrl: productRender.url,
+      aspectRatio: aspectRatio as any,
+      model: imageModel,
+      useCompositing: true,
+      productPosition: "center",
+      productScale: 0.45,
+    },
+    variationIndex,
+  );
 
   const finalUrl = result.imageUrl;
 
@@ -710,8 +887,10 @@ Output a structured analysis so we can brief image generation to MATCH this styl
 }
 
 /**
- * Generate an iteration brief — 3 new copy angles that keep the visual DNA
- * but test different headlines, subheadlines, and angles.
+ * Generate an iteration brief — N new copy angles that keep the visual DNA
+ * but test different headlines, subheadlines, and visual descriptions.
+ * Returns a valid v1 brief. Retries once on malformed JSON, then falls back
+ * to a deterministic skeleton with qualityWarning=true.
  */
 async function generateIterationBrief(
   analysis: string,
@@ -719,8 +898,14 @@ async function generateIterationBrief(
   productInfo: string,
   variationCount: number = 3,
   variationTypes?: string[]
-): Promise<string> {
+): Promise<BriefGenerationResult> {
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
+
+IMPORTANT VISUAL RULE:
+- The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
+- Only include dramatic visual effects (fire, smoke, lightning, ice, explosions, glows) in visualDescription or backgroundNote if the REFERENCE AD'S ANALYSIS above explicitly describes them. If the reference is clean/minimal, keep the variations clean/minimal.
+- Set referenceFxPresent to true ONLY if the analysis text clearly says the reference uses dramatic FX. Otherwise false.
+- Populate detectedFxTypes only with FX types the analysis actually mentions. Empty array or ["none"] if the reference has none.
 
 Return ONLY valid JSON. No markdown, no code blocks, no explanation.`;
 
@@ -817,12 +1002,15 @@ The ${variationCount} variations should test DIFFERENT angles across these categ
 - Transformation (before to after)
 - Urgency/scarcity (limited time, don't miss out)
 
-Return JSON in this exact format with ${variationCount} variations:
+Return JSON in this EXACT format with ${variationCount} variations. All fields required:
 {
+  "version": 1,
   "originalHeadline": "exact headline from the winning ad",
   "originalAngle": "description of the original ad's angle",
   "preserveElements": ["list of visual elements to keep exactly the same"],
   "targetAudience": "description of target audience",
+  "referenceFxPresent": false,
+  "detectedFxTypes": [],
   "variations": [
     {
       "number": 1,
@@ -831,40 +1019,58 @@ Return JSON in this exact format with ${variationCount} variations:
       "angleDescription": "Why this angle works and what it tests",
       "headline": "NEW HEADLINE TEXT (3-8 words, all caps)",
       "subheadline": "Supporting subheadline (5-12 words)",
-      "benefitCallouts": ["Benefit 1", "Benefit 2", "Benefit 3"],
-      "backgroundNote": "Specific instructions for background/layout/props based on variation type"
+      "visualDescription": "3-4 concrete sentences describing composition, subject, lighting, props, background, typography. MAX ${VISUAL_DESCRIPTION_MAX} CHARACTERS. No dramatic FX unless reference has them.",
+      "backgroundNote": "One-line specific instruction for background/layout/props based on variation type",
+      "benefitCallouts": ["Benefit 1", "Benefit 2", "Benefit 3"]
     }
     ... (generate ${variationCount} total variations, distributed across selected types)
   ]
-}`;
+}
 
-  const body = {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
-  };
+Set referenceFxPresent to true ONLY if the analysis clearly describes fire/smoke/lightning/ice/explosion/glow in the reference ad. Otherwise false.
+Populate detectedFxTypes only with FX types the analysis mentions (fire, smoke, lightning, ice, explosion, glow). Use ["none"] or [] if the reference has no dramatic effects.
+visualDescription MUST be ${VISUAL_DESCRIPTION_MAX} characters or fewer.`;
 
-  const res = await claudeClient.post("/messages", body);
-  const resContent = res.data?.content;
-  let text = "";
-  if (Array.isArray(resContent)) {
-    text = resContent.map((c: any) => c.text || "").join("\n");
-  } else {
-    text = resContent?.text || JSON.stringify(resContent);
+  async function callClaude(userContent: string): Promise<string> {
+    const body = {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      system,
+      messages: [{ role: "user", content: userContent }],
+    };
+    const res = await claudeClient.post("/messages", body);
+    const resContent = res.data?.content;
+    const text = Array.isArray(resContent)
+      ? resContent.map((c: any) => c.text || "").join("\n")
+      : resContent?.text || JSON.stringify(resContent);
+    return stripMarkdownFences(text);
   }
 
-  // Clean up any markdown code blocks
-  text = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  const firstText = await callClaude(userPrompt);
+  const firstValid = validateBriefJson(firstText);
+  if (firstValid) {
+    return { brief: JSON.stringify(firstValid), qualityWarning: false };
+  }
+  console.warn("[Iteration] Brief-gen first attempt invalid, retrying with stricter prompt");
 
-  // Validate it's valid JSON — fail explicitly so the caller can retry or surface the error
+  const retryPrompt = `${userPrompt}
+
+Your previous response did not match the required schema. Common failures: missing "version": 1, missing referenceFxPresent/detectedFxTypes, missing visualDescription on one or more variations, visualDescription over ${VISUAL_DESCRIPTION_MAX} characters, invalid variationType value. Return STRICT JSON matching every field exactly as specified above. Every variation needs every field. Do not omit anything.`;
+
+  let secondText = "";
   try {
-    JSON.parse(text);
-  } catch {
-    throw new Error(`[Iteration] Claude returned invalid JSON for brief. Raw response: ${text.substring(0, 500)}`);
+    secondText = await callClaude(retryPrompt);
+  } catch (err: any) {
+    console.warn("[Iteration] Brief-gen retry call failed:", err?.message);
+  }
+  const secondValid = secondText ? validateBriefJson(secondText) : null;
+  if (secondValid) {
+    return { brief: JSON.stringify(secondValid), qualityWarning: false };
   }
 
-  return text;
+  console.error("[Iteration] Brief-gen failed validation twice, using deterministic fallback");
+  const fallback = buildFallbackBrief(variationCount, variationTypes, analysis);
+  return { brief: JSON.stringify(fallback), qualityWarning: true };
 }
 
 /**
@@ -878,9 +1084,18 @@ async function generateCompetitorIterationBrief(
   productInfo: string,
   adaptationMode: IterationAdaptationMode,
   competitorBrand?: string
-): Promise<string> {
+): Promise<BriefGenerationResult> {
   const isConcept = adaptationMode === "concept";
-  const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."} Return ONLY valid JSON. No markdown, no code blocks.`;
+  const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."}
+
+IMPORTANT VISUAL RULE:
+- The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
+- Only include dramatic visual effects (fire, smoke, lightning, ice, explosions, glows) in visualDescription/backgroundNote if the competitor analysis above explicitly describes them.
+- Set referenceFxPresent to true ONLY if the analysis clearly describes FX in the reference.
+
+Return ONLY valid JSON. No markdown, no code blocks.`;
+
+  const variationCount = 3;
 
   const userPrompt = `Based on this analysis of a COMPETITOR ad (${competitorBrand || "other brand"}):
 
@@ -888,46 +1103,70 @@ ${analysis}
 
 ${productInfo ? `\nONEST Product Information for ${product}:\n${productInfo}` : ""}
 
-Generate an iteration brief with 3 variations for ONEST Health's ${product}.
-${isConcept ? "Each variation should ADAPT the competitor's concept/angle for ONEST — our visual style, our messaging, our product. Test different ways to execute the same conceptual hook." : "Each variation should REPLICATE the competitor's visual style (layout, colours, typography, mood) but with ONEST product and ONEST-only copy. Test different headline/angle within that style."}
+Generate an iteration brief with ${variationCount} variations for ONEST Health's ${product}.
+${isConcept ? "Each variation should ADAPT the competitor's concept/angle for ONEST — our visual style, our messaging, our product." : "Each variation should REPLICATE the competitor's visual style (layout, colours, typography, mood) but with ONEST product and ONEST-only copy."}
 
-Return JSON in this exact format:
+Return JSON in this EXACT format:
 {
+  "version": 1,
   "originalHeadline": "headline or concept from competitor ad",
   "originalAngle": "description of competitor's angle",
   "preserveElements": ["elements we are preserving or adapting"],
   "targetAudience": "target audience",
+  "referenceFxPresent": false,
+  "detectedFxTypes": [],
   "variations": [
     {
       "number": 1,
+      "variationType": "full_remix",
       "angle": "Angle name",
       "angleDescription": "Why this angle",
       "headline": "ONEST HEADLINE (3-8 words, all caps)",
       "subheadline": "Supporting subheadline",
-      "benefitCallouts": ["Benefit 1", "Benefit 2"],
-      "backgroundNote": "Background/style note for this variation"
+      "visualDescription": "3-4 concrete sentences on composition, subject, lighting, props, background. MAX ${VISUAL_DESCRIPTION_MAX} characters.",
+      "backgroundNote": "One-line background/style note",
+      "benefitCallouts": ["Benefit 1", "Benefit 2"]
     },
     { "number": 2, ... },
     { "number": 3, ... }
   ]
-}`;
+}
 
-  const res = await claudeClient.post("/messages", {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
-  });
-  let text = "";
-  const resContent = res.data?.content;
-  if (Array.isArray(resContent)) text = resContent.map((c: any) => c.text || "").join("\n");
-  else text = resContent?.text || JSON.stringify(resContent);
-  text = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  try {
-    JSON.parse(text);
-  } catch {
-    text = JSON.stringify({ raw: text, variations: [] });
+visualDescription MUST be ${VISUAL_DESCRIPTION_MAX} characters or fewer. Every variation needs every field.`;
+
+  async function callClaude(userContent: string): Promise<string> {
+    const res = await claudeClient.post("/messages", {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      system,
+      messages: [{ role: "user", content: userContent }],
+    });
+    const resContent = res.data?.content;
+    const text = Array.isArray(resContent)
+      ? resContent.map((c: any) => c.text || "").join("\n")
+      : resContent?.text || JSON.stringify(resContent);
+    return stripMarkdownFences(text);
   }
-  return text;
+
+  const firstText = await callClaude(userPrompt);
+  const firstValid = validateBriefJson(firstText);
+  if (firstValid) return { brief: JSON.stringify(firstValid), qualityWarning: false };
+
+  console.warn("[Iteration] Competitor brief-gen first attempt invalid, retrying");
+  const retryPrompt = `${userPrompt}
+
+Your previous response did not match the schema. Return strict JSON with every field present, visualDescription under ${VISUAL_DESCRIPTION_MAX} chars, and version: 1.`;
+  let secondText = "";
+  try {
+    secondText = await callClaude(retryPrompt);
+  } catch (err: any) {
+    console.warn("[Iteration] Competitor brief-gen retry failed:", err?.message);
+  }
+  const secondValid = secondText ? validateBriefJson(secondText) : null;
+  if (secondValid) return { brief: JSON.stringify(secondValid), qualityWarning: false };
+
+  console.error("[Iteration] Competitor brief-gen failed twice, using fallback");
+  const fallback = buildFallbackBrief(variationCount, undefined, analysis);
+  return { brief: JSON.stringify(fallback), qualityWarning: true };
 }
 

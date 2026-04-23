@@ -49,7 +49,7 @@ async function generateStaticAdVariationsWithGemini(
         controlImageUrl: referenceImageUrl || undefined,
         productRenderUrl: productRender.url,
         aspectRatio: "1:1",
-        useCompositing: false,
+        useCompositing: true,
         productPosition: "center",
         productScale: 0.45,
       }),

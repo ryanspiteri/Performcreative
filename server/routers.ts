@@ -21,6 +21,7 @@ import { ENV } from "./_core/env";
 import { SignJWT } from "jose";
 import { storagePut } from "./storage";
 import { ACTIVE_PRODUCTS } from "../drizzle/schema";
+import { iterationBriefV1Schema } from "../shared/iterationBriefSchema";
 import { canvaRouter } from "./routers/canva";
 import { metaRouter } from "./routers/meta";
 import { organicRouter } from "./routers/organic";
@@ -1014,14 +1015,19 @@ Return JSON in this exact format:
         foreplayAdId: z.string().optional(),
         foreplayAdTitle: z.string().optional(),
         foreplayAdBrand: z.string().optional(),
+        /** @deprecated — Risk Level removed from UI. Input accepted for backward compat, not persisted. */
         creativityLevel: z.enum(["SAFE", "BOLD", "WILD"]).optional(),
+        styleMode: z.enum(["MATCH_REFERENCE", "EVOLVE_REFERENCE", "DEPART_FROM_REFERENCE"]).optional(),
+        adAngle: z.enum(["auto", "claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"]).optional(),
         variationTypes: z.array(z.enum(["headline_only", "background_only", "layout_only", "benefit_callouts_only", "props_only", "talent_swap", "full_remix"])).optional(),
         variationCount: z.number().min(1).max(50).optional(),
         aspectRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]).optional(),
-        imageModel: z.enum(["nano_banana_pro", "nano_banana_2"]).optional(),
+        imageModel: z.enum(["nano_banana_pro", "nano_banana_2", "openai_gpt_image"]).optional(),
         selectedRenderId: z.number().optional(),
         selectedFlavour: z.string().optional(),
         selectedPersonId: z.number().optional(),
+        /** Per-variation person overrides (Custom Per Variation mode). null = no person for that variation. */
+        selectedPersonIds: z.array(z.number().nullable()).optional(),
         selectedAudience: z.string().optional(),
         resolution: z.enum(["2K", "4K"]).optional(),
         // Provenance — set when iteration is triggered from a winner via
@@ -1068,14 +1074,24 @@ Return JSON in this exact format:
           iterationStage: "stage_1_analysis",
           iterationSourceType: sourceType,
           iterationAdaptationMode: sourceType === "competitor_ad" ? input.adaptationMode ?? null : null,
-          creativityLevel: input.creativityLevel || "BOLD",
+          creativityLevel: "BOLD", // legacy column, kept for backward-compat reads; Risk Level cut in UI
+          styleMode: input.styleMode ?? "EVOLVE_REFERENCE",
+          adAngle: input.adAngle ?? "auto",
           aspectRatio: input.aspectRatio || "1:1",
           variationTypes: input.variationTypes ? JSON.stringify(input.variationTypes) : null,
           variationCount: input.variationCount || 3,
           imageModel: input.imageModel || "nano_banana_pro",
           selectedRenderId: input.selectedRenderId ?? null,
           selectedFlavour: input.selectedFlavour ?? null,
-          selectedPersonId: input.selectedPersonId ?? null,
+          // Legacy scalar: populated with first non-null from selectedPersonIds if present, else input.selectedPersonId
+          selectedPersonId:
+            input.selectedPersonIds?.find((id) => id != null) ??
+            input.selectedPersonId ??
+            null,
+          // New plural: JSON-encoded array of (number | null) for Custom Per Variation
+          selectedPersonIds: input.selectedPersonIds
+            ? JSON.stringify(input.selectedPersonIds)
+            : null,
           selectedAudience: input.selectedAudience ?? null,
           resolution: input.resolution ?? "2K",
           // Winner provenance (added for winner → iteration handoff).
@@ -1106,7 +1122,9 @@ Return JSON in this exact format:
           await db.updatePipelineRun(input.runId, {
             iterationStage: "stage_3_generation",
           });
-          runIterationStage3(input.runId, run).catch(err => {
+          // Re-read the run so Stage 3 sees any brief edits made via updateIterationBrief.
+          const freshRun = await db.getPipelineRun(input.runId);
+          runIterationStage3(input.runId, freshRun ?? run).catch(err => {
             console.error("[Pipeline] Iteration stage 3 failed:", err);
             db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
           });
@@ -1118,6 +1136,30 @@ Return JSON in this exact format:
           });
         }
 
+        return { success: true };
+      }),
+
+    // Save user edits to the iteration brief during the stage_2b_approval gate.
+    // Refuses to write if the run has moved past approval (race guard).
+    updateIterationBrief: protectedProcedure
+      .input(z.object({
+        runId: z.number(),
+        brief: iterationBriefV1Schema,
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.iterationStage !== "stage_2b_approval") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Brief can only be edited before approval. This run is already in stage: " + run.iterationStage,
+          });
+        }
+        await db.updatePipelineRun(input.runId, {
+          iterationBrief: JSON.stringify(input.brief),
+          // User edited = explicitly acknowledged; clear the fallback warning.
+          briefQualityWarning: 0,
+        });
         return { success: true };
       }),
 
