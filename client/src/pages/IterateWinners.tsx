@@ -8,10 +8,27 @@ import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 const AUDIENCE_PRESETS = ["Gym-goers", "Busy professionals", "Athletes", "Health-conscious parents", "Biohackers", "Weight loss seekers"];
 const ANGLE_OPTIONS = ["front", "side", "45-degree", "top-down", "back"];
 
-type CreativityLevel = "SAFE" | "BOLD" | "WILD";
 type VariationType = "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix";
 type AspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
 type ImageModel = "nano_banana_pro" | "nano_banana_2";
+type StyleMode = "MATCH_REFERENCE" | "EVOLVE_REFERENCE" | "DEPART_FROM_REFERENCE";
+type AdAngle = "auto" | "claim_led" | "before_after" | "testimonial" | "ugc_organic" | "product_hero" | "lifestyle";
+
+const AD_ANGLE_OPTIONS: { value: AdAngle; label: string; desc: string }[] = [
+  { value: "auto", label: "Auto", desc: "Claude picks from the winning ad" },
+  { value: "claim_led", label: "Claim-Led", desc: "Bold promise, product hero" },
+  { value: "before_after", label: "Before / After", desc: "Transformation framing" },
+  { value: "testimonial", label: "Testimonial", desc: "First-person social proof" },
+  { value: "ugc_organic", label: "UGC / Organic", desc: "Unpolished, real-user feel" },
+  { value: "product_hero", label: "Product Hero", desc: "Product as star, clean" },
+  { value: "lifestyle", label: "Lifestyle", desc: "Scene or setting with person" },
+];
+
+const STYLE_MODE_OPTIONS: { value: StyleMode; label: string; desc: string }[] = [
+  { value: "MATCH_REFERENCE", label: "Match", desc: "Hug the reference tightly" },
+  { value: "EVOLVE_REFERENCE", label: "Evolve", desc: "Vary only what the brief calls for" },
+  { value: "DEPART_FROM_REFERENCE", label: "Depart", desc: "Reinvent composition and props" },
+];
 type SourceType = "own_ad" | "competitor_ad";
 type AdaptationMode = "concept" | "style";
 
@@ -34,7 +51,8 @@ export default function IterateWinners() {
   const [uploadedImageName, setUploadedImageName] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [runId, setRunId] = useState<number | null>(null);
-  const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>("BOLD");
+  const [styleMode, setStyleMode] = useState<StyleMode>("EVOLVE_REFERENCE");
+  const [adAngle, setAdAngle] = useState<AdAngle>("auto");
   const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Legacy single selection
   const [variationCount, setVariationCount] = useState(5);
   const [perVariationStrategies, setPerVariationStrategies] = useState<VariationType[]>(Array(5).fill('full_remix'));
@@ -266,7 +284,8 @@ export default function IterateWinners() {
           foreplayAdTitle: selectedCompetitor?.title,
           foreplayAdBrand: selectedCompetitor?.brandName,
         }),
-        creativityLevel,
+        styleMode,
+        adAngle,
         variationTypes: usePerVariationMode ? perVariationStrategies : [variationType],
         variationCount,
         aspectRatio,
@@ -678,39 +697,55 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* Risk Level (renamed from Creativity) */}
+          {/* Ad Angle — what format of ad Claude should write */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Risk Level</label>
+            <label className="block text-sm font-medium text-gray-300 mb-3">Ad Angle</label>
             <div className="bg-white/5 rounded-xl p-6">
-              <div className="flex gap-2 mb-4">
-                {(['SAFE', 'BOLD', 'WILD'] as CreativityLevel[]).map((level) => (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {AD_ANGLE_OPTIONS.map((opt) => (
                   <button
-                    key={level}
-                    onClick={() => setCreativityLevel(level)}
-                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white/5 ${
-                      creativityLevel === level
-                        ? level === 'SAFE'
-                          ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 focus:ring-blue-400"
-                          : level === 'BOLD'
-                          ? "bg-[#A78BFA] text-white shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
-                          : "bg-red-500 text-white shadow-lg shadow-red-500/20 focus:ring-red-400"
-                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
+                    key={opt.value}
+                    onClick={() => setAdAngle(opt.value)}
+                    role="radio"
+                    aria-checked={adAngle === opt.value}
+                    className={`px-3 py-2 rounded-lg text-left border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                      adAngle === opt.value
+                        ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
                     }`}
                   >
-                    {level}
+                    <div className="font-semibold text-xs">{opt.label}</div>
+                    <div className="text-[11px] opacity-75 mt-0.5">{opt.desc}</div>
                   </button>
                 ))}
               </div>
-              <div className="text-sm text-gray-300 leading-relaxed">
-                {creativityLevel === 'SAFE' && (
-                  <p><span className="font-semibold text-blue-400">SAFE:</span> Minor headline tweaks, same visual style. Low risk, proven patterns. Example: "30 Days to Shredded" → "Transform in 30 Days"</p>
-                )}
-                {creativityLevel === 'BOLD' && (
-                  <p><span className="font-semibold text-purple-400">BOLD:</span> New headlines + background variations. Moderate risk, higher upside. Example: Fire background → Ice/transformation theme. <span className="text-purple-300">(Recommended)</span></p>
-                )}
-                {creativityLevel === 'WILD' && (
-                  <p><span className="font-semibold text-red-400">WILD:</span> Completely different concepts. High risk, moonshot potential. Example: Product-focused → Lifestyle/aspirational scene. May polarise but deeply resonate.</p>
-                )}
+              {adAngle === "auto" && (
+                <p className="text-[11px] text-gray-500 italic mt-3">Claude will infer the angle from the winning ad's structure.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Style Mode — how tightly to hug the reference */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Style Fidelity</label>
+            <div className="bg-white/5 rounded-xl p-6">
+              <div className="flex gap-2">
+                {STYLE_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setStyleMode(opt.value)}
+                    role="radio"
+                    aria-checked={styleMode === opt.value}
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                      styleMode === opt.value
+                        ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
+                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
+                    }`}
+                  >
+                    <div className="font-semibold">{opt.label}</div>
+                    <div className="text-[11px] opacity-75 mt-0.5">{opt.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -975,8 +1010,16 @@ export default function IterateWinners() {
                 <span className="text-white font-medium capitalize">{variationType.replace('_', ' ')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Creativity Level:</span>
-                <span className="text-white font-medium">{creativityLevel}</span>
+                <span className="text-gray-400">Ad Angle:</span>
+                <span className="text-white font-medium">{AD_ANGLE_OPTIONS.find(o => o.value === adAngle)?.label ?? adAngle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Style Fidelity:</span>
+                <span className="text-white font-medium">{STYLE_MODE_OPTIONS.find(o => o.value === styleMode)?.label ?? styleMode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Image Model:</span>
+                <span className="text-white font-medium">{imageModel === 'nano_banana_2' ? 'Nano Banana 2' : 'Nano Banana Pro'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Aspect Ratio:</span>

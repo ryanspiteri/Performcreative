@@ -1015,7 +1015,10 @@ Return JSON in this exact format:
         foreplayAdId: z.string().optional(),
         foreplayAdTitle: z.string().optional(),
         foreplayAdBrand: z.string().optional(),
+        /** @deprecated — Risk Level removed from UI. Input accepted for backward compat, not persisted. */
         creativityLevel: z.enum(["SAFE", "BOLD", "WILD"]).optional(),
+        styleMode: z.enum(["MATCH_REFERENCE", "EVOLVE_REFERENCE", "DEPART_FROM_REFERENCE"]).optional(),
+        adAngle: z.enum(["auto", "claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"]).optional(),
         variationTypes: z.array(z.enum(["headline_only", "background_only", "layout_only", "benefit_callouts_only", "props_only", "talent_swap", "full_remix"])).optional(),
         variationCount: z.number().min(1).max(50).optional(),
         aspectRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]).optional(),
@@ -1069,7 +1072,9 @@ Return JSON in this exact format:
           iterationStage: "stage_1_analysis",
           iterationSourceType: sourceType,
           iterationAdaptationMode: sourceType === "competitor_ad" ? input.adaptationMode ?? null : null,
-          creativityLevel: input.creativityLevel || "BOLD",
+          creativityLevel: "BOLD", // legacy column, kept for backward-compat reads; Risk Level cut in UI
+          styleMode: input.styleMode ?? "EVOLVE_REFERENCE",
+          adAngle: input.adAngle ?? "auto",
           aspectRatio: input.aspectRatio || "1:1",
           variationTypes: input.variationTypes ? JSON.stringify(input.variationTypes) : null,
           variationCount: input.variationCount || 3,
