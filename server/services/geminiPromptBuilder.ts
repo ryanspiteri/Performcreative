@@ -20,6 +20,10 @@ export interface PromptBuildOptions {
   headline: string;
   subheadline?: string;
   productName: string;
+  /** Short product key matching ACTIVE_PRODUCTS (e.g. "Hyperburn"). Used to look up the label spec. */
+  productKey?: string;
+  /** Selected flavour for label spec injection (e.g. "Mango"). Undefined when "Auto (Default)". */
+  flavour?: string;
   /** @deprecated prefer visualDescription on the brief. Kept for fallback callers. */
   backgroundStyleDescription?: string;
   /** App-owned structured description of the variation's visual intent. Max 400 chars in v1 schema. */
@@ -33,6 +37,68 @@ export interface PromptBuildOptions {
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
   targetAudience?: string;
   hasPersonReference?: boolean;
+}
+
+// Label specs lift the tub description out of abstract ("preserve label, colour,
+// cap, branding") into enumerated elements Gemini can match 1:1 against Image 2.
+// Technique borrowed from a prompt that's been shown to reliably preserve the
+// Hyperburn label across stylised scenes: name the wordmark, the subtext, the
+// flavour strip, and the logo explicitly so the model can't hallucinate them.
+//
+// Keys match ACTIVE_PRODUCTS in drizzle/schema.ts. Products not in the map fall
+// back to the generic preservation language. Add new products here as we dial
+// them in — start narrow (Hyperburn is the first product the hypothesis targets).
+const PRODUCT_LABEL_SPECS: Record<string, (flavour?: string) => string> = {
+  Hyperburn: (flavour) => {
+    const flavourClause = flavour
+      ? `the "${flavour.toUpperCase()}" flavour label strip across the front`
+      : `the flavour label strip across the front (exactly as shown in Image 2)`;
+    return [
+      `matte black tub with an orange graphic swoosh`,
+      `bold white "HYPERBURN" wordmark`,
+      `"ELITE THERMOGENIC" subtext beneath the wordmark`,
+      flavourClause,
+      `the ONEST "Z" logo positioned top-left`,
+    ].join(", ");
+  },
+};
+
+// Keywords that mean "this scene is stylised / non-photoreal." When ANY appear
+// in the brief's visualDescription, we inject the product-is-photorealistic
+// carve-out. Without it, Gemini defaults to stylising everything including
+// the tub — which destroys small label text ("ELITE THERMOGENIC", flavour
+// strips) because stylised small text is exactly Gemini's weakest output mode.
+const STYLISED_SCENE_KEYWORDS = [
+  "animated", "animation",
+  "cartoon", "cartoony",
+  "3d rendered", "3d-rendered", "cgi",
+  "illustrated", "illustration",
+  "painted", "painting",
+  "hand-drawn", "hand drawn",
+  "pixar", "disney", "studio ghibli",
+  "stylised", "stylized",
+  "anime", "manga",
+  "sketch", "sketched",
+  "watercolor", "watercolour",
+];
+
+function isStylisedScene(visualDescription: string | undefined): boolean {
+  if (!visualDescription) return false;
+  const lower = visualDescription.toLowerCase();
+  return STYLISED_SCENE_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+function productPreservationBlock(productKey: string | undefined, flavour: string | undefined): string {
+  const specFn = productKey ? PRODUCT_LABEL_SPECS[productKey] : undefined;
+  if (specFn) {
+    return `The ONEST ${productKey} tub in Image 2 is the ONLY acceptable product in your output. It MUST match Image 2 exactly — ${specFn(flavour)}. Do NOT redesign, restyle, reinterpret, or hallucinate any label element. Every word on the packaging, the colour, the graphic, and the logo must appear in your output exactly as they appear in Image 2. If you cannot preserve them faithfully, fail rather than fabricate. The product shown in Image 1 belongs to a different brand — treat it as invisible when deciding what product to render.`;
+  }
+  return `The ONEST bottle in Image 2 is the ONLY acceptable product in your output. Do NOT generate, redraw, restyle, or replace it. Preserve its label, colour, cap, and branding pixel-accurate. If you cannot, fail rather than fabricate. The product shown in Image 1 belongs to a different brand — treat it as invisible when deciding what product to render.`;
+}
+
+function stylisedSceneCarveoutBlock(): string {
+  return `=== STYLE CARVE-OUT — PRODUCT STAYS PHOTOREALISTIC ===
+The scene you are generating is stylised (animated / illustrated / rendered / non-photoreal). The PRODUCT in Image 2 is the ONE element that MUST remain photorealistic. Render the scene, character, environment, and props in the requested style, but composite the product tub in with unchanged photorealism — as if an actual product photograph was placed into the stylised scene. Do NOT stylise, cartoonify, or reinterpret the tub's label, wordmark, subtext, flavour strip, logo, or packaging material. Apply only lighting and shadow appropriate to the scene; everything else about the product must be 1:1 with Image 2.`;
 }
 
 function styleModeBlock(styleMode: StyleMode | undefined): string {
@@ -69,6 +135,8 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
     headline,
     subheadline,
     productName,
+    productKey,
+    flavour,
     backgroundStyleDescription,
     visualDescription,
     referenceFxPresent,
@@ -84,8 +152,12 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
         ? backgroundStyleDescription.trim()
         : "Clean, premium composition with the product as the clear focal point. Respect the reference ad's style.");
 
+  const stylised = isStylisedScene(visualDescription);
+  const productBlock = productPreservationBlock(productKey, flavour);
+  const carveout = stylised ? `\n${stylisedSceneCarveoutBlock()}\n` : "";
+
   const prompt = `HARD RULE — PRODUCT SOURCE (read before anything else):
-The ONEST bottle in Image 2 is the ONLY acceptable product in your output. Do NOT generate, redraw, restyle, or replace it. Preserve its label, colour, cap, and branding pixel-accurate. If you cannot, fail rather than fabricate. The product shown in Image 1 belongs to a different brand — treat it as invisible when deciding what product to render.
+${productBlock}
 
 You are creating a premium supplement advertisement image for paid social media advertising (Meta/TikTok).
 
@@ -94,7 +166,7 @@ I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
 - Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output.${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}
 
 ${styleModeBlock(styleMode)}
-
+${carveout}
 === NEW COPY FOR THIS VERSION ===
 Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
 
@@ -106,11 +178,11 @@ ${leadingVisual}
 ${fxGuardrailBlock(referenceFxPresent, detectedFxTypes)}
 
 === PRODUCT INTEGRATION ===
-Integrate the ${productName} bottle (from Image 2) into the scene following Image 1's approach:
+Integrate the ${productName} tub (from Image 2) into the scene following Image 1's approach:
 - Floating vs grounded — match Image 1.
-- Lighting, shadows, reflections — apply to the ONEST bottle similarly to how Image 1 treats its product.
+- Lighting, shadows, reflections — apply to the ONEST tub similarly to how Image 1 treats its product.
 - Position (centre, left, right, offset) and prominence — match Image 1.
-CRITICAL: The product label and branding on the ONEST bottle (Image 2) must be preserved and clearly visible. Do not obscure, alter, or redraw the product's existing design. Do not invent a new product — use the exact bottle from Image 2.
+CRITICAL: Render the tub as if it was composited into the scene from a real product photograph${stylised ? ' — NOT stylised, NOT redesigned, NOT reinterpreted, even though the rest of the scene is stylised' : ''}. Every wordmark, subtext line, flavour strip, colour, and logo element on the packaging must appear in your output EXACTLY as it appears in Image 2. Do not obscure, alter, redraw, or hallucinate any label element. Do not invent a new product.
 
 === COMPOSITION ===
 - Aspect ratio: ${aspectRatio}

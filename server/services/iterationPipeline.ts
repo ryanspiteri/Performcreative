@@ -397,6 +397,8 @@ export async function runIterationStage3(runId: number, run: any) {
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
           subheadline: v.subheadline || undefined,
           productName: `ONEST Health ${product}`,
+          productKey: product,
+          flavour: run.selectedFlavour || undefined,
           visualDescription: v.visualDescription || undefined,
           backgroundStyleDescription: v.backgroundNote || undefined,
           referenceFxPresent: briefFxPresent,
@@ -464,6 +466,8 @@ export async function runIterationStage3(runId: number, run: any) {
         const fallbackPrompt = buildReferenceBasedPrompt({
           headline,
           productName: `ONEST Health ${product}`,
+          productKey: product,
+          flavour: run.selectedFlavour || undefined,
           backgroundStyleDescription: bg,
           aspectRatio: aspectRatio as any,
         });
