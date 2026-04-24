@@ -126,6 +126,16 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  code,
+  pre,
+  kbd,
+  samp,
+  .font-mono {
+    font-family: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
