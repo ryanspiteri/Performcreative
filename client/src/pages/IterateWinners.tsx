@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info, X } from "lucide-react";
+import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info, X, Zap, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 
@@ -328,12 +328,12 @@ export default function IterateWinners() {
   };
 
   return (
-    <div className="min-h-screen bg-[#01040A] p-6">
+    <div className="min-h-screen bg-[#0A0B0D] p-6">
       {/* Header */}
       <div className="max-w-4xl mx-auto mb-8">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-[#FF3838] flex items-center justify-center">
               <RefreshCw className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -353,7 +353,7 @@ export default function IterateWinners() {
         <section
           role="region"
           aria-label="Winner context"
-          className="max-w-4xl mx-auto mb-4 bg-[#15171B] border border-[#FF3838]/30 rounded-xl p-4 flex items-center justify-between"
+          className="max-w-4xl mx-auto mb-4 bg-[#15171B] border border-[#FF3838]/30 rounded-lg p-4 flex items-center justify-between"
         >
           <div className="flex items-center gap-2 text-sm text-white">
             {winnerAssetQuery.isLoading ? (
@@ -386,8 +386,11 @@ export default function IterateWinners() {
 
       <div className="max-w-4xl mx-auto">
         {/* Step 1: Upload & Configure */}
-        <div className="bg-[#0D0F12] border border-white/5 rounded-2xl p-8">
-          
+        <div className="bg-[#15171B] border border-white/5 rounded-lg p-8">
+
+          {/* ─── Section: Source ─── */}
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-4">Source</h2>
+
           {/* Product Selection */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Select Product</label>
@@ -396,9 +399,9 @@ export default function IterateWinners() {
                 <button
                   key={p}
                   onClick={() => setProduct(p)}
-                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+                  className={`px-4 py-3 rounded-sm text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#15171B] ${
                     product === p
-                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
+                      ? "bg-[#FF3838] text-white focus:ring-[#FF3838]"
                       : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
                   }`}
                 >
@@ -415,7 +418,7 @@ export default function IterateWinners() {
               <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   onClick={() => { setSelectedFlavour(null); setSelectedRenderId(null); }}
-                  className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                  className={`px-4 py-2 rounded-sm text-xs font-medium transition-all ${
                     !selectedFlavour ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
@@ -425,7 +428,7 @@ export default function IterateWinners() {
                   <button
                     key={f}
                     onClick={() => { setSelectedFlavour(f); setSelectedRenderId(null); }}
-                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                    className={`px-4 py-2 rounded-sm text-xs font-medium transition-all ${
                       selectedFlavour === f ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
                     }`}
                   >
@@ -446,8 +449,8 @@ export default function IterateWinners() {
                         <button
                           key={r.id}
                           onClick={() => setSelectedRenderId(r.id)}
-                          className={`w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
-                            selectedRenderId === r.id ? "border-[#FF3838] shadow-lg shadow-red-500/20" : "border-white/10 hover:border-white/20"
+                          className={`w-20 h-20 rounded-md overflow-hidden border-2 transition-all ${
+                            selectedRenderId === r.id ? "border-[#FF3838]" : "border-white/10 hover:border-white/20"
                           }`}
                         >
                           <img src={r.url} alt={r.angle || r.flavour || "render"} className="w-full h-full object-cover" />
@@ -474,7 +477,7 @@ export default function IterateWinners() {
               <button
                 type="button"
                 onClick={() => { setSourceType("own_ad"); setSelectedCompetitor(null); }}
-                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                className={`px-4 py-3 rounded-sm text-sm font-medium transition-all ${
                   sourceType === "own_ad"
                     ? "bg-[#FF3838] text-white"
                     : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
@@ -492,7 +495,7 @@ export default function IterateWinners() {
                   // (the winner was an own_ad). Clear + scrub URL.
                   if (winnerSource) clearWinnerContext();
                 }}
-                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                className={`px-4 py-3 rounded-sm text-sm font-medium transition-all ${
                   sourceType === "competitor_ad"
                     ? "bg-[#FF3838] text-white"
                     : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
@@ -511,14 +514,14 @@ export default function IterateWinners() {
                   <button
                     type="button"
                     onClick={() => setAdaptationMode("concept")}
-                    className={`px-4 py-2 rounded-lg text-sm ${adaptationMode === "concept" ? "bg-[#0347ED] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
+                    className={`px-4 py-2 rounded-sm text-sm ${adaptationMode === "concept" ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
                   >
                     Adapt concept
                   </button>
                   <button
                     type="button"
                     onClick={() => setAdaptationMode("style")}
-                    className={`px-4 py-2 rounded-lg text-sm ${adaptationMode === "style" ? "bg-[#0347ED] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
+                    className={`px-4 py-2 rounded-sm text-sm ${adaptationMode === "style" ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
                   >
                     Match style
                   </button>
@@ -532,9 +535,9 @@ export default function IterateWinners() {
                 {staticsQuery.isLoading ? (
                   <div className="text-gray-400 py-8 text-center">Loading competitor ads…</div>
                 ) : staticsQuery.isError ? (
-                  <div className="text-red-400 py-8 text-center border border-red-500/20 rounded-xl">Failed to load competitor ads — try syncing from Foreplay on Browse Creatives.</div>
+                  <div className="text-red-400 py-8 text-center border border-red-500/20 rounded-lg">Failed to load competitor ads — try syncing from Foreplay on Browse Creatives.</div>
                 ) : competitorStatics.length === 0 ? (
-                  <div className="text-gray-400 py-8 text-center border border-white/10 rounded-xl">No static ads in library. Sync from Foreplay on Browse Creatives.</div>
+                  <div className="text-gray-400 py-8 text-center border border-white/10 rounded-lg">No static ads in library. Sync from Foreplay on Browse Creatives.</div>
                 ) : (
                   <div className="grid grid-cols-4 gap-3 max-h-64 overflow-y-auto">
                     {competitorStatics.map((c) => (
@@ -546,7 +549,7 @@ export default function IterateWinners() {
                           // Picking a competitor invalidates winner provenance.
                           if (winnerSource) clearWinnerContext();
                         }}
-                        className={`rounded-xl overflow-hidden border-2 text-left transition-all ${
+                        className={`rounded-md overflow-hidden border-2 text-left transition-all ${
                           selectedCompetitor?.id === c.id ? "border-[#FF3838] ring-2 ring-[#FF3838]/30" : "border-white/10 hover:border-white/20"
                         }`}
                       >
@@ -555,7 +558,7 @@ export default function IterateWinners() {
                         ) : (
                           <div className="w-full aspect-square bg-white/5 flex items-center justify-center text-gray-500 text-xs">No preview</div>
                         )}
-                        <div className="p-2 bg-[#0D0F12]">
+                        <div className="p-2 bg-[#0A0B0D]">
                           <div className="text-xs text-white truncate">{c.title}</div>
                           <div className="text-xs text-gray-500 truncate">{c.brandName}</div>
                         </div>
@@ -583,7 +586,7 @@ export default function IterateWinners() {
               tabIndex={0}
               role="button"
               aria-label="Upload winning ad image"
-              className={`relative border-2 border-dashed rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+              className={`relative border-2 border-dashed rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#15171B] ${
                 uploadedImageUrl
                   ? "border-green-500/30 bg-green-500/5"
                   : "border-white/10 hover:border-white/20 bg-white/[0.02] cursor-pointer"
@@ -597,7 +600,7 @@ export default function IterateWinners() {
               ) : uploadedImageUrl ? (
                 <div className="p-4">
                   <div className="flex gap-6">
-                    <div className="w-48 h-48 rounded-xl overflow-hidden bg-black/50 shrink-0">
+                    <div className="w-48 h-48 rounded-md overflow-hidden bg-black/50 shrink-0">
                       <img src={uploadedImageUrl} alt="Winning ad" className="w-full h-full object-contain" />
                     </div>
                     <div className="flex-1 flex flex-col justify-center">
@@ -607,7 +610,7 @@ export default function IterateWinners() {
                       </div>
                       <p className="text-white font-medium mb-1">{uploadedImageName}</p>
                       <p className="text-gray-500 text-xs mb-4">Click or drag to replace</p>
-                      <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-300 text-sm cursor-pointer hover:bg-white/10 transition-colors w-fit">
+                      <label className="inline-flex items-center gap-2 px-4 py-2 rounded-sm bg-white/5 text-gray-300 text-sm cursor-pointer hover:bg-white/10 transition-colors w-fit">
                         <Upload className="w-4 h-4" />
                         Replace Image
                         <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file); }} />
@@ -617,12 +620,12 @@ export default function IterateWinners() {
                 </div>
               ) : (
                 <label className="flex flex-col items-center justify-center py-16 cursor-pointer">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
+                  <div className="w-16 h-16 rounded-md bg-white/5 flex items-center justify-center mb-4">
                     <Upload className="w-8 h-8 text-gray-500" />
                   </div>
                   <p className="text-white font-medium mb-1">Drop your winning ad here</p>
                   <p className="text-gray-500 text-sm mb-4">or click to browse (PNG, JPG, up to 10MB)</p>
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF3838]/10 text-[#FF3838] text-sm font-medium">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-sm bg-[#FF3838]/10 text-[#FF3838] text-sm font-medium">
                     <Upload className="w-4 h-4" />
                     Choose File
                   </div>
@@ -633,13 +636,18 @@ export default function IterateWinners() {
           </div>
           )}
 
+          {/* ─── Section: Variations ─── */}
+          <div className="mt-10 pt-8 border-t border-white/5">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-4">Variations</h2>
+          </div>
+
           {/* Number of Variations — moved above Strategy */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Number of Variations</label>
             <select
               value={variationCount}
               onChange={(e) => setVariationCount(parseInt(e.target.value))}
-              className="w-full px-4 py-3 rounded-lg bg-white/10 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:border-transparent transition-all"
+              className="w-full px-4 py-3 rounded-sm bg-white/10 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:border-transparent transition-all"
             >
               {imageModel === 'nano_banana_2' ? (
                 <>
@@ -660,10 +668,10 @@ export default function IterateWinners() {
           {/* Variation Strategy Selector — moved above Risk Level */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Variation Strategy</label>
-            <div className="bg-white/5 rounded-xl p-6">
+            <div className="bg-white/5 rounded-lg p-6">
               <div className="flex gap-2 mb-6">
-                <button onClick={() => setUsePerVariationMode(false)} className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${!usePerVariationMode ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"}`}>All Same Strategy</button>
-                <button onClick={() => setUsePerVariationMode(true)} className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${usePerVariationMode ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"}`}>Custom Per Variation</button>
+                <button onClick={() => setUsePerVariationMode(false)} className={`flex-1 px-4 py-3 rounded-sm text-sm font-medium transition-all ${!usePerVariationMode ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"}`}>All Same Strategy</button>
+                <button onClick={() => setUsePerVariationMode(true)} className={`flex-1 px-4 py-3 rounded-sm text-sm font-medium transition-all ${usePerVariationMode ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"}`}>Custom Per Variation</button>
               </div>
               {!usePerVariationMode ? (
                 <div className="space-y-2">
@@ -676,7 +684,7 @@ export default function IterateWinners() {
                     { value: 'props_only', label: 'Props Only', desc: 'Test different visual metaphors.' },
                     { value: 'talent_swap', label: 'Talent Swap', desc: 'Test different people/models.' },
                   ] as const).map((type) => (
-                    <button key={type.value} onClick={() => setVariationType(type.value)} className={`w-full px-4 py-3 rounded-lg text-left transition-all flex items-start gap-3 ${variationType === type.value ? "bg-[#FF3838]/10 border-2 border-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-2 border-transparent"}`}>
+                    <button key={type.value} onClick={() => setVariationType(type.value)} className={`w-full px-4 py-3 rounded-sm text-left transition-all flex items-start gap-3 ${variationType === type.value ? "bg-[#FF3838]/10 border-2 border-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-2 border-transparent"}`}>
                       <div className="flex-1">
                         <div className="font-semibold text-sm mb-1">{type.label}</div>
                         <div className="text-xs opacity-75">{type.desc}</div>
@@ -687,9 +695,9 @@ export default function IterateWinners() {
               ) : (
                 <>
                   <div className="flex gap-2 mb-4">
-                    <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('full_remix'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Full Remix</button>
-                    <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('headline_only'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Headlines</button>
-                    <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('background_only'))} className="px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Backgrounds</button>
+                    <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('full_remix'))} className="px-3 py-2 rounded-sm text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Full Remix</button>
+                    <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('headline_only'))} className="px-3 py-2 rounded-sm text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Headlines</button>
+                    <button onClick={() => setPerVariationStrategies(Array(variationCount).fill('background_only'))} className="px-3 py-2 rounded-sm text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">All Backgrounds</button>
                   </div>
                   {peopleQuery.data && peopleQuery.data.length > 0 && (
                     <div className="mb-3 flex items-center justify-between">
@@ -704,9 +712,9 @@ export default function IterateWinners() {
                   )}
                   <div className="space-y-3">
                     {Array.from({ length: variationCount }).map((_, index) => (
-                      <div key={index} className="bg-white/5 rounded-lg p-4">
+                      <div key={index} className="bg-white/5 rounded-md p-4">
                         <label className="block text-xs font-medium text-gray-400 mb-2">Variation {index + 1} Strategy</label>
-                        <select value={perVariationStrategies[index]} onChange={(e) => { const s = [...perVariationStrategies]; s[index] = e.target.value as VariationType; setPerVariationStrategies(s); }} className="w-full px-3 py-2 rounded-lg bg-white/10 text-white text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838]">
+                        <select value={perVariationStrategies[index]} onChange={(e) => { const s = [...perVariationStrategies]; s[index] = e.target.value as VariationType; setPerVariationStrategies(s); }} className="w-full px-3 py-2 rounded-sm bg-white/10 text-white text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838]">
                           <option value="full_remix">Full Remix</option>
                           <option value="headline_only">Headline Only</option>
                           <option value="background_only">Background Only</option>
@@ -762,10 +770,15 @@ export default function IterateWinners() {
             </div>
           </div>
 
+          {/* ─── Section: Creative direction ─── */}
+          <div className="mt-10 pt-8 border-t border-white/5">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-4">Creative direction</h2>
+          </div>
+
           {/* Ad Angle — what format of ad Claude should write */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Ad Angle</label>
-            <div className="bg-white/5 rounded-xl p-6">
+            <div className="bg-white/5 rounded-lg p-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {AD_ANGLE_OPTIONS.map((opt) => (
                   <button
@@ -773,7 +786,7 @@ export default function IterateWinners() {
                     onClick={() => setAdAngle(opt.value)}
                     role="radio"
                     aria-checked={adAngle === opt.value}
-                    className={`px-3 py-2 rounded-lg text-left border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                    className={`px-3 py-2 rounded-sm text-left border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
                       adAngle === opt.value
                         ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
                         : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
@@ -793,7 +806,7 @@ export default function IterateWinners() {
           {/* Style Mode — how tightly to hug the reference */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Style Fidelity</label>
-            <div className="bg-white/5 rounded-xl p-6">
+            <div className="bg-white/5 rounded-lg p-6">
               <div className="flex gap-2">
                 {STYLE_MODE_OPTIONS.map((opt) => (
                   <button
@@ -801,7 +814,7 @@ export default function IterateWinners() {
                     onClick={() => setStyleMode(opt.value)}
                     role="radio"
                     aria-checked={styleMode === opt.value}
-                    className={`flex-1 px-4 py-3 rounded-lg text-sm border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                    className={`flex-1 px-4 py-3 rounded-sm text-sm border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
                       styleMode === opt.value
                         ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
                         : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
@@ -815,137 +828,10 @@ export default function IterateWinners() {
             </div>
           </div>
 
-          {/* Aspect Ratio Selector */}
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Aspect Ratio</label>
-            <div className="grid grid-cols-4 gap-2">
-              {(['1:1', '4:5', '9:16', '16:9'] as AspectRatio[]).map((ratio) => (
-                <button
-                  key={ratio}
-                  onClick={() => setAspectRatio(ratio)}
-                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
-                    aspectRatio === ratio
-                      ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20 focus:ring-[#FF3838]"
-                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
-                  }`}
-                >
-                  {ratio}
-                </button>
-              ))}
-            </div>
-          </div>
-
-
-          {/* Image Model Selector */}
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Image Generation Model</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <button
-                onClick={() => setImageModel('nano_banana_pro')}
-                role="radio"
-                aria-checked={imageModel === 'nano_banana_pro'}
-                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
-                  imageModel === 'nano_banana_pro'
-                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
-                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-base">🍌</span>
-                  <span className="font-semibold text-sm text-white">Nano Banana Pro</span>
-                  {imageModel === 'nano_banana_pro' && (
-                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 leading-relaxed">Highest quality. Advanced reasoning, perfect text rendering. ~$0.12/image, 2–3 min per variation.</p>
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded">Recommended</span>
-                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded">Best quality</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setImageModel('nano_banana_2')}
-                role="radio"
-                aria-checked={imageModel === 'nano_banana_2'}
-                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
-                  imageModel === 'nano_banana_2'
-                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
-                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-base">⚡</span>
-                  <span className="font-semibold text-sm text-white">Nano Banana 2</span>
-                  {imageModel === 'nano_banana_2' && (
-                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 leading-relaxed">4× faster, ~3× cheaper. Ranked #1 in Image Arena. ~$0.04/image, 30–60 sec per variation.</p>
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded">4× faster</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setImageModel('openai_gpt_image')}
-                role="radio"
-                aria-checked={imageModel === 'openai_gpt_image'}
-                className={`relative p-4 rounded-xl text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
-                  imageModel === 'openai_gpt_image'
-                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
-                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-4 h-4 text-gray-300" />
-                  <span className="font-semibold text-sm text-white">OpenAI Image</span>
-                  {imageModel === 'openai_gpt_image' && (
-                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 leading-relaxed">gpt-image-1 edits with multiple reference images. ~$0.15/image, 30–90 sec per variation.</p>
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded">Experimental</span>
-                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded">A/B bakeoff</span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Resolution */}
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Resolution</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setResolution("2K")}
-                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                  resolution === "2K"
-                    ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                2K (Default)
-              </button>
-              <button
-                onClick={() => setResolution("4K")}
-                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                  resolution === "4K"
-                    ? "bg-[#FF3838] text-white shadow-lg shadow-red-500/20"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                4K (Higher Detail)
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {resolution === "2K"
-                ? `${aspectRatio === '1:1' ? '2048x2048' : aspectRatio === '4:5' ? '2048x2560' : aspectRatio === '9:16' ? '2304x4096' : '4096x2304'} px`
-                : `${aspectRatio === '1:1' ? '4096x4096' : aspectRatio === '4:5' ? '4096x5120' : aspectRatio === '9:16' ? '4608x8192' : '8192x4608'} px — larger file, longer generation`}
-            </p>
-          </div>
-
-          {/* People Selector */}
+          {/* People Selector — creative decision, lives with Ad Angle / Audience.
+              Hidden entirely when per-variation mode is active: per-variation
+              pickers inside the Strategy section own person selection there. */}
+          {!usePerVariationMode && (
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
               <Users className="w-4 h-4" />
@@ -966,7 +852,7 @@ export default function IterateWinners() {
                     key={person.id}
                     onClick={() => setSelectedPersonId(selectedPersonId === person.id ? null : person.id)}
                     className={`flex-shrink-0 w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${
-                      selectedPersonId === person.id ? "border-[#FF3838] shadow-lg shadow-red-500/20" : "border-white/10 hover:border-white/20"
+                      selectedPersonId === person.id ? "border-[#FF3838]" : "border-white/10 hover:border-white/20"
                     }`}
                     title={person.name}
                   >
@@ -979,12 +865,8 @@ export default function IterateWinners() {
                 No people uploaded yet. <a href="/people" className="text-[#FF3838] hover:underline">Add reference photos in People Library</a>
               </p>
             )}
-            {!usePerVariationMode && peopleQuery.data && peopleQuery.data.length > 0 && (
-              <p className="text-[11px] text-gray-500 mt-3">
-                Applied to all variations. Switch to <span className="text-gray-300">Custom Per Variation</span> above to assign different people.
-              </p>
-            )}
           </div>
+          )}
 
           {/* Audience Type */}
           <div className="mb-8">
@@ -995,7 +877,7 @@ export default function IterateWinners() {
             <div className="flex flex-wrap gap-2 mb-2">
               <button
                 onClick={() => { setSelectedAudience(""); setCustomAudience(false); }}
-                className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                className={`px-4 py-2 rounded-sm text-xs font-medium transition-all ${
                   !selectedAudience && !customAudience ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
@@ -1005,7 +887,7 @@ export default function IterateWinners() {
                 <button
                   key={a}
                   onClick={() => { setSelectedAudience(a); setCustomAudience(false); }}
-                  className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                  className={`px-4 py-2 rounded-sm text-xs font-medium transition-all ${
                     selectedAudience === a && !customAudience ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
@@ -1014,7 +896,7 @@ export default function IterateWinners() {
               ))}
               <button
                 onClick={() => { setCustomAudience(true); setSelectedAudience(""); }}
-                className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                className={`px-4 py-2 rounded-sm text-xs font-medium transition-all ${
                   customAudience ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
@@ -1027,25 +909,160 @@ export default function IterateWinners() {
                 value={selectedAudience}
                 onChange={(e) => setSelectedAudience(e.target.value)}
                 placeholder="Describe your target audience..."
-                className="w-full bg-[#01040A] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600"
+                className="w-full bg-[#0A0B0D] border border-white/10 rounded-sm px-3 py-2 text-sm text-white placeholder-gray-600"
               />
             )}
           </div>
 
+          {/* ─── Section: Output ─── */}
+          <div className="mt-10 pt-8 border-t border-white/5">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-4">Output</h2>
+          </div>
+
+          {/* Image Model Selector — picked first so the cost/speed context
+              flows into Resolution and Aspect Ratio below. */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Image Generation Model</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <button
+                onClick={() => setImageModel('nano_banana_pro')}
+                role="radio"
+                aria-checked={imageModel === 'nano_banana_pro'}
+                className={`relative p-4 rounded-md text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                  imageModel === 'nano_banana_pro'
+                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-[#FF3838]" />
+                  <span className="font-semibold text-sm text-white">Nano Banana Pro</span>
+                  {imageModel === 'nano_banana_pro' && (
+                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">Highest quality. Advanced reasoning, perfect text rendering. ~$0.12/image, 2–3 min per variation.</p>
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-sm">Recommended</span>
+                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-sm">Best quality</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setImageModel('nano_banana_2')}
+                role="radio"
+                aria-checked={imageModel === 'nano_banana_2'}
+                className={`relative p-4 rounded-md text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                  imageModel === 'nano_banana_2'
+                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="w-4 h-4 text-gray-300" />
+                  <span className="font-semibold text-sm text-white">Nano Banana 2</span>
+                  {imageModel === 'nano_banana_2' && (
+                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">4× faster, ~3× cheaper. Ranked #1 in Image Arena. ~$0.04/image, 30–60 sec per variation.</p>
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-sm">4× faster</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setImageModel('openai_gpt_image')}
+                role="radio"
+                aria-checked={imageModel === 'openai_gpt_image'}
+                className={`relative p-4 rounded-md text-left transition-all border-2 focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                  imageModel === 'openai_gpt_image'
+                    ? 'bg-[#FF3838]/10 border-[#FF3838]'
+                    : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <FlaskConical className="w-4 h-4 text-gray-300" />
+                  <span className="font-semibold text-sm text-white">OpenAI Image</span>
+                  {imageModel === 'openai_gpt_image' && (
+                    <CheckCircle className="w-4 h-4 text-[#FF3838] ml-auto" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">gpt-image-1 edits with multiple reference images. ~$0.15/image, 30–90 sec per variation.</p>
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-sm">Experimental</span>
+                  <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-sm">A/B bakeoff</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Resolution */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Resolution</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setResolution("2K")}
+                className={`px-4 py-3 rounded-sm text-sm font-medium transition-all ${
+                  resolution === "2K"
+                    ? "bg-[#FF3838] text-white"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                2K (Default)
+              </button>
+              <button
+                onClick={() => setResolution("4K")}
+                className={`px-4 py-3 rounded-sm text-sm font-medium transition-all ${
+                  resolution === "4K"
+                    ? "bg-[#FF3838] text-white"
+                    : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                4K (Higher Detail)
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2 font-mono tabular-nums">
+              {resolution === "2K"
+                ? `${aspectRatio === '1:1' ? '2048x2048' : aspectRatio === '4:5' ? '2048x2560' : aspectRatio === '9:16' ? '2304x4096' : '4096x2304'} px`
+                : `${aspectRatio === '1:1' ? '4096x4096' : aspectRatio === '4:5' ? '4096x5120' : aspectRatio === '9:16' ? '4608x8192' : '8192x4608'} px — larger file, longer generation`}
+            </p>
+          </div>
+
+          {/* Aspect Ratio Selector — picked after Model so cost context is set */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-300 mb-3">Aspect Ratio</label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['1:1', '4:5', '9:16', '16:9'] as AspectRatio[]).map((ratio) => (
+                <button
+                  key={ratio}
+                  onClick={() => setAspectRatio(ratio)}
+                  className={`px-4 py-3 rounded-sm text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#15171B] ${
+                    aspectRatio === ratio
+                      ? "bg-[#FF3838] text-white focus:ring-[#FF3838]"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white focus:ring-white/20"
+                  }`}
+                >
+                  {ratio}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Cost Summary */}
           <div className="mb-8">
-            <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl p-6">
+            <div className="bg-[#1E2126] border border-white/10 rounded-lg p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm text-gray-400 mb-1">Estimated Cost</div>
-                  <div className="text-3xl font-bold text-white">${estimatedCost.toFixed(2)}</div>
+                  <div className="text-3xl font-bold text-[#FF3838] font-mono tabular-nums">${estimatedCost.toFixed(2)}</div>
                   <div className="text-xs text-gray-500 mt-1">
                     {variationCount} variation{variationCount === 1 ? '' : 's'} x ${perImageCost.toFixed(2)} per image ({imageModel === 'nano_banana_2' ? 'Nano Banana 2' : imageModel === 'openai_gpt_image' ? 'OpenAI Image' : 'Nano Banana Pro'})
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-400 mb-2">Estimated Time</div>
-                  <div className={`px-3 py-2 rounded-lg text-sm font-semibold ${imageModel === 'nano_banana_2' ? 'bg-green-500/10 border border-green-500/30 text-green-300' : imageModel === 'openai_gpt_image' ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300' : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'}`}>
+                  <div className="px-3 py-2 rounded-sm text-sm font-semibold bg-white/5 border border-white/10 text-gray-200 font-mono tabular-nums">
                     {imageModel === 'nano_banana_2' ? `${Math.ceil(variationCount * 0.5)}-${variationCount} min` : imageModel === 'openai_gpt_image' ? `${Math.ceil(variationCount * 0.5)}-${Math.ceil(variationCount * 1.5)} min` : `${variationCount * 2}-${variationCount * 3} min`}
                   </div>
                 </div>
@@ -1057,9 +1074,9 @@ export default function IterateWinners() {
           <button
             onClick={handleStartPipeline}
             disabled={!hasSource || triggerIteration.isPending}
-            className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0D0F12] ${
+            className={`w-full py-4 rounded-sm font-semibold text-base transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#15171B] ${
               hasSource && !triggerIteration.isPending
-                ? "bg-gradient-to-r from-[#A78BFA] to-pink-600 text-white hover:from-[#9F7AEA] hover:to-pink-500 shadow-lg shadow-purple-500/20 focus:ring-[#A78BFA]"
+                ? "bg-[#FF3838] text-white hover:bg-[#FF5555] focus:ring-[#FF3838]"
                 : "bg-white/5 text-gray-600 cursor-not-allowed"
             }`}
           >
@@ -1085,9 +1102,9 @@ export default function IterateWinners() {
       {/* Confirmation Dialog */}
       {showConfirmation && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0D0F12] border border-white/10 rounded-2xl p-8 max-w-md w-full">
+          <div className="bg-[#15171B] border border-white/10 rounded-xl p-8 max-w-md w-full">
             <div className="flex items-start gap-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-[#FF3838]/10 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 rounded-md bg-[#FF3838]/10 flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="w-6 h-6 text-[#FF3838]" />
               </div>
               <div>
@@ -1097,7 +1114,7 @@ export default function IterateWinners() {
                 </p>
               </div>
             </div>
-            <div className="bg-white/5 rounded-xl p-4 mb-6 space-y-2 text-sm">
+            <div className="bg-white/5 rounded-md p-4 mb-6 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-400">Product:</span>
                 <span className="text-white font-medium">{product}</span>
@@ -1130,14 +1147,14 @@ export default function IterateWinners() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmation(false)}
-                className="flex-1 px-4 py-3 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-all font-medium focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="flex-1 px-4 py-3 rounded-sm bg-white/5 text-gray-300 hover:bg-white/10 transition-all font-medium focus:outline-none focus:ring-2 focus:ring-white/20"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmAndStart}
                 disabled={triggerIteration.isPending}
-                className="flex-1 px-4 py-3 rounded-lg bg-[#FF3838] text-white hover:bg-[#FF3838]/90 transition-all font-bold focus:outline-none focus:ring-2 focus:ring-[#FF3838] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-3 rounded-sm bg-[#FF3838] text-white hover:bg-[#FF5555] transition-all font-semibold focus:outline-none focus:ring-2 focus:ring-[#FF3838] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {triggerIteration.isPending ? (
                   <>
@@ -1166,8 +1183,8 @@ function RecentIterations() {
 
   if (isLoading) {
     return (
-      <div className="mt-8 bg-[#0D0F12] border border-white/5 rounded-2xl p-8">
-        <h2 className="text-lg font-bold text-white mb-4">Recent Iterations</h2>
+      <div className="mt-8 bg-[#15171B] border border-white/5 rounded-lg p-8">
+        <h2 className="text-lg font-semibold text-white mb-4">Recent Iterations</h2>
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
         </div>
@@ -1180,16 +1197,16 @@ function RecentIterations() {
   }
 
   return (
-    <div className="mt-8 bg-[#0D0F12] border border-white/5 rounded-2xl p-8">
-      <h2 className="text-lg font-bold text-white mb-4">Recent Iterations</h2>
+    <div className="mt-8 bg-[#15171B] border border-white/5 rounded-lg p-8">
+      <h2 className="text-lg font-semibold text-white mb-4">Recent Iterations</h2>
       <div className="space-y-2">
         {runs.slice(0, 10).map((run: any) => (
           <button
             key={run.id}
             onClick={() => setLocation(`/results/${run.id}`)}
-            className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all text-left focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#0D0F12]"
+            className="w-full flex items-center gap-4 p-4 rounded-md bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all text-left focus:outline-none focus:ring-2 focus:ring-[#FF3838] focus:ring-offset-2 focus:ring-offset-[#15171B]"
           >
-            <div className="w-16 h-16 rounded-lg overflow-hidden bg-black/50 shrink-0">
+            <div className="w-16 h-16 rounded-md overflow-hidden bg-black/50 shrink-0">
               {run.iterationSourceUrl ? (
                 <img src={run.iterationSourceUrl} alt="" className="w-full h-full object-cover" />
               ) : (
