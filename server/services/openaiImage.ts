@@ -75,10 +75,14 @@ export async function generateWithOpenAI(opts: ImageGenerateOptions): Promise<Im
   form.append("size", aspectRatioToSize(opts.aspectRatio));
   form.append("n", "1");
   form.append("quality", "high");
-  // OpenAI's images/edits accepts multiple files via repeated "image" field.
+  // OpenAI's images/edits requires the `image[]` array-syntax field name when
+  // multiple files are passed. Using the bare `image` field triggers
+  // "Duplicate parameter: 'image'" because the API treats repeated `image=...`
+  // fields as conflicting single-value assignments.
+  const imageField = buffers.length > 1 ? "image[]" : "image";
   buffers.forEach(({ buffer, contentType }, i) => {
     const ext = contentType.includes("jpeg") ? "jpg" : "png";
-    form.append("image", buffer, { filename: `ref_${i}.${ext}`, contentType });
+    form.append(imageField, buffer, { filename: `ref_${i}.${ext}`, contentType });
   });
 
   let response;
