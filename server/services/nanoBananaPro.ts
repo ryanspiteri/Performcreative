@@ -80,9 +80,49 @@ export async function generateProductAdWithNanoBananaPro(
   const modelId = MODEL_IDS[model];
   const modelLabel = MODEL_LABELS[model];
 
-  // NOTE: Two-pass compositing (useCompositing) was disabled in Round 15.
-  // The productCompositor module has been removed. If two-pass compositing is
-  // needed again, it should be rebuilt from scratch.
+  // Two-pass compositing — guarantees pixel-perfect product label by:
+  //   Pass 1: Gemini generates the background scene WITHOUT the product
+  //           (the prompt builder injects "do not render any product, leave
+  //           a clear zone at <position>" when compositingMode is on).
+  //   Pass 2: sharp overlays the real product render PNG at <position>
+  //           with optional drop shadow.
+  // The label is the literal upload, not a Gemini approximation, so it
+  // can never hallucinate "ELITE THERWOGENIC", "MENES", or "THE LSA".
+  if (useCompositing && productRenderUrl) {
+    console.log(`[${modelLabel}] Two-pass compositing ON (position=${productPosition}, scale=${productScale})`);
+    const { compositeProductOnBackground } = await import("./productCompositor");
+
+    const bgResult = await generateProductAdWithNanaBananaPro_internal({
+      prompt,
+      controlImageUrl,
+      // Intentionally NOT passing productRenderUrl — Pass 1 must generate the
+      // background ONLY. The "leave space at <position>" instruction is the
+      // prompt builder's job.
+      aspectRatio,
+      resolution,
+      modelId,
+      modelLabel,
+      personImageUrl: options.personImageUrl,
+    });
+
+    console.log(`[${modelLabel}] Pass 1 done: background at ${bgResult.imageUrl}`);
+
+    const composited = await compositeProductOnBackground({
+      backgroundUrl: bgResult.imageUrl,
+      productRenderUrl,
+      productPosition,
+      productScale,
+      addShadow: true,
+      addGlow: false,
+    });
+
+    console.log(`[${modelLabel}] Pass 2 done: composited at ${composited.imageUrl}`);
+
+    return {
+      imageUrl: composited.imageUrl,
+      s3Key: composited.s3Key,
+    };
+  }
 
   return generateProductAdWithNanaBananaPro_internal({
     prompt,
