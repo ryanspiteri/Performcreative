@@ -37,6 +37,26 @@ export interface PromptBuildOptions {
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
   targetAudience?: string;
   hasPersonReference?: boolean;
+  /** When true, build a background-only prompt: Gemini generates the scene
+      WITHOUT the product (sharp overlays the real product PNG in pass 2).
+      The label-spec, style carve-out, and product integration sections are
+      replaced with "leave a clear zone at <productPosition>" language. */
+  compositingMode?: boolean;
+  /** Where the product will be composited in pass 2. Tells Gemini where to
+      leave clear space. Only used when compositingMode is true. */
+  productPosition?: "center" | "left" | "right" | "bottom-center" | "bottom-left" | "bottom-right";
+}
+
+function compositingZoneDescription(position: string): string {
+  switch (position) {
+    case "center": return "the centre of the frame";
+    case "left": return "the left side of the frame";
+    case "right": return "the right side of the frame";
+    case "bottom-center": return "the bottom-centre of the frame";
+    case "bottom-left": return "the bottom-left of the frame";
+    case "bottom-right": return "the bottom-right of the frame";
+    default: return "the centre of the frame";
+  }
 }
 
 // Label specs lift the tub description out of abstract ("preserve label, colour,
@@ -152,18 +172,74 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
         ? backgroundStyleDescription.trim()
         : "Clean, premium composition with the product as the clear focal point. Respect the reference ad's style.");
 
-  const stylised = isStylisedScene(visualDescription);
-  const productBlock = productPreservationBlock(productKey, flavour);
-  const carveout = stylised ? `\n${stylisedSceneCarveoutBlock()}\n` : "";
+  const compositingMode = options.compositingMode === true;
+  const productPosition = options.productPosition ?? "bottom-right";
+  const zoneDesc = compositingZoneDescription(productPosition);
 
-  const prompt = `HARD RULE — PRODUCT SOURCE (read before anything else):
+  const stylised = isStylisedScene(visualDescription);
+  // In compositing mode, the product is overlaid in pass 2 — Gemini never
+  // sees Image 2 and must NOT render any product. The HARD RULE inverts to
+  // a "do not render product" instruction; style carve-out is unnecessary
+  // (no product to stylise); product-integration block becomes a leave-zone
+  // block. This is the reason the label can no longer hallucinate text.
+  const productBlock = compositingMode
+    ? `Do NOT render any product, tub, jar, bottle, container, supplement packaging, or branded product object in this image. The product will be composited on top of your output in a second pass using the actual product photograph. Your job is to generate the SCENE, BACKGROUND, CHARACTER, COPY, and ATMOSPHERE only — leaving a clear, unobstructed zone at ${zoneDesc} where the product will be overlaid.`
+    : productPreservationBlock(productKey, flavour);
+  const carveout = (compositingMode || !stylised) ? "" : `\n${stylisedSceneCarveoutBlock()}\n`;
+
+  // Image list also changes in compositing mode — Pass 1 doesn't pass Image 2.
+  const imageList = compositingMode
+    ? `I am providing you with ${hasPersonReference ? 'TWO' : 'ONE'} image${hasPersonReference ? 's' : ''}:
+- Image 1: A REFERENCE AD — use this for STYLE REFERENCE ONLY (layout, palette, mood, lighting, typography, composition). The product in Image 1 is NOT something you should render — ignore the product entirely.${hasPersonReference ? '\n- Image 2: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new person with a similar look and place them naturally in the composition.' : ''}`
+    : `I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
+- Image 1: A REFERENCE AD — use this for STYLE REFERENCE ONLY (layout, palette, mood, lighting, typography, composition). The product in Image 1 is NOT the product you are rendering.
+- Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output.${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}`;
+
+  const productIntegrationBlock = compositingMode
+    ? `=== COMPOSITING ZONE (PASS 2 OVERLAY) ===
+A real product photograph will be composited on top of your output at ${zoneDesc} in a second pass. Your job is to leave that area clear:
+- Reserve roughly 35-45% of canvas width at ${zoneDesc} as an unobstructed zone.
+- Do not place text, characters, props, or hands inside the zone.
+- The zone should look natural in the scene — e.g. an empty kitchen counter, a clean stretch of floor, a clear patch of mirror — not a literal blank box.
+- Lighting in the zone should match the rest of the scene so the composited product reads as belonging there.
+- Cast a subtle direction-appropriate shadow region into the zone if the scene has consistent directional light, so the overlay receives realistic grounding.
+NEVER render the product itself — even as a silhouette, placeholder, or implied shape. The zone stays empty until pass 2.`
+    : `=== PRODUCT INTEGRATION ===
+Integrate the ${productName} tub (from Image 2) into the scene following Image 1's approach:
+- Floating vs grounded — match Image 1.
+- Lighting, shadows, reflections — apply to the ONEST tub similarly to how Image 1 treats its product.
+- Position (centre, left, right, offset) and prominence — match Image 1.
+CRITICAL: Render the tub as if it was composited into the scene from a real product photograph${stylised ? ' — NOT stylised, NOT redesigned, NOT reinterpreted, even though the rest of the scene is stylised' : ''}. Every wordmark, subtext line, flavour strip, colour, and logo element on the packaging must appear in your output EXACTLY as it appears in Image 2. Do not obscure, alter, redraw, or hallucinate any label element. Do not invent a new product.`;
+
+  const avoidList = compositingMode
+    ? `=== AVOID ===
+✗ Rendering ANY product, tub, jar, bottle, container, or supplement packaging
+✗ Drawing a placeholder, silhouette, outline, or "ghost" shape where the product will go
+✗ Filling the compositing zone with characters, hands, props, text, or scenery
+✗ Adding fire, flames, lightning, ice, smoke, sparks, explosions, or glowing auras unless the reference ad uses them AND the Visual Description above calls for them
+✗ Treating the product name (e.g., "Hyperburn", "Ignite") as a literal visual instruction — it is brand language
+✗ Ignoring the reference image's style and creating something completely different
+✗ Generic stock photo aesthetics (unless the reference uses that style)
+✗ Text that's illegible, poorly contrasted, or hard to read
+✗ Completely different colour palette from the reference`
+    : `=== AVOID ===
+✗ Adding fire, flames, lightning, ice, smoke, sparks, explosions, or glowing auras unless the reference ad uses them AND the Visual Description above calls for them
+✗ Treating the product name (e.g., "Hyperburn", "Ignite") as a literal visual instruction — it is brand language
+✗ Ignoring the reference image's style and creating something completely different
+✗ Making it look like a different campaign or brand aesthetic
+✗ Generic stock photo aesthetics (unless the reference uses that style)
+✗ Obscuring the product label or branding
+✗ Redrawing the product — always use the exact bottle from Image 2
+✗ Text that's illegible, poorly contrasted, or hard to read
+✗ Anything that looks "photoshopped" or artificially composited
+✗ Completely different colour palette from the reference`;
+
+  const prompt = `HARD RULE — PRODUCT ${compositingMode ? "ABSENCE" : "SOURCE"} (read before anything else):
 ${productBlock}
 
-You are creating a premium supplement advertisement image for paid social media advertising (Meta/TikTok).
+You are creating a premium supplement advertisement ${compositingMode ? "BACKGROUND" : "image"} for paid social media advertising (Meta/TikTok).
 
-I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
-- Image 1: A REFERENCE AD — use this for STYLE REFERENCE ONLY (layout, palette, mood, lighting, typography, composition). The product in Image 1 is NOT the product you are rendering.
-- Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output.${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}
+${imageList}
 
 ${styleModeBlock(styleMode)}
 ${carveout}
@@ -177,30 +253,15 @@ ${leadingVisual}
 
 ${fxGuardrailBlock(referenceFxPresent, detectedFxTypes)}
 
-=== PRODUCT INTEGRATION ===
-Integrate the ${productName} tub (from Image 2) into the scene following Image 1's approach:
-- Floating vs grounded — match Image 1.
-- Lighting, shadows, reflections — apply to the ONEST tub similarly to how Image 1 treats its product.
-- Position (centre, left, right, offset) and prominence — match Image 1.
-CRITICAL: Render the tub as if it was composited into the scene from a real product photograph${stylised ? ' — NOT stylised, NOT redesigned, NOT reinterpreted, even though the rest of the scene is stylised' : ''}. Every wordmark, subtext line, flavour strip, colour, and logo element on the packaging must appear in your output EXACTLY as it appears in Image 2. Do not obscure, alter, redraw, or hallucinate any label element. Do not invent a new product.
+${productIntegrationBlock}
 
 === COMPOSITION ===
 - Aspect ratio: ${aspectRatio}
 - Follow the same compositional approach as the reference (centred, rule of thirds, symmetrical, asymmetrical, etc.)
-- Leave appropriate breathing room around text and product
+- Leave appropriate breathing room around text${compositingMode ? ` and the compositing zone at ${zoneDesc}` : ' and product'}
 - Ensure nothing important is cut off at edges
 
-=== AVOID ===
-✗ Adding fire, flames, lightning, ice, smoke, sparks, explosions, or glowing auras unless the reference ad uses them AND the Visual Description above calls for them
-✗ Treating the product name (e.g., "Hyperburn", "Ignite") as a literal visual instruction — it is brand language
-✗ Ignoring the reference image's style and creating something completely different
-✗ Making it look like a different campaign or brand aesthetic
-✗ Generic stock photo aesthetics (unless the reference uses that style)
-✗ Obscuring the product label or branding
-✗ Redrawing the product — always use the exact bottle from Image 2
-✗ Text that's illegible, poorly contrasted, or hard to read
-✗ Anything that looks "photoshopped" or artificially composited
-✗ Completely different colour palette from the reference
+${avoidList}
 
 === FINAL GOAL ===
 Someone should look at your output and the reference image side-by-side and think: "These are clearly from the same campaign and brand — just with different headlines."`;
