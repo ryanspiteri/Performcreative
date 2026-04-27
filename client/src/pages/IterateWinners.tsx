@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info, X, Zap, FlaskConical } from "lucide-react";
+import { Upload, ArrowRight, Loader2, CheckCircle, XCircle, RefreshCw, Sparkles, Eye, Copy, Download, ExternalLink, AlertCircle, Users, Target, Info, X, Zap, FlaskConical, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { ACTIVE_PRODUCTS } from "../../../drizzle/schema";
 
@@ -667,7 +667,19 @@ export default function IterateWinners() {
 
           {/* Variation Strategy Selector — moved above Risk Level */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-3">Variation Strategy</label>
+            <label className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+              <span>Variation Strategy</span>
+              <a
+                href="https://github.com/ryanspiteri/Performcreative/blob/main/docs/variation-strategies.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-500 hover:text-[#FF3838] transition-colors"
+                title="What does each strategy / angle / style mode do?"
+                aria-label="Open variation strategies reference doc on GitHub"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </a>
+            </label>
             <div className="bg-white/5 rounded-lg p-6">
               <div className="flex gap-2 mb-6">
                 <button onClick={() => setUsePerVariationMode(false)} className={`flex-1 px-4 py-3 rounded-sm text-sm font-medium transition-all ${!usePerVariationMode ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"}`}>All Same Strategy</button>
