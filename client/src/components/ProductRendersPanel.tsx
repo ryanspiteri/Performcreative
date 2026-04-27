@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Upload, Trash2, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Upload, Trash2, Image as ImageIcon, Loader2, Pencil, Check, X } from "lucide-react";
 
 interface ProductRendersPanelProps {
   selectedProduct: string;
@@ -39,6 +39,25 @@ export default function ProductRendersPanel({ selectedProduct }: ProductRendersP
       toast.error("Delete failed: " + err.message);
     },
   });
+
+  const updateMutation = trpc.renders.update.useMutation({
+    onSuccess: () => {
+      toast.success("Render updated");
+      utils.renders.list.invalidate();
+      setEditingId(null);
+    },
+    onError: (err) => {
+      toast.error("Update failed: " + err.message);
+    },
+  });
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTags, setEditTags] = useState("");
+
+  useEffect(() => {
+    setEditingId(null);
+  }, [selectedProduct]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -144,37 +163,124 @@ export default function ProductRendersPanel({ selectedProduct }: ProductRendersP
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {rendersQuery.data.map((render) => (
-            <div
-              key={render.id}
-              className="group relative bg-[#0F1117] rounded-lg overflow-hidden border border-white/5 hover:border-white/20 transition-all"
-            >
-              <div className="aspect-square bg-[#01040A] flex items-center justify-center p-4">
-                <img
-                  src={render.url}
-                  alt={render.fileName}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div className="p-3">
-                <p className="text-xs text-white truncate font-medium">{render.fileName}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {render.fileSize ? `${(render.fileSize / 1024).toFixed(0)} KB` : "—"}
-                </p>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm("Delete this render?")) {
-                    deleteMutation.mutate({ id: render.id });
-                  }
-                }}
-                className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+          {rendersQuery.data.map((render) => {
+            const isEditing = editingId === render.id;
+            const tagList = (render.tags || "")
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
+            return (
+              <div
+                key={render.id}
+                className="group relative bg-[#0F1117] rounded-lg overflow-hidden border border-white/5 hover:border-white/20 transition-all"
               >
-                <Trash2 className="w-3.5 h-3.5 text-white" />
-              </button>
-            </div>
-          ))}
+                <div className="aspect-square bg-[#01040A] flex items-center justify-center p-4">
+                  <img
+                    src={render.url}
+                    alt={render.fileName}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div className="p-3">
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Name"
+                        className="w-full bg-[#01040A] border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#FF3838]/50"
+                      />
+                      <input
+                        type="text"
+                        value={editTags}
+                        onChange={(e) => setEditTags(e.target.value)}
+                        placeholder="Tags (comma separated)"
+                        className="w-full bg-[#01040A] border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#FF3838]/50"
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const trimmedName = editName.trim();
+                            if (!trimmedName) {
+                              toast.error("Name can't be empty");
+                              return;
+                            }
+                            updateMutation.mutate({
+                              id: render.id,
+                              fileName: trimmedName,
+                              tags: editTags.trim() ? editTags.trim() : null,
+                            });
+                          }}
+                          disabled={updateMutation.isPending}
+                          className="flex-1 flex items-center justify-center gap-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-xs py-1 rounded disabled:opacity-50"
+                        >
+                          <Check className="w-3 h-3" /> Save
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingId(null);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 text-gray-400 text-xs py-1 rounded"
+                        >
+                          <X className="w-3 h-3" /> Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-white truncate font-medium">{render.fileName}</p>
+                      {tagList.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {tagList.map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[10px] bg-[#FF3838]/15 text-[#FF6B6B] px-1.5 py-0.5 rounded"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {render.fileSize ? `${(render.fileSize / 1024).toFixed(0)} KB` : "—"}
+                      </p>
+                    </>
+                  )}
+                </div>
+                {!isEditing && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingId(render.id);
+                        setEditName(render.fileName);
+                        setEditTags(render.tags || "");
+                      }}
+                      className="absolute top-2 right-10 p-1.5 bg-blue-500/80 hover:bg-blue-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Edit name & tags"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-white" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Delete this render?")) {
+                          deleteMutation.mutate({ id: render.id });
+                        }
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-white" />
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

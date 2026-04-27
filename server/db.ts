@@ -317,6 +317,21 @@ export async function deleteProductRender(id: number) {
   await db.delete(productRenders).where(eq(productRenders.id, id));
 }
 
+export async function updateProductRender(
+  id: number,
+  data: { fileName?: string; tags?: string | null; flavour?: string | null; angle?: string | null },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const patch: Record<string, unknown> = {};
+  if (data.fileName !== undefined) patch.fileName = data.fileName.slice(0, 256);
+  if (data.tags !== undefined) patch.tags = data.tags === null ? null : data.tags.slice(0, 256);
+  if (data.flavour !== undefined) patch.flavour = data.flavour === null ? null : data.flavour.slice(0, 64);
+  if (data.angle !== undefined) patch.angle = data.angle === null ? null : data.angle.slice(0, 32);
+  if (Object.keys(patch).length === 0) return;
+  await db.update(productRenders).set(patch).where(eq(productRenders.id, id));
+}
+
 // ============================================================
 // People Type Reference helpers
 // ============================================================
