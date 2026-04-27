@@ -399,8 +399,6 @@ export async function runIterationStage3(runId: number, run: any) {
           productName: `ONEST Health ${product}`,
           productKey: product,
           flavour: run.selectedFlavour || undefined,
-          compositingMode: true,
-          productPosition: "bottom-right",
           visualDescription: v.visualDescription || undefined,
           backgroundStyleDescription: v.backgroundNote || undefined,
           referenceFxPresent: briefFxPresent,
@@ -423,8 +421,8 @@ export async function runIterationStage3(runId: number, run: any) {
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
           useCompositing: true,
-          productPosition: "bottom-right",
-          productScale: 0.42,
+          productPosition: "center",
+          productScale: 0.45,
           personImageUrl: variationPersonUrl,
         }, i);
 
@@ -470,8 +468,6 @@ export async function runIterationStage3(runId: number, run: any) {
           productName: `ONEST Health ${product}`,
           productKey: product,
           flavour: run.selectedFlavour || undefined,
-          compositingMode: true,
-          productPosition: "bottom-right",
           backgroundStyleDescription: bg,
           aspectRatio: aspectRatio as any,
         });
@@ -484,8 +480,8 @@ export async function runIterationStage3(runId: number, run: any) {
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
           useCompositing: true,
-          productPosition: "bottom-right",
-          productScale: 0.42,
+          productPosition: "center",
+          productScale: 0.45,
         }, i);
 
         return {
@@ -649,10 +645,6 @@ export async function regenerateIterationVariation(
     headline,
     subheadline: subheadline || undefined,
     productName: `ONEST Health ${product}`,
-    productKey: product,
-    flavour: run.selectedFlavour || undefined,
-    compositingMode: true,
-    productPosition: "bottom-right",
     visualDescription: v.visualDescription || undefined,
     backgroundStyleDescription: bgPrompt,
     referenceFxPresent: regenFxPresent,
@@ -685,8 +677,8 @@ export async function regenerateIterationVariation(
       aspectRatio: aspectRatio as any,
       model: imageModel,
       useCompositing: true,
-      productPosition: "bottom-right",
-      productScale: 0.42,
+      productPosition: "center",
+      productScale: 0.45,
     },
     variationIndex,
   );
