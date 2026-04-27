@@ -1,0 +1,75 @@
+name: Auto Doc Sync
+
+# Detects when a PR touches files referenced in any docs/*.md, asks Claude
+# to update the affected doc(s), and commits the updates back to the PR
+# branch. Goal: docs stay current without anyone thinking about it.
+#
+# How it knows what's affected: each doc has a "## Code pointers" section
+# listing file paths. Script parses those, cross-references against changed
+# files in the PR, and only triggers Claude on docs that actually map to
+# touched code.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+# Avoid running on the auto-sync's own commits. The auto-commit message
+# includes [skip ci]; GitHub honours that and won't re-trigger.
+concurrency:
+  group: doc-sync-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync-docs:
+    # Skip docs-only PRs (no source changes to react to) and skip the bot's
+    # own commits (defense in depth — concurrency + [skip ci] should also
+    # prevent loops).
+    if: |
+      !contains(github.event.pull_request.title, '[skip-doc-sync]') &&
+      github.event.pull_request.user.login != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node + pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Run doc-drift sync
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm tsx scripts/doc-drift.ts
+
+      - name: Commit updates if any
+        run: |
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add docs/
+            git commit -m "docs: auto-sync from code changes [skip ci]" \
+              -m "Updated by .github/workflows/doc-drift.yml in response to source changes in this PR." \
+              -m "Review the diff to confirm the doc updates are accurate. If Claude got something wrong, edit the doc and force-push — the action won't re-run on its own commits."
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            echo "Pushed doc sync commit to PR branch."
+          else
+            echo "No doc updates needed."
+          fi
