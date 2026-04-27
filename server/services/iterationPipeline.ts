@@ -399,10 +399,32 @@ export async function runIterationStage3(runId: number, run: any) {
       : [];
 
     if (briefData?.variations && Array.isArray(briefData.variations)) {
-      // Generate variations concurrently (2 at a time to avoid API rate limits)
-      const tasks = Array.from({ length: variationCount }, (_, i) => async () => {
+      // Generate variations concurrently (2 at a time to avoid API rate
+      // limits). Each task returns a Result type so a single failure
+      // doesn't kill the whole batch — we collect successes and ship,
+      // mark failures separately so the UI can surface a "regenerate"
+      // affordance per failed variation.
+      type VariationSuccess = {
+        ok: true;
+        url: string;
+        s3Key: string;
+        headline: string;
+        subheadline: string | null;
+        angle: string | null;
+        backgroundNote: string | null;
+        productImageUrl: string;
+        controlImageUrl: string;
+      };
+      type VariationFailure = {
+        ok: false;
+        index: number;
+        headline: string;
+        error: string;
+      };
+      type VariationResult = VariationSuccess | VariationFailure;
+
+      const tasks = Array.from({ length: variationCount }, (_, i) => async (): Promise<VariationResult> => {
         const v = briefData.variations[i] || {};
-        // Per-variation person override > global person > none
         const variationPersonUrl = perVariationPersonUrls[i] ?? globalPersonImageUrl;
 
         const basePrompt = buildReferenceBasedPrompt({
@@ -427,32 +449,63 @@ export async function runIterationStage3(runId: number, run: any) {
 
         console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
 
-        const result = await dispatchVariationGeneration({
-          prompt: geminiPrompt,
-          controlImageUrl: sourceUrl,
-          productRenderUrl: productRender.url,
-          aspectRatio: aspectRatio as any,
-          resolution: (run.resolution as any) || "2K",
-          model: imageModel,
-          useCompositing: true,
-          productPosition: "center",
-          productScale: 0.45,
-          personImageUrl: variationPersonUrl,
-        }, i);
+        try {
+          const result = await dispatchVariationGeneration({
+            prompt: geminiPrompt,
+            controlImageUrl: sourceUrl,
+            productRenderUrl: productRender.url,
+            aspectRatio: aspectRatio as any,
+            resolution: (run.resolution as any) || "2K",
+            model: imageModel,
+            useCompositing: true,
+            productPosition: "center",
+            productScale: 0.45,
+            personImageUrl: variationPersonUrl,
+          }, i);
 
-        return {
-          url: result.imageUrl,
-          s3Key: result.imageUrl.split('/').pop() || '',
-          headline: v.headline || `VARIATION ${i + 1}`,
-          subheadline: v.subheadline || null,
-          angle: v.angle || null,
-          backgroundNote: v.backgroundNote || null,
-          productImageUrl: productRender.url,
-          controlImageUrl: sourceUrl,
-        };
+          return {
+            ok: true,
+            url: result.imageUrl,
+            s3Key: result.imageUrl.split('/').pop() || '',
+            headline: v.headline || `VARIATION ${i + 1}`,
+            subheadline: v.subheadline || null,
+            angle: v.angle || null,
+            backgroundNote: v.backgroundNote || null,
+            productImageUrl: productRender.url,
+            controlImageUrl: sourceUrl,
+          };
+        } catch (err: any) {
+          const message = err?.message || "Unknown generation error";
+          console.error(`[Iteration] Variation ${i + 1} failed: ${message}`);
+          return {
+            ok: false,
+            index: i,
+            headline: v.headline || `VARIATION ${i + 1}`,
+            error: message,
+          };
+        }
       });
 
-      geminiResults.push(...await runWithConcurrency(tasks, 2));
+      const settled = await runWithConcurrency(tasks, 2);
+      const successes = settled.filter((r): r is VariationSuccess => r.ok);
+      const failures = settled.filter((r): r is VariationFailure => !r.ok);
+
+      if (failures.length > 0) {
+        console.warn(`[Iteration] ${failures.length}/${variationCount} variations failed. Shipping ${successes.length} successes.`);
+        for (const f of failures) {
+          console.warn(`[Iteration]   V${f.index + 1} (${f.headline}): ${f.error}`);
+        }
+      }
+
+      // Hard fail only when EVERY variation failed — partial success is
+      // useful, zero success is not.
+      if (successes.length === 0) {
+        throw new Error(
+          `All ${variationCount} variations failed to generate. Last error: ${failures[0]?.error ?? "unknown"}`,
+        );
+      }
+
+      geminiResults.push(...successes);
     } else {
       // Fallback: generate variations with rotating headlines and backgrounds
       const fallbackHeadlineTemplates = [

@@ -29,10 +29,10 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 /** 10 minutes — used for Claude API calls and other long-running steps. */
 export const STEP_TIMEOUT = 10 * 60 * 1000;
 
-/** 5 minutes — used for individual image variation generation. Wraps the
-    inner Gemini HTTP timeout (240s) with 60s of buffer for compositing,
-    S3 upload, and other post-generation work. */
-export const VARIATION_TIMEOUT = 5 * 60 * 1000;
+/** 7 minutes — used for individual image variation generation. Wraps the
+    inner Gemini HTTP timeout (360s) plus 60s buffer, doubled to allow one
+    retry on timeout (see nanoBananaPro.ts retry-on-timeout logic). */
+export const VARIATION_TIMEOUT = 13 * 60 * 1000;
 
 /** 90 minutes — outer ceiling for the entire Stage 4 (script generation + review loop). */
 export const STAGE_4_TIMEOUT = 90 * 60 * 1000;

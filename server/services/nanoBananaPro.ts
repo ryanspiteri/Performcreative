@@ -189,17 +189,32 @@ async function generateProductAdWithNanaBananaPro_internal(
 
     console.log(`[NanaBanana] Sending request to Gemini API (${modelId})...`);
 
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GOOGLE_AI_API_KEY}`,
-      requestBody,
-      {
-        headers: { "Content-Type": "application/json" },
-        // Nano Banana Pro is officially quoted at 2-3 min per image. 180s
-        // sat right on the edge of natural variance and timed out whenever
-        // Gemini landed on the slow side. 240s gives real headroom.
-        timeout: 240000,
-      }
-    );
+    // Nano Banana Pro is officially quoted at 2-3 min per image, but slow
+    // days plus our heavier prompts (label specs + style carve-outs + angle
+    // blocks) have hit 4 min. 360s gives real headroom; retry-once on
+    // timeout handles the long tail without inflating the floor for fast
+    // requests.
+    const HTTP_TIMEOUT = 360_000;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GOOGLE_AI_API_KEY}`;
+    const requestConfig = {
+      headers: { "Content-Type": "application/json" },
+      timeout: HTTP_TIMEOUT,
+    };
+
+    let response;
+    try {
+      response = await axios.post(apiUrl, requestBody, requestConfig);
+    } catch (err: any) {
+      // Retry once on timeout. If Gemini is just slow this run, a second
+      // attempt usually lands fast. If both attempts time out, surface the
+      // error so the partial-success path in iterationPipeline can ship the
+      // other variations and mark this one as failed.
+      const isTimeout = err?.code === "ECONNABORTED" || /timeout/i.test(err?.message || "");
+      if (!isTimeout) throw err;
+      console.warn(`[NanaBanana] First attempt timed out after ${HTTP_TIMEOUT}ms, retrying once...`);
+      response = await axios.post(apiUrl, requestBody, requestConfig);
+      console.log(`[NanaBanana] Retry succeeded.`);
+    }
 
     console.log(`[NanaBanana] Received response from Gemini API`);
 
