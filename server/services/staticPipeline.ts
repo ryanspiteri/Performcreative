@@ -34,9 +34,6 @@ async function generateStaticAdVariationsWithGemini(
       headline,
       subheadline: subheadline || undefined,
       productName: `ONEST Health ${product}`,
-      productKey: product,
-      compositingMode: true,
-      productPosition: "bottom-right",
       backgroundStyleDescription: backgroundDesc,
       aspectRatio: "1:1",
     });
@@ -53,8 +50,8 @@ async function generateStaticAdVariationsWithGemini(
         productRenderUrl: productRender.url,
         aspectRatio: "1:1",
         useCompositing: true,
-        productPosition: "bottom-right",
-        productScale: 0.42,
+        productPosition: "center",
+        productScale: 0.45,
       }),
       VARIATION_TIMEOUT,
       `Stage 4: Variation ${i + 1}/${variationCount}`
