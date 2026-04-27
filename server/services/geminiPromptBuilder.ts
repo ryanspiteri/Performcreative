@@ -90,10 +90,17 @@ function isStylisedScene(visualDescription: string | undefined): boolean {
 
 function productPreservationBlock(productKey: string | undefined, flavour: string | undefined): string {
   const specFn = productKey ? PRODUCT_LABEL_SPECS[productKey] : undefined;
+  // Anti-bleed clauses. Added after a Pink Lemonade run produced a pink-bodied
+  // tub on one of three variations: Gemini interpreted "PINK LEMONADE" in the
+  // flavour spec as a body-colour instruction, and the competitor reference
+  // ad's product design leaked into the variation prompts via the brief.
+  // (1) Flavour names describe taste, not body colour.
+  // (2) Image 1's product is invisible for product-rendering purposes.
+  const antiBleed = `\n\nFLAVOUR NAMES ARE NOT COLOUR INSTRUCTIONS. A flavour like "PINK LEMONADE", "MANGO", or "GRAPE" describes the powder's taste — it appears ONLY on the small flavour label strip. The tub body design (matte black, orange swoosh, wordmark, cap) is FIXED and identical for every flavour. Do NOT tint the tub body, cap, or graphic to match the flavour name. A "PINK LEMONADE" Hyperburn tub is still matte black with an orange swoosh — only the flavour strip text changes.\n\nIGNORE IMAGE 1's PRODUCT. Image 1 belongs to a different brand. Its product may have a different colour, shape, label design, cap style, or material entirely. Do NOT take product design cues from Image 1 — for the purpose of rendering the product, Image 1's product is invisible. Image 2 is the only product reference that matters.`;
   if (specFn) {
-    return `The ONEST ${productKey} tub in Image 2 is the ONLY acceptable product in your output. It MUST match Image 2 exactly — ${specFn(flavour)}. Do NOT redesign, restyle, reinterpret, or hallucinate any label element. Every word on the packaging, the colour, the graphic, and the logo must appear in your output exactly as they appear in Image 2. If you cannot preserve them faithfully, fail rather than fabricate. The product shown in Image 1 belongs to a different brand — treat it as invisible when deciding what product to render.`;
+    return `The ONEST ${productKey} tub in Image 2 is the ONLY acceptable product in your output. It MUST match Image 2 exactly — ${specFn(flavour)}. Do NOT redesign, restyle, reinterpret, or hallucinate any label element. Every word on the packaging, the colour, the graphic, and the logo must appear in your output exactly as they appear in Image 2. If you cannot preserve them faithfully, fail rather than fabricate.${antiBleed}`;
   }
-  return `The ONEST bottle in Image 2 is the ONLY acceptable product in your output. Do NOT generate, redraw, restyle, or replace it. Preserve its label, colour, cap, and branding pixel-accurate. If you cannot, fail rather than fabricate. The product shown in Image 1 belongs to a different brand — treat it as invisible when deciding what product to render.`;
+  return `The ONEST bottle in Image 2 is the ONLY acceptable product in your output. Do NOT generate, redraw, restyle, or replace it. Preserve its label, colour, cap, and branding pixel-accurate. If you cannot, fail rather than fabricate.${antiBleed}`;
 }
 
 function stylisedSceneCarveoutBlock(): string {
