@@ -11,7 +11,7 @@
  * contained "burn" or "power" — including brand names like "Hyperburn".
  */
 
-import type { DetectedFxType, StyleMode } from "../../shared/iterationBriefSchema";
+import type { DetectedFxType, StyleMode, VariationType } from "../../shared/iterationBriefSchema";
 
 /** @deprecated kept only so legacy callers compile; risk level cut in UI in Day 4. */
 export type CreativityLevel = "SAFE" | "BOLD" | "WILD";
@@ -34,6 +34,10 @@ export interface PromptBuildOptions {
   detectedFxTypes?: DetectedFxType[];
   /** How tightly to hug the reference's visual language. */
   styleMode?: StyleMode;
+  /** Variation type from the brief — drives per-variation override of styleMode.
+      A full_remix variation gets max freedom regardless of styleMode; a
+      headline_only variation gets MATCH-style language regardless of styleMode. */
+  variationType?: VariationType;
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
   targetAudience?: string;
   hasPersonReference?: boolean;
@@ -108,18 +112,52 @@ function stylisedSceneCarveoutBlock(): string {
 The scene you are generating is stylised (animated / illustrated / rendered / non-photoreal). The PRODUCT in Image 2 is the ONE element that MUST remain photorealistic. Render the scene, character, environment, and props in the requested style, but composite the product tub in with unchanged photorealism — as if an actual product photograph was placed into the stylised scene. Do NOT stylise, cartoonify, or reinterpret the tub's label, wordmark, subtext, flavour strip, logo, or packaging material. Apply only lighting and shadow appropriate to the scene; everything else about the product must be 1:1 with Image 2.`;
 }
 
-function styleModeBlock(styleMode: StyleMode | undefined): string {
-  switch (styleMode) {
+// Some variation types are conceptually incompatible with hugging the reference.
+// A `full_remix` variation is meant to test "change everything" — telling Gemini
+// "replicate the reference's colour palette, layout, composition" makes the
+// remix structurally impossible. Override styleMode for those types.
+//
+// Past failure that motivated this: a Pink Lemonade run with a pink-themed
+// reference produced a `full_remix` variation whose brief said "split-screen,
+// dark gradient orange-red" — but Gemini matched the reference's pink palette
+// instead, because EVOLVE_REFERENCE told it to. The variationType-aware path
+// fixes that: full_remix gets DEPART-equivalent freedom no matter the styleMode.
+function effectiveStyleMode(
+  styleMode: StyleMode | undefined,
+  variationType: VariationType | undefined,
+): StyleMode {
+  if (variationType === "full_remix") return "DEPART_FROM_REFERENCE";
+  // background_only and layout_only briefs explicitly differ from the reference
+  // on the dimension being varied. Honour the user's styleMode for the rest of
+  // the composition but loosen it to EVOLVE so the variation brief can override
+  // colour/composition where it specifies a difference.
+  if ((variationType === "background_only" || variationType === "layout_only") && styleMode === "MATCH_REFERENCE") {
+    return "EVOLVE_REFERENCE";
+  }
+  return styleMode ?? "EVOLVE_REFERENCE";
+}
+
+function styleModeBlock(
+  styleMode: StyleMode | undefined,
+  variationType: VariationType | undefined,
+): string {
+  const resolved = effectiveStyleMode(styleMode, variationType);
+  const overrideNote = variationType === "full_remix"
+    ? `\n(Note: this is a FULL REMIX variation — full creative freedom overrides any tighter style mode set on the run.)`
+    : "";
+  switch (resolved) {
     case "MATCH_REFERENCE":
       return `=== STYLE FIDELITY — MATCH REFERENCE ===
-Treat Image 1's composition, colour palette, lighting, texture, and typographic style as LOCKED. Reproduce them as faithfully as you can while substituting the copy below and using the product render from Image 2. Do not introduce props, colours, or compositions that aren't present in Image 1.`;
+Treat Image 1's composition, colour palette, lighting, texture, and typographic style as LOCKED. Reproduce them as faithfully as you can while substituting the copy below and using the product render from Image 2. Do not introduce props, colours, or compositions that aren't present in Image 1.${overrideNote}`;
     case "DEPART_FROM_REFERENCE":
       return `=== STYLE FIDELITY — DEPART FROM REFERENCE ===
-Use Image 1 as a quality benchmark only. You may reinvent composition, lighting, and props. Still use the product render from Image 2. Still produce a coherent supplement ad that feels premium.`;
+Use Image 1 as a quality benchmark only — for production polish and aesthetic family. You may reinvent composition, lighting, palette, and props. Still use the product render from Image 2. Still produce a coherent supplement ad that feels premium.${overrideNote}`;
     case "EVOLVE_REFERENCE":
     default:
       return `=== STYLE FIDELITY — EVOLVE REFERENCE ===
-Study Image 1 carefully and replicate its overall layout, text placement, colour palette, lighting, product placement, background style, typography hierarchy, and aesthetic. Vary only what the variation brief calls for. Someone should look at your output beside Image 1 and say "same campaign, different headline".`;
+Study Image 1 carefully and replicate its overall layout, text placement, colour palette, lighting, product placement, background style, typography hierarchy, and aesthetic. Vary only what the variation brief calls for. Someone should look at your output beside Image 1 and say "same campaign, different headline".
+
+Where the VISUAL DESCRIPTION FOR THIS VARIATION (below) explicitly describes a different background colour, layout, composition, or palette from Image 1, the variation description WINS. The style mode sets the aesthetic family; the variation description sets the specific composition for this one variation.${overrideNote}`;
   }
 }
 
@@ -144,6 +182,7 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
     productName,
     productKey,
     flavour,
+    variationType,
     backgroundStyleDescription,
     visualDescription,
     referenceFxPresent,
@@ -172,7 +211,7 @@ I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
 - Image 1: A REFERENCE AD — use this for STYLE REFERENCE ONLY (layout, palette, mood, lighting, typography, composition). The product in Image 1 is NOT the product you are rendering.
 - Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output.${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}
 
-${styleModeBlock(styleMode)}
+${styleModeBlock(styleMode, variationType)}
 ${carveout}
 === NEW COPY FOR THIS VERSION ===
 Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
