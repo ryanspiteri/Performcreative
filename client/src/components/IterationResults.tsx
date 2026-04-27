@@ -486,6 +486,11 @@ export function IterationResults({ run }: { run: any }) {
                         <span className="text-xs font-bold text-[#FF3838] bg-[#FF3838]/10 px-2 py-1 rounded">
                           V{v.number || i + 1}
                         </span>
+                        {v.variationType && (
+                          <span className="text-[10px] bg-[#0347ED]/10 text-[#0347ED] px-2 py-1 rounded border border-[#0347ED]/20 whitespace-nowrap" title="Variation type">
+                            {String(v.variationType).replace(/_/g, ' ')}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-400 flex-1 truncate">{isEditing ? buf.angle : v.angle}</span>
                         {isEditing ? (
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Unsaved edits" />
