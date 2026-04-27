@@ -1363,6 +1363,20 @@ Return JSON in this exact format:
         await db.setDefaultProductRender(input.id);
         return { success: true };
       }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        fileName: z.string().min(1).max(256).optional(),
+        tags: z.string().max(256).nullable().optional(),
+        flavour: z.string().max(64).nullable().optional(),
+        angle: z.string().max(32).nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...patch } = input;
+        await db.updateProductRender(id, patch);
+        return { success: true };
+      }),
   }),
 
   // ============================================================

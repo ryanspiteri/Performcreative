@@ -149,6 +149,8 @@ export const productRenders = mysqlTable("product_renders", {
   flavour: varchar("flavour", { length: 64 }),
   /** Render angle (e.g., "front", "side", "45-degree", "top-down", "back"). */
   angle: varchar("angle", { length: 32 }),
+  /** Comma-separated free-form tags (e.g., "hero,clean,white-bg"). */
+  tags: varchar("tags", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
