@@ -325,28 +325,35 @@ export async function runIterationStage3(runId: number, run: any) {
     //      different flavour (and was, before this fix — Mango defaults
     //      were leaking into Pink Lemonade runs).
     //   3. Global default for the product — the catch-all fallback.
-    let productRender;
+    // Build a *pool* of candidate renders. Variations within a run round-robin
+    // across the pool so multiple flavour-tagged renders (e.g. front + tilted)
+    // produce visual variety naturally instead of every variation reusing the
+    // single isDefault shot. Manual selectedRenderId locks the pool to one.
+    let renderPool: Array<Awaited<ReturnType<typeof db.getProductRenderById>>> = [];
     if (run.selectedRenderId) {
-      productRender = await db.getProductRenderById(run.selectedRenderId);
-      if (!productRender) {
-        console.warn(`[Iteration] Selected render #${run.selectedRenderId} not found, falling back to flavour/default lookup`);
-      }
+      const picked = await db.getProductRenderById(run.selectedRenderId);
+      if (picked) renderPool = [picked];
+      else console.warn(`[Iteration] Selected render #${run.selectedRenderId} not found, falling back to flavour/default lookup`);
     }
-    if (!productRender && run.selectedFlavour) {
+    if (renderPool.length === 0 && run.selectedFlavour) {
       const flavourRenders = await db.listProductRendersByFlavour(product, run.selectedFlavour);
       if (flavourRenders.length > 0) {
-        productRender = flavourRenders[0]; // sorted by isDefault desc, then createdAt desc
-        console.log(`[Iteration] Using flavour-tagged render #${productRender.id} for ${product} / ${run.selectedFlavour}`);
+        renderPool = flavourRenders;
+        console.log(`[Iteration] Render pool for ${product} / ${run.selectedFlavour}: ${flavourRenders.length} render(s) — will round-robin across variations`);
       } else {
         console.warn(`[Iteration] No render tagged for ${product} / "${run.selectedFlavour}" — falling back to global default. Upload a flavour-specific render in /product-info to fix.`);
       }
     }
-    if (!productRender) {
-      productRender = await db.getDefaultProductRender(product);
+    if (renderPool.length === 0) {
+      const fallback = await db.getDefaultProductRender(product);
+      if (fallback) renderPool = [fallback];
     }
-    if (!productRender) {
+    if (renderPool.length === 0 || !renderPool[0]) {
       throw new Error(`No product render found for ${product}`);
     }
+    // Primary render — used for fallback paths and logging. The structured
+    // variation loop picks per-variation from renderPool below.
+    const productRender = renderPool[0]!;
 
     // Resolve person references. Two modes:
     //  - Custom Per Variation: selectedPersonIds is a JSON array `(number | null)[]` of length N.
@@ -444,6 +451,12 @@ export async function runIterationStage3(runId: number, run: any) {
       const tasks = Array.from({ length: variationCount }, (_, i) => async (): Promise<VariationResult> => {
         const v = briefData.variations[i] || {};
         const variationPersonUrl = perVariationPersonUrls[i] ?? globalPersonImageUrl;
+        // Round-robin across the render pool so flavour-tagged variants (front,
+        // tilted, etc.) all get used across a multi-variation run.
+        const variationRender = renderPool[i % renderPool.length]!;
+        if (renderPool.length > 1) {
+          console.log(`[Iteration] V${i + 1}/${variationCount} → render #${variationRender.id} (${variationRender.fileName})`);
+        }
 
         const basePrompt = buildReferenceBasedPrompt({
           headline: v.headline || `${product.toUpperCase()} VARIATION ${i + 1}`,
@@ -485,7 +498,7 @@ export async function runIterationStage3(runId: number, run: any) {
             const result = await dispatchVariationGeneration({
               prompt: geminiPrompt,
               controlImageUrl: sourceUrl,
-              productRenderUrl: productRender.url,
+              productRenderUrl: variationRender.url,
               aspectRatio: aspectRatio as any,
               resolution: (run.resolution as any) || "2K",
               model: imageModel,
@@ -495,7 +508,7 @@ export async function runIterationStage3(runId: number, run: any) {
               personImageUrl: variationPersonUrl,
             }, i);
 
-            const vqa = await validateProductFidelity(result.imageUrl, productRender.url);
+            const vqa = await validateProductFidelity(result.imageUrl, variationRender.url);
             if (vqa.pass) {
               return {
                 ok: true,
@@ -505,7 +518,7 @@ export async function runIterationStage3(runId: number, run: any) {
                 subheadline: v.subheadline || null,
                 angle: v.angle || null,
                 backgroundNote: v.backgroundNote || null,
-                productImageUrl: productRender.url,
+                productImageUrl: variationRender.url,
                 controlImageUrl: sourceUrl,
               };
             }
@@ -568,6 +581,7 @@ export async function runIterationStage3(runId: number, run: any) {
 
         const headline = fallbackHeadlineTemplates[i % fallbackHeadlineTemplates.length];
         const bg = fallbackBackgrounds[i % fallbackBackgrounds.length];
+        const variationRender = renderPool[i % renderPool.length]!;
 
         const fallbackPrompt = buildReferenceBasedPrompt({
           headline,
@@ -581,7 +595,7 @@ export async function runIterationStage3(runId: number, run: any) {
         const result = await dispatchVariationGeneration({
           prompt: fallbackPrompt,
           controlImageUrl: sourceUrl,
-          productRenderUrl: productRender.url,
+          productRenderUrl: variationRender.url,
           aspectRatio: aspectRatio as any,
           resolution: (run.resolution as any) || "2K",
           model: imageModel,
@@ -597,7 +611,7 @@ export async function runIterationStage3(runId: number, run: any) {
           subheadline: null,
           angle: null,
           backgroundNote: bg,
-          productImageUrl: productRender.url,
+          productImageUrl: variationRender.url,
           controlImageUrl: sourceUrl,
         };
       });
@@ -727,14 +741,18 @@ export async function regenerateIterationVariation(
       : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
 
   // Get product render. Same resolution order as Stage 3 fresh runs:
-  // explicit selectedRenderId → flavour-tagged render → global default.
+  // explicit selectedRenderId → flavour pool (round-robined by variationIndex)
+  // → global default. Using `variationIndex % pool.length` keeps regeneration
+  // deterministic — variation #2 always re-uses the same render slot it had.
   let productRender;
   if (run.selectedRenderId) {
     productRender = await db.getProductRenderById(run.selectedRenderId);
   }
   if (!productRender && run.selectedFlavour) {
     const flavourRenders = await db.listProductRendersByFlavour(product, run.selectedFlavour);
-    if (flavourRenders.length > 0) productRender = flavourRenders[0];
+    if (flavourRenders.length > 0) {
+      productRender = flavourRenders[variationIndex % flavourRenders.length];
+    }
   }
   if (!productRender) {
     productRender = await db.getDefaultProductRender(product);
