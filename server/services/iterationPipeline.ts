@@ -999,10 +999,8 @@ IMPORTANT VISUAL RULE:
 
 DO NOT BLEED PRODUCT DESIGN INTO visualDescription OR backgroundNote:
 - visualDescription and backgroundNote describe SCENE elements: lighting, composition, characters, props, atmosphere, surfaces, environment. They do NOT describe the product's design.
-- The product itself (tub colour, cap, swoosh, wordmark, label) is rendered from a separate fixed product render image — its design is locked and not your responsibility to describe.
-- Do NOT include cues like "pink-toned tub", "mango-coloured packaging", "matching the flavour colour", or anything that implies the product body should change colour, shape, or style based on flavour or theme.
+- The product itself is rendered from a fixed product render image (Image 2) — its design is locked at runtime by that image, not your responsibility to describe.
 - If the reference ad's analysis describes the COMPETITOR'S product design (their tub colour, label style, etc.), DO NOT echo that into visualDescription — the competitor's product is irrelevant; only their scene/composition/lighting matters.
-- Flavour names like "Pink Lemonade" or "Mango" describe TASTE only. Do NOT translate flavour names into colour instructions for the visual description.
 
 Return ONLY valid JSON. No markdown, no code blocks, no explanation.`;
 
@@ -1199,10 +1197,8 @@ IMPORTANT VISUAL RULE:
 
 DO NOT BLEED PRODUCT DESIGN INTO visualDescription OR backgroundNote:
 - visualDescription/backgroundNote describe SCENE elements only: lighting, composition, characters, props, atmosphere, surfaces, environment.
-- The ONEST product itself (tub colour, cap, swoosh, wordmark, label) is rendered from a fixed product render — its design is locked and not your responsibility to describe.
+- The ONEST product is rendered from a fixed product render image (Image 2) — its design is locked at runtime by that image, not your responsibility to describe.
 - The COMPETITOR'S product design (their tub colour, packaging shape, label style) is IRRELEVANT — DO NOT echo it into visualDescription. Only the competitor's scene, composition, and lighting matter.
-- Do NOT include cues like "pink-toned tub", "mango-coloured packaging", or anything that implies the ONEST product body should change colour or style based on flavour or theme.
-- Flavour names like "Pink Lemonade" or "Mango" describe TASTE only. Do NOT translate them into colour instructions.
 
 Return ONLY valid JSON. No markdown, no code blocks.`;
 

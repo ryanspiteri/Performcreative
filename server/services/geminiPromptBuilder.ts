@@ -55,13 +55,22 @@ export interface PromptBuildOptions {
 // Keys match ACTIVE_PRODUCTS in drizzle/schema.ts. Products not in the map fall
 // back to the generic preservation language. Add new products here as we dial
 // them in — start narrow (Hyperburn is the first product the hypothesis targets).
+// IMPORTANT: do NOT bake colour claims into the spec. The Hyperburn swoosh
+// graphic colour CHANGES per flavour — Pink Lemonade has a pink swoosh,
+// Mango has orange, etc. The original spec hardcoded "orange swoosh" and
+// caused Gemini to render Mango-style swooshes on Pink Lemonade variations.
+// Image 2 (the product render) is the source of truth for swoosh colour
+// and shape. The spec only enumerates elements that are stable across
+// flavours: body material, wordmark, subtext, logo position, plus a
+// pointer to the flavour strip.
 const PRODUCT_LABEL_SPECS: Record<string, (flavour?: string) => string> = {
   Hyperburn: (flavour) => {
     const flavourClause = flavour
       ? `the "${flavour.toUpperCase()}" flavour label strip across the front`
-      : `the flavour label strip across the front (exactly as shown in Image 2)`;
+      : `the flavour label strip across the front`;
     return [
-      `matte black tub with an orange graphic swoosh`,
+      `matte black tub body`,
+      `a graphic swoosh whose colour and shape match Image 2 exactly (do not assume orange — different flavours have different swoosh colours)`,
       `bold white "HYPERBURN" wordmark`,
       `"ELITE THERMOGENIC" subtext beneath the wordmark`,
       flavourClause,
@@ -97,13 +106,17 @@ function isStylisedScene(visualDescription: string | undefined): boolean {
 
 function productPreservationBlock(productKey: string | undefined, flavour: string | undefined): string {
   const specFn = productKey ? PRODUCT_LABEL_SPECS[productKey] : undefined;
-  // Anti-bleed clauses. Added after a Pink Lemonade run produced a pink-bodied
-  // tub on one of three variations: Gemini interpreted "PINK LEMONADE" in the
-  // flavour spec as a body-colour instruction, and the competitor reference
-  // ad's product design leaked into the variation prompts via the brief.
-  // (1) Flavour names describe taste, not body colour.
-  // (2) Image 1's product is invisible for product-rendering purposes.
-  const antiBleed = `\n\nFLAVOUR NAMES ARE NOT COLOUR INSTRUCTIONS. A flavour like "PINK LEMONADE", "MANGO", or "GRAPE" describes the powder's taste — it appears ONLY on the small flavour label strip. The tub body design (matte black, orange swoosh, wordmark, cap) is FIXED and identical for every flavour. Do NOT tint the tub body, cap, or graphic to match the flavour name. A "PINK LEMONADE" Hyperburn tub is still matte black with an orange swoosh — only the flavour strip text changes.\n\nIGNORE IMAGE 1's PRODUCT. Image 1 belongs to a different brand. Its product may have a different colour, shape, label design, cap style, or material entirely. Do NOT take product design cues from Image 1 — for the purpose of rendering the product, Image 1's product is invisible. Image 2 is the only product reference that matters.`;
+  // Anti-bleed clauses. The flavour CAN influence packaging colour (Pink
+  // Lemonade has a pink swoosh, Mango has orange) — this is correct
+  // brand design. What flavour-name DOESN'T do is change the tub body
+  // material/colour, the wordmark style, the cap, or the wrapper layout.
+  // The earlier "flavour names are not colour instructions" clause was
+  // wrong and was forcing Gemini to render Mango-style swooshes on
+  // every flavour. Removed.
+  //
+  // What stays is the Image 1 invisibility clause — competitor product
+  // design from the reference ad still shouldn't bleed into our output.
+  const antiBleed = `\n\nMATCH IMAGE 2 EXACTLY FOR PACKAGING. The swoosh graphic colour, shape, and position; the flavour label strip colour and text; and any other packaging-design elements MUST match Image 2 exactly. Different flavours of this product have DIFFERENT swoosh colours — do not assume the swoosh is any specific colour. Trust Image 2.\n\nIGNORE IMAGE 1's PRODUCT. Image 1 belongs to a different brand. Its product may have a different colour, shape, label design, cap style, or material entirely. Do NOT take product design cues from Image 1 — for the purpose of rendering the product, Image 1's product is invisible. Image 2 is the only product reference that matters.`;
   if (specFn) {
     return `The ONEST ${productKey} tub in Image 2 is the ONLY acceptable product in your output. It MUST match Image 2 exactly — ${specFn(flavour)}. Do NOT redesign, restyle, reinterpret, or hallucinate any label element. Every word on the packaging, the colour, the graphic, and the logo must appear in your output exactly as they appear in Image 2. If you cannot preserve them faithfully, fail rather than fabricate.${antiBleed}`;
   }
