@@ -315,15 +315,32 @@ export async function runIterationStage3(runId: number, run: any) {
       imageModel === "openai_gpt_image" ? "OpenAI gpt-image-1" : MODEL_LABELS[imageModel];
     console.log(`[Iteration] Using image model: ${modelLabel}`);
 
-    // Get product render: use selectedRenderId if set, otherwise fallback to default
+    // Get product render. Resolution order:
+    //   1. Explicit user pick (selectedRenderId) — they manually clicked
+    //      a thumbnail on /iterate.
+    //   2. Flavour-tagged render for this run's selectedFlavour — when the
+    //      user picked "Pink Lemonade" we should pass the Pink Lemonade
+    //      render PNG to Gemini, not the global default which might be a
+    //      different flavour (and was, before this fix — Mango defaults
+    //      were leaking into Pink Lemonade runs).
+    //   3. Global default for the product — the catch-all fallback.
     let productRender;
     if (run.selectedRenderId) {
       productRender = await db.getProductRenderById(run.selectedRenderId);
       if (!productRender) {
-        console.warn(`[Iteration] Selected render #${run.selectedRenderId} not found, falling back to default`);
-        productRender = await db.getDefaultProductRender(product);
+        console.warn(`[Iteration] Selected render #${run.selectedRenderId} not found, falling back to flavour/default lookup`);
       }
-    } else {
+    }
+    if (!productRender && run.selectedFlavour) {
+      const flavourRenders = await db.listProductRendersByFlavour(product, run.selectedFlavour);
+      if (flavourRenders.length > 0) {
+        productRender = flavourRenders[0]; // sorted by isDefault desc, then createdAt desc
+        console.log(`[Iteration] Using flavour-tagged render #${productRender.id} for ${product} / ${run.selectedFlavour}`);
+      } else {
+        console.warn(`[Iteration] No render tagged for ${product} / "${run.selectedFlavour}" — falling back to global default. Upload a flavour-specific render in /product-info to fix.`);
+      }
+    }
+    if (!productRender) {
       productRender = await db.getDefaultProductRender(product);
     }
     if (!productRender) {
@@ -687,10 +704,15 @@ export async function regenerateIterationVariation(
       ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
       : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
 
-  // Get product render: use run's selected render or fall back to default
+  // Get product render. Same resolution order as Stage 3 fresh runs:
+  // explicit selectedRenderId → flavour-tagged render → global default.
   let productRender;
   if (run.selectedRenderId) {
     productRender = await db.getProductRenderById(run.selectedRenderId);
+  }
+  if (!productRender && run.selectedFlavour) {
+    const flavourRenders = await db.listProductRendersByFlavour(product, run.selectedFlavour);
+    if (flavourRenders.length > 0) productRender = flavourRenders[0];
   }
   if (!productRender) {
     productRender = await db.getDefaultProductRender(product);
