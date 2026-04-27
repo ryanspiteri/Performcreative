@@ -89,4 +89,13 @@ export const ENV = {
    */
   pipelineIdleTimeoutMinutes: parseInt(process.env.PIPELINE_IDLE_TIMEOUT_MINUTES ?? "60", 10),
   pipelineSweepIntervalMinutes: parseInt(process.env.PIPELINE_SWEEP_INTERVAL_MINUTES ?? "10", 10),
+  /**
+   * Vision QA validate-and-retry. When enabled (default), each Stage 3
+   * variation is scored by Claude Vision against the canonical /product-info
+   * render. Catastrophic structural failures (wrong body colour, wrong
+   * swoosh colour, missing wordmark, missing flavour strip) trigger up to
+   * 2 regenerate attempts before the variation is marked failed. Set to
+   * "true" to disable without a deploy if Vision QA misfires.
+   */
+  disableVisionQA: (process.env.DISABLE_VISION_QA ?? "false").toLowerCase() === "true",
 };
