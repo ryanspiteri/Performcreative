@@ -7,6 +7,7 @@ import type { ImageGenerateOptions } from "./imageGenerator";
 
 export type ImageModel = GeminiImageModel | "openai_gpt_image";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
+import { validateProductFidelity } from "./visionQA";
 import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
 import {
   iterationBriefV1Schema,
@@ -462,35 +463,56 @@ export async function runIterationStage3(runId: number, run: any) {
           hasPersonReference: !!variationPersonUrl,
         });
 
-        const geminiPrompt = `${basePrompt}\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
+        const baseUniquenessNote = `\n\n=== VARIATION ${i + 1} UNIQUENESS ===\nThis is variation #${i + 1} of ${variationCount}. Make this visually distinct from other variations by using unique:\n- Color combinations and lighting angles\n- Composition and framing choices\n- Background element arrangements\n- Visual effects and atmospheric details\n\nDo NOT create identical or near-identical outputs. Each variation must be recognizably different while maintaining the reference style.`;
 
-        console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} with Nano Banana Pro`);
-
+        // Validate-and-retry loop: up to MAX_ATTEMPTS (1 initial + 2 retries).
+        // Each attempt generates the image, then asks Vision QA whether the
+        // product label is structurally correct vs the canonical render. On
+        // FAIL we retry with a hardened prompt that names the exact failure.
+        // After MAX_ATTEMPTS we throw — the outer catch turns it into a
+        // partial-success failure (other variations still ship).
+        const MAX_ATTEMPTS = 3;
+        let lastVqaReason: string | undefined;
         try {
-          const result = await dispatchVariationGeneration({
-            prompt: geminiPrompt,
-            controlImageUrl: sourceUrl,
-            productRenderUrl: productRender.url,
-            aspectRatio: aspectRatio as any,
-            resolution: (run.resolution as any) || "2K",
-            model: imageModel,
-            useCompositing: true,
-            productPosition: "center",
-            productScale: 0.45,
-            personImageUrl: variationPersonUrl,
-          }, i);
+          for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            const hardenedSuffix = lastVqaReason
+              ? `\n\n=== PREVIOUS ATTEMPT FAILED VALIDATION ===\nReason: ${lastVqaReason}\nMatch Image 2's product design EXACTLY this time. Do not deviate from the canonical product. Body colour, swoosh colour, wordmark, subtext, and flavour strip MUST match Image 2.`
+              : "";
+            const geminiPrompt = `${basePrompt}${baseUniquenessNote}${hardenedSuffix}`;
 
-          return {
-            ok: true,
-            url: result.imageUrl,
-            s3Key: result.imageUrl.split('/').pop() || '',
-            headline: v.headline || `VARIATION ${i + 1}`,
-            subheadline: v.subheadline || null,
-            angle: v.angle || null,
-            backgroundNote: v.backgroundNote || null,
-            productImageUrl: productRender.url,
-            controlImageUrl: sourceUrl,
-          };
+            console.log(`[Iteration] Generating variation ${i + 1}/${variationCount} (attempt ${attempt + 1}/${MAX_ATTEMPTS}) with ${imageModel}`);
+
+            const result = await dispatchVariationGeneration({
+              prompt: geminiPrompt,
+              controlImageUrl: sourceUrl,
+              productRenderUrl: productRender.url,
+              aspectRatio: aspectRatio as any,
+              resolution: (run.resolution as any) || "2K",
+              model: imageModel,
+              useCompositing: true,
+              productPosition: "center",
+              productScale: 0.45,
+              personImageUrl: variationPersonUrl,
+            }, i);
+
+            const vqa = await validateProductFidelity(result.imageUrl, productRender.url);
+            if (vqa.pass) {
+              return {
+                ok: true,
+                url: result.imageUrl,
+                s3Key: result.imageUrl.split('/').pop() || '',
+                headline: v.headline || `VARIATION ${i + 1}`,
+                subheadline: v.subheadline || null,
+                angle: v.angle || null,
+                backgroundNote: v.backgroundNote || null,
+                productImageUrl: productRender.url,
+                controlImageUrl: sourceUrl,
+              };
+            }
+            lastVqaReason = vqa.reason;
+            console.warn(`[Iteration] V${i + 1} attempt ${attempt + 1} failed Vision QA: ${vqa.reason}. ${attempt + 1 < MAX_ATTEMPTS ? "Retrying with hardened prompt." : "No retries left."}`);
+          }
+          throw new Error(`Vision QA failed after ${MAX_ATTEMPTS} attempts: ${lastVqaReason ?? "unknown reason"}`);
         } catch (err: any) {
           const message = err?.message || "Unknown generation error";
           console.error(`[Iteration] Variation ${i + 1} failed: ${message}`);
