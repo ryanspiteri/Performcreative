@@ -183,6 +183,10 @@ export interface IterationPipelineInput {
   variationCount?: number;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   imageModel?: ImageModel;
+  /** Ad angle from /iterate picker. "auto" = let Claude diversify per variation;
+      anything else = lock every variation to this angle. */
+  adAngle?: import("../../shared/iterationBriefSchema").AdAngle;
+  styleMode?: import("../../shared/iterationBriefSchema").StyleMode;
 }
 
 /**
@@ -243,13 +247,21 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
 
     const briefResult = await withTimeout(
       runSourceType === "competitor_ad"
-        ? generateCompetitorIterationBrief(analysis, input.product, productInfoContext, runAdaptationMode ?? "concept", input.foreplayAdBrand)
+        ? generateCompetitorIterationBrief(
+            analysis,
+            input.product,
+            productInfoContext,
+            runAdaptationMode ?? "concept",
+            input.foreplayAdBrand,
+            input.adAngle ?? "auto",
+          )
         : generateIterationBrief(
             analysis,
             input.product,
             productInfoContext,
             input.variationCount || 3,
-            input.variationTypes
+            input.variationTypes,
+            input.adAngle ?? "auto",
           ),
       STEP_TIMEOUT,
       "Stage 2: Iteration Brief"
@@ -400,6 +412,7 @@ export async function runIterationStage3(runId: number, run: any) {
           productKey: product,
           flavour: run.selectedFlavour || undefined,
           variationType: v.variationType,
+          adAngle: v.adAngle,
           visualDescription: v.visualDescription || undefined,
           backgroundStyleDescription: v.backgroundNote || undefined,
           referenceFxPresent: briefFxPresent,
@@ -649,6 +662,7 @@ export async function regenerateIterationVariation(
     productKey: product,
     flavour: run.selectedFlavour || undefined,
     variationType: v.variationType,
+    adAngle: v.adAngle ?? (run.adAngle as any) ?? undefined,
     visualDescription: v.visualDescription || undefined,
     backgroundStyleDescription: bgPrompt,
     referenceFxPresent: regenFxPresent,
@@ -905,9 +919,24 @@ async function generateIterationBrief(
   product: string,
   productInfo: string,
   variationCount: number = 3,
-  variationTypes?: string[]
+  variationTypes?: string[],
+  runAdAngle: import("../../shared/iterationBriefSchema").AdAngle = "auto",
 ): Promise<BriefGenerationResult> {
+  const adAngleInstruction = runAdAngle === "auto"
+    ? `AD ANGLE — DIVERSIFY:
+The user selected "Auto" angle. Pick a DIFFERENT adAngle for each variation from this set: claim_led, before_after, testimonial, ugc_organic, product_hero, lifestyle. No two variations should share the same adAngle when the variation count allows it. Match each variation's headline + visualDescription + backgroundNote to its chosen adAngle (e.g., a testimonial variation has first-person quote-style copy and a real-feeling person; a product_hero variation centres the tub with minimal copy; a before_after variation uses split-screen transformation framing).`
+    : `AD ANGLE — LOCKED:
+The user selected "${runAdAngle}" angle. Set EVERY variation's adAngle to "${runAdAngle}" and shape each variation's headline + visualDescription + backgroundNote to fit that angle. Definitions:
+- claim_led: bold benefit promise as the hero. Big visible claim text. Product as supporting hero.
+- before_after: transformation framing. Split-screen, time-lapse cues, or paired imagery showing change.
+- testimonial: first-person social proof. Quote-style headline. Real-feeling person on camera.
+- ugc_organic: unpolished, real-user feel. Phone-camera aesthetic, natural lighting, candid framing.
+- product_hero: product is the star. Clean composition, minimal supporting copy.
+- lifestyle: scene/setting with a person using the product naturally.`;
+
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
+
+${adAngleInstruction}
 
 IMPORTANT VISUAL RULE:
 - The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
@@ -1030,6 +1059,7 @@ Return JSON in this EXACT format with ${variationCount} variations. All fields r
     {
       "number": 1,
       "variationType": "headline_only" | "background_only" | "layout_only" | "benefit_callouts_only" | "props_only" | "talent_swap" | "full_remix",
+      "adAngle": "claim_led" | "before_after" | "testimonial" | "ugc_organic" | "product_hero" | "lifestyle",
       "angle": "Benefit-Driven",
       "angleDescription": "Why this angle works and what it tests",
       "headline": "NEW HEADLINE TEXT (3-8 words, all caps)",
@@ -1098,10 +1128,16 @@ async function generateCompetitorIterationBrief(
   product: string,
   productInfo: string,
   adaptationMode: IterationAdaptationMode,
-  competitorBrand?: string
+  competitorBrand?: string,
+  runAdAngle: import("../../shared/iterationBriefSchema").AdAngle = "auto",
 ): Promise<BriefGenerationResult> {
   const isConcept = adaptationMode === "concept";
+  const adAngleInstruction = runAdAngle === "auto"
+    ? `AD ANGLE — DIVERSIFY: Pick a DIFFERENT adAngle for each variation from {claim_led, before_after, testimonial, ugc_organic, product_hero, lifestyle}. Match each variation's headline/visualDescription/backgroundNote to its chosen adAngle.`
+    : `AD ANGLE — LOCKED to "${runAdAngle}": set EVERY variation's adAngle to "${runAdAngle}" and shape headline/visualDescription/backgroundNote to fit that angle. Definitions: claim_led = bold benefit promise hero; before_after = transformation framing; testimonial = first-person social proof; ugc_organic = unpolished real-user feel; product_hero = product as star; lifestyle = scene with person.`;
   const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."}
+
+${adAngleInstruction}
 
 IMPORTANT VISUAL RULE:
 - The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
@@ -1141,6 +1177,7 @@ Return JSON in this EXACT format:
     {
       "number": 1,
       "variationType": "full_remix",
+      "adAngle": "claim_led" | "before_after" | "testimonial" | "ugc_organic" | "product_hero" | "lifestyle",
       "angle": "Angle name",
       "angleDescription": "Why this angle",
       "headline": "ONEST HEADLINE (3-8 words, all caps)",
