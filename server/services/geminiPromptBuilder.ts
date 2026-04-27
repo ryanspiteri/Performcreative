@@ -11,7 +11,7 @@
  * contained "burn" or "power" — including brand names like "Hyperburn".
  */
 
-import type { DetectedFxType, StyleMode, VariationType } from "../../shared/iterationBriefSchema";
+import type { AdAngle, DetectedFxType, StyleMode, VariationType } from "../../shared/iterationBriefSchema";
 
 /** @deprecated kept only so legacy callers compile; risk level cut in UI in Day 4. */
 export type CreativityLevel = "SAFE" | "BOLD" | "WILD";
@@ -38,6 +38,9 @@ export interface PromptBuildOptions {
       A full_remix variation gets max freedom regardless of styleMode; a
       headline_only variation gets MATCH-style language regardless of styleMode. */
   variationType?: VariationType;
+  /** Per-variation ad angle from the brief (claim_led, testimonial, etc.).
+      "auto" or undefined skips the angle block. */
+  adAngle?: AdAngle;
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
   targetAudience?: string;
   hasPersonReference?: boolean;
@@ -161,6 +164,29 @@ Where the VISUAL DESCRIPTION FOR THIS VARIATION (below) explicitly describes a d
   }
 }
 
+// Per-variation ad angle direction. The brief generator now picks an adAngle
+// per variation (or locks them all to a single value when the run picker is
+// not "auto"). This block translates the angle into Gemini-facing direction
+// so the rendered output actually reflects the angle — not just the copy.
+function adAngleBlock(adAngle: AdAngle | undefined): string {
+  if (!adAngle || adAngle === "auto") return "";
+  const directions: Record<Exclude<AdAngle, "auto">, string> = {
+    claim_led: `=== AD ANGLE — CLAIM-LED ===
+Lead with a bold benefit promise. The headline is the visual hero, not the product. Big, high-contrast headline text dominating the upper portion of the frame. The product is supporting, not the centrepiece. Composition emphasizes confidence and authority.`,
+    before_after: `=== AD ANGLE — BEFORE / AFTER ===
+Use transformation framing. Split-screen, paired imagery, time-lapse cues, or a clear visual contrast between two states. The output should read as "this state → this better state". Lighting and palette can shift across the two halves to reinforce the transformation. Product anchors the "after" side.`,
+    testimonial: `=== AD ANGLE — TESTIMONIAL ===
+Frame as first-person social proof. Real-feeling person on camera (not a model pose). Quote-style or first-person headline ("I lost...", "After 30 days..."). Casual, candid composition — the kind of frame you'd see in a friend's selfie or a video review. Product visible but not posed.`,
+    ugc_organic: `=== AD ANGLE — UGC / ORGANIC ===
+Unpolished, real-user feel. Phone-camera aesthetic — slight lens distortion, natural lighting, candid framing. NOT studio. NOT polished ad. The output should look like organic social content a real customer posted. Product placed naturally in a real environment (kitchen counter, gym bag, bathroom shelf).`,
+    product_hero: `=== AD ANGLE — PRODUCT HERO ===
+Product is the star. Clean, premium composition with the product centred or prominently positioned. Minimal supporting copy. Studio-quality lighting on the product. Background is restrained and atmospheric so the product reads cleanly.`,
+    lifestyle: `=== AD ANGLE — LIFESTYLE ===
+Scene/setting with a person using the product naturally. The story is "this person, this moment, this product". Real environment (home, gym, outdoors). The product is part of a life, not posed in isolation. Natural body language and interaction with the product.`,
+  };
+  return directions[adAngle as Exclude<AdAngle, "auto">] ?? "";
+}
+
 function fxGuardrailBlock(
   referenceFxPresent: boolean | undefined,
   detectedFxTypes: DetectedFxType[] | undefined,
@@ -183,6 +209,7 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
     productKey,
     flavour,
     variationType,
+    adAngle,
     backgroundStyleDescription,
     visualDescription,
     referenceFxPresent,
@@ -212,8 +239,7 @@ I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
 - Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output.${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}
 
 ${styleModeBlock(styleMode, variationType)}
-${carveout}
-=== NEW COPY FOR THIS VERSION ===
+${carveout}${adAngleBlock(adAngle) ? "\n" + adAngleBlock(adAngle) + "\n\n" : ""}=== NEW COPY FOR THIS VERSION ===
 Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
 
 Render the headline${subheadline ? ' and subheadline' : ''} in the SAME STYLE as the reference image (placement, size, typography, colour, effects). If the reference has text at the top, put it at the top. Replicate whatever text approach the reference uses.
