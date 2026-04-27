@@ -92,7 +92,7 @@ export async function generateWithOpenAI(opts: ImageGenerateOptions): Promise<Im
         Authorization: `Bearer ${ENV.openaiApiKey}`,
         ...form.getHeaders(),
       },
-      timeout: 180_000,
+      timeout: 240_000,
       maxContentLength: 50 * 1024 * 1024,
       maxBodyLength: 50 * 1024 * 1024,
     });

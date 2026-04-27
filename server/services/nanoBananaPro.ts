@@ -194,7 +194,10 @@ async function generateProductAdWithNanaBananaPro_internal(
       requestBody,
       {
         headers: { "Content-Type": "application/json" },
-        timeout: 180000,
+        // Nano Banana Pro is officially quoted at 2-3 min per image. 180s
+        // sat right on the edge of natural variance and timed out whenever
+        // Gemini landed on the slow side. 240s gives real headroom.
+        timeout: 240000,
       }
     );
 
