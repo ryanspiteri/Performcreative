@@ -204,6 +204,31 @@ export type Person = typeof people.$inferSelect;
 export type InsertPerson = typeof people.$inferInsert;
 
 /**
+ * Brand logo library.
+ * Stores ONEST brand logo PNGs (Z-mark, full wordmark, alt variants) so
+ * the iteration pipeline can pass them as reference images to Gemini and
+ * tell it "use this logo, not what you see in the competitor reference ad".
+ * Without this, Gemini was picking up logos from the reference ad's brand
+ * (the "examples I provided" the user mentioned) and using those instead.
+ */
+export const brandLogos = mysqlTable("brand_logos", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  description: text("description"),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  url: text("url").notNull(),
+  mimeType: varchar("mimeType", { length: 64 }).default("image/png").notNull(),
+  fileSize: int("fileSize"),
+  /** When set, this is the logo applied by default in the iteration pipeline. */
+  isDefault: int("isDefault").default(0).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BrandLogo = typeof brandLogos.$inferSelect;
+export type InsertBrandLogo = typeof brandLogos.$inferInsert;
+
+/**
  * Locally cached Foreplay creatives.
  * Auto-synced every 24 hours and on manual trigger.
  * foreplayAdId is unique to prevent duplicates.

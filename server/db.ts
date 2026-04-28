@@ -5,7 +5,7 @@ import {
   InsertUser, users, pipelineRuns, InsertPipelineRun, productRenders, InsertProductRender,
   productInfo, InsertProductInfo, foreplayCreatives, InsertForeplayCreative, backgrounds,
   InsertBackground, ugcUploads, ugcVariants, headlineBank, faceSwapJobs, organicRuns,
-  captionExamples, people, InsertPerson, scriptStructures, InsertScriptStructure,
+  captionExamples, people, InsertPerson, brandLogos, InsertBrandLogo, scriptStructures, InsertScriptStructure,
   scriptAudiences, InsertScriptAudience,
   // Creative Analytics OS
   creativeAssets, InsertCreativeAsset, CreativeAsset,
@@ -359,6 +359,85 @@ export async function deletePerson(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(people).set({ deletedAt: new Date() }).where(eq(people.id, id));
+}
+
+// ============================================================
+// Brand Logo helpers
+// ============================================================
+export async function listBrandLogos() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(brandLogos)
+    .where(isNull(brandLogos.deletedAt))
+    .orderBy(desc(brandLogos.isDefault), desc(brandLogos.createdAt));
+}
+
+export async function getBrandLogo(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const row = await db
+    .select()
+    .from(brandLogos)
+    .where(and(eq(brandLogos.id, id), isNull(brandLogos.deletedAt)))
+    .limit(1);
+  return row[0] ?? null;
+}
+
+/**
+ * Resolve the logo to use in an iteration run. Order:
+ *   1. The default-flagged logo
+ *   2. The most recently uploaded logo
+ *   3. null
+ */
+export async function getDefaultBrandLogo() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const withDefault = await db
+    .select()
+    .from(brandLogos)
+    .where(and(eq(brandLogos.isDefault, 1), isNull(brandLogos.deletedAt)))
+    .limit(1);
+  if (withDefault.length > 0) return withDefault[0];
+  const fallback = await db
+    .select()
+    .from(brandLogos)
+    .where(isNull(brandLogos.deletedAt))
+    .orderBy(desc(brandLogos.createdAt))
+    .limit(1);
+  return fallback[0] ?? null;
+}
+
+export async function createBrandLogo(data: InsertBrandLogo) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(brandLogos).values(data);
+  const insertId = (result as any)[0]?.insertId as number | undefined;
+  if (insertId && data.isDefault === 1) {
+    // Make this the only default; clear any others.
+    await db
+      .update(brandLogos)
+      .set({ isDefault: 0 })
+      .where(and(eq(brandLogos.isDefault, 1), isNull(brandLogos.deletedAt)));
+    await db.update(brandLogos).set({ isDefault: 1 }).where(eq(brandLogos.id, insertId));
+  }
+  return insertId;
+}
+
+export async function setDefaultBrandLogo(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const row = await db.select().from(brandLogos).where(eq(brandLogos.id, id)).limit(1);
+  if (row.length === 0) throw new Error("Brand logo not found");
+  await db.update(brandLogos).set({ isDefault: 0 }).where(eq(brandLogos.isDefault, 1));
+  await db.update(brandLogos).set({ isDefault: 1 }).where(eq(brandLogos.id, id));
+}
+
+export async function deleteBrandLogo(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(brandLogos).set({ deletedAt: new Date() }).where(eq(brandLogos.id, id));
 }
 
 // ============================================================

@@ -25,6 +25,7 @@ import CaptionGenerator from "./pages/CaptionGenerator";
 import ContentLibrary from "./pages/ContentLibrary";
 import VisualContent from "./pages/VisualContent";
 import PeopleLibrary from "./pages/PeopleLibrary";
+import BrandLogos from "./pages/BrandLogos";
 import CreativePerformance from "./pages/analytics/CreativePerformance";
 import CreativeStrategy from "./pages/analytics/CreativeStrategy";
 import AdDetail from "./pages/analytics/AdDetail";
@@ -57,6 +58,7 @@ function AuthenticatedRoutes() {
         <Route path="/organic/library" component={ContentLibrary} />
         <Route path="/product-info" component={ProductInfoHub} />
         <Route path="/people" component={PeopleLibrary} />
+        <Route path="/brand-logos" component={BrandLogos} />
         <Route path="/trigger" component={ManualTrigger} />
         <Route path="/static" component={StaticPipeline} />
         <Route path="/results/:id" component={Results} />
