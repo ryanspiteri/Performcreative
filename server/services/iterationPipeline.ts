@@ -8,6 +8,7 @@ import type { ImageGenerateOptions } from "./imageGenerator";
 export type ImageModel = GeminiImageModel | "openai_gpt_image";
 import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptBuilder";
 import { validateProductFidelity } from "./visionQA";
+import { overlayBrandLogo } from "./brandLogoOverlay";
 import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
 import {
   iterationBriefV1Schema,
@@ -355,6 +356,17 @@ export async function runIterationStage3(runId: number, run: any) {
     // variation loop picks per-variation from renderPool below.
     const productRender = renderPool[0]!;
 
+    // Resolve brand logo. Passed to Gemini as an extra reference so it doesn't
+    // pick up the competitor's logo from the reference ad. null = no logo
+    // configured (system falls through to whatever Gemini does today, plus a
+    // log line telling the user to upload one in /brand-logos).
+    const brandLogo = await db.getDefaultBrandLogo();
+    if (brandLogo) {
+      console.log(`[Iteration] Using brand logo #${brandLogo.id} (${brandLogo.name})`);
+    } else {
+      console.warn(`[Iteration] No brand logo configured. Upload one in /brand-logos to stop Gemini from reusing competitor logos from the reference ad.`);
+    }
+
     // Resolve person references. Two modes:
     //  - Custom Per Variation: selectedPersonIds is a JSON array `(number | null)[]` of length N.
     //    Each slot overrides the person for that variation. null = no person.
@@ -508,12 +520,25 @@ export async function runIterationStage3(runId: number, run: any) {
               personImageUrl: variationPersonUrl,
             }, i);
 
-            const vqa = await validateProductFidelity(result.imageUrl, variationRender.url);
+            // Brand-logo overlay: when a default logo is configured, sharp
+            // composites it onto the Gemini output before VQA. The overlay
+            // is defensive — on any failure we keep the original URL so
+            // a single overlay hiccup doesn't break the run.
+            const finalUrl = brandLogo?.url
+              ? (await overlayBrandLogo({
+                  backgroundUrl: result.imageUrl,
+                  logoUrl: brandLogo.url,
+                  position: "top-left",
+                  scale: 0.12,
+                })).imageUrl
+              : result.imageUrl;
+
+            const vqa = await validateProductFidelity(finalUrl, variationRender.url);
             if (vqa.pass) {
               return {
                 ok: true,
-                url: result.imageUrl,
-                s3Key: result.imageUrl.split('/').pop() || '',
+                url: finalUrl,
+                s3Key: finalUrl.split('/').pop() || '',
                 headline: v.headline || `VARIATION ${i + 1}`,
                 subheadline: v.subheadline || null,
                 angle: v.angle || null,
@@ -826,6 +851,9 @@ export async function regenerateIterationVariation(
     console.log(`[Iteration] Full regeneration for variation ${variationIndex + 1}`);
   }
 
+  // Resolve brand logo for the regen path too — same default-logo lookup as Stage 3.
+  const regenBrandLogo = await db.getDefaultBrandLogo();
+
   const result = await dispatchVariationGeneration(
     {
       prompt: geminiPrompt,
@@ -840,7 +868,14 @@ export async function regenerateIterationVariation(
     variationIndex,
   );
 
-  const finalUrl = result.imageUrl;
+  const finalUrl = regenBrandLogo?.url
+    ? (await overlayBrandLogo({
+        backgroundUrl: result.imageUrl,
+        logoUrl: regenBrandLogo.url,
+        position: "top-left",
+        scale: 0.12,
+      })).imageUrl
+    : result.imageUrl;
 
   // Race condition fix: re-read variations before merging to avoid clobbering concurrent changes
   const freshRun = await db.getPipelineRun(runId);

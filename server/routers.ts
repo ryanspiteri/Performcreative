@@ -1517,6 +1517,58 @@ Return JSON in this exact format:
   }),
 
   // ============================================================
+  // BRAND LOGO LIBRARY
+  // Stores ONEST logo PNGs that get passed as a reference image to
+  // the iteration pipeline. Without this, Gemini was picking up
+  // logos from the competitor reference ad ("the old logo from the
+  // examples i provided") and using those instead of ONEST's.
+  // ============================================================
+  brandLogos: router({
+    list: publicProcedure.query(async () => db.listBrandLogos()),
+
+    upload: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(128),
+        description: z.string().optional(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+        isDefault: z.boolean().optional().default(false),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const fileSize = buffer.length;
+        const suffix = Math.random().toString(36).slice(2, 10);
+        const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : input.mimeType === "image/svg+xml" ? "svg" : "jpg";
+        const fileKey = `brand-logos/${input.name.toLowerCase().replace(/\s+/g, "-")}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const id = await db.createBrandLogo({
+          name: input.name,
+          description: input.description || null,
+          fileKey,
+          url,
+          mimeType: input.mimeType,
+          fileSize,
+          isDefault: input.isDefault ? 1 : 0,
+        });
+        return { id, url, fileKey };
+      }),
+
+    setDefault: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.setDefaultBrandLogo(input.id);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteBrandLogo(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================================
   // PRODUCT INFORMATION HUB
   // ============================================================
   productInfo: router({

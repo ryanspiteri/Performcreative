@@ -248,8 +248,10 @@ ${productBlock}
 You are creating a premium supplement advertisement image for paid social media advertising (Meta/TikTok).
 
 I am providing you with ${hasPersonReference ? 'THREE' : 'TWO'} images:
-- Image 1: A REFERENCE AD — use this for STYLE REFERENCE ONLY (layout, palette, mood, lighting, typography, composition). The product in Image 1 is NOT the product you are rendering.
+- Image 1: A REFERENCE AD — use this for STYLE REFERENCE ONLY (layout, palette, mood, lighting, typography, composition). The product in Image 1 is NOT the product you are rendering, and the LOGOS / BRAND MARKS in Image 1 belong to a different brand — do NOT copy them.
 - Image 2: The ONEST PRODUCT RENDER — this is the ONLY product to use in your output.${hasPersonReference ? '\n- Image 3: A PERSON TYPE REFERENCE — generate a realistic person matching this general type/aesthetic (age range, build, style, energy). Do NOT copy the exact person. Create a new, realistic person with a similar look and place them naturally in the ad composition.' : ''}
+
+NOTE: Do NOT render any standalone brand logo, wordmark, or text-only brand-mark element in the top-left or top-centre of the frame. That space is reserved for a brand-logo overlay added in post-processing — leave it visually clean.
 
 ${styleModeBlock(styleMode, variationType)}
 ${carveout}${adAngleBlock(adAngle) ? "\n" + adAngleBlock(adAngle) + "\n\n" : ""}=== NEW COPY FOR THIS VERSION ===

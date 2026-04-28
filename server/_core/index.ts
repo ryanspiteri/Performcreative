@@ -156,6 +156,24 @@ async function runStartupColumnMigrations() {
           KEY \`pi_type_idx\` (\`insightType\`, \`createdAt\`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
       },
+      {
+        name: "brand_logos",
+        ddl: `CREATE TABLE IF NOT EXISTS \`brand_logos\` (
+          \`id\` int NOT NULL AUTO_INCREMENT,
+          \`name\` varchar(128) NOT NULL,
+          \`description\` text DEFAULT NULL,
+          \`fileKey\` varchar(512) NOT NULL,
+          \`url\` text NOT NULL,
+          \`mimeType\` varchar(64) NOT NULL DEFAULT 'image/png',
+          \`fileSize\` int DEFAULT NULL,
+          \`isDefault\` int NOT NULL DEFAULT 0,
+          \`deletedAt\` timestamp NULL DEFAULT NULL,
+          \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          KEY \`brand_logos_default_idx\` (\`isDefault\`),
+          KEY \`brand_logos_deleted_idx\` (\`deletedAt\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      },
     ];
 
     for (const tbl of requiredTables) {
@@ -259,6 +277,7 @@ async function startServer() {
   app.get("/api/health/db", async (_req, res) => {
     const requiredTables = [
       "users", "pipeline_runs", "product_renders", "product_info", "people",
+      "brand_logos",
       "foreplay_creatives", "backgrounds", "ugc_uploads", "ugc_variants",
       "headline_bank", "face_swap_jobs", "organic_runs", "caption_examples",
       "scriptStructures", "scriptAudiences",
