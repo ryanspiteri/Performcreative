@@ -712,7 +712,18 @@ export async function runIterationStage4(runId: number, run: any) {
 export async function regenerateIterationVariation(
   runId: number,
   variationIndex: number,
-  overrides?: { headline?: string; subheadline?: string; backgroundPrompt?: string; referenceImageUrl?: string }
+  overrides?: {
+    headline?: string;
+    subheadline?: string;
+    /** Free-form scene description from the user. Routed into the prompt builder's
+     *  visualDescription slot — covers backgrounds, mood, props, composition, anything. */
+    customDescription?: string;
+    referenceImageUrl?: string;
+    /** Per-regen style fidelity override. Falls back to run.styleMode. */
+    styleMode?: import("../../shared/iterationBriefSchema").StyleMode;
+    /** Per-regen ad angle override. Falls back to brief variation / run.adAngle. */
+    adAngle?: import("../../shared/iterationBriefSchema").AdAngle;
+  }
 ) {
   const run = await db.getPipelineRun(runId);
   if (!run) throw new Error("Run not found");
@@ -727,18 +738,25 @@ export async function regenerateIterationVariation(
 
   const v = briefData?.variations?.[variationIndex] || {};
   const product = run.product;
+  const currentVariation = variations[variationIndex] || {};
 
-  const headline = overrides?.headline || v.headline || `VARIATION ${variationIndex + 1}`;
-  const subheadline = overrides?.subheadline || v.subheadline || null;
+  // Headline/subheadline: blank input keeps the current value (current variation
+  // first, then brief fallback). Lets the user retune scene/style without retyping.
+  const headline = overrides?.headline || currentVariation.headline || v.headline || `VARIATION ${variationIndex + 1}`;
+  const subheadline = overrides?.subheadline || currentVariation.subheadline || v.subheadline || null;
 
   // Reference precedence: uploaded image > existing variation (text-only) > original source
   const hasReferenceImage = !!overrides?.referenceImageUrl;
-  const isTextOnlyChange = !overrides?.backgroundPrompt && !hasReferenceImage && (overrides?.headline || overrides?.subheadline);
+  const isTextOnlyChange = !overrides?.customDescription && !hasReferenceImage && (overrides?.headline || overrides?.subheadline);
 
-  const bgPrompt = overrides?.backgroundPrompt
-    || (v.backgroundNote
-      ? `Premium background for health supplement ad. ${v.backgroundNote}. Dramatic lighting, premium aesthetic. No text, no product, no logos, no people.`
-      : `Premium dark background for health supplement advertisement. Dramatic lighting, subtle atmospheric effects. No text, no product, no logos, no people.`);
+  // Free-form description from the user is routed into visualDescription (the
+  // scene/composition slot). Falls back to the brief's visualDescription, then
+  // its backgroundNote. We no longer wrap in "Premium background..." boilerplate
+  // since the user might describe people, props, or any composition.
+  const sceneDescription = overrides?.customDescription
+    || v.visualDescription
+    || v.backgroundNote
+    || undefined;
 
   // Get product render. Same resolution order as Stage 3 fresh runs:
   // explicit selectedRenderId → flavour pool (round-robined by variationIndex)
@@ -764,7 +782,14 @@ export async function regenerateIterationVariation(
   const aspectRatio = run.aspectRatio || "1:1";
   const imageModel: ImageModel = (run.imageModel as ImageModel) || "nano_banana_pro";
 
-  const regenStyleMode = (run.styleMode as import("../../shared/iterationBriefSchema").StyleMode | null) || undefined;
+  // Per-regen overrides win over run-level defaults.
+  const regenStyleMode = overrides?.styleMode
+    || (run.styleMode as import("../../shared/iterationBriefSchema").StyleMode | null)
+    || undefined;
+  const regenAdAngle = overrides?.adAngle
+    || v.adAngle
+    || (run.adAngle as import("../../shared/iterationBriefSchema").AdAngle | null)
+    || undefined;
   const regenFxPresent = briefData?.referenceFxPresent === true;
   const regenDetectedFx = Array.isArray(briefData?.detectedFxTypes)
     ? (briefData.detectedFxTypes as import("../../shared/iterationBriefSchema").DetectedFxType[])
@@ -777,9 +802,8 @@ export async function regenerateIterationVariation(
     productKey: product,
     flavour: run.selectedFlavour || undefined,
     variationType: v.variationType,
-    adAngle: v.adAngle ?? (run.adAngle as any) ?? undefined,
-    visualDescription: v.visualDescription || undefined,
-    backgroundStyleDescription: bgPrompt,
+    adAngle: regenAdAngle,
+    visualDescription: sceneDescription,
     referenceFxPresent: regenFxPresent,
     detectedFxTypes: regenDetectedFx,
     styleMode: regenStyleMode,

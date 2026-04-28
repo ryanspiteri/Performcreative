@@ -1202,8 +1202,10 @@ Return JSON in this exact format:
         variationIndex: z.number().min(0).max(49),
         headline: z.string().optional(),
         subheadline: z.string().optional(),
-        backgroundPrompt: z.string().optional(),
+        customDescription: z.string().optional(),
         referenceImageUrl: z.string().url().optional(),
+        styleMode: z.enum(["MATCH_REFERENCE", "EVOLVE_REFERENCE", "DEPART_FROM_REFERENCE"]).optional(),
+        adAngle: z.enum(["auto", "claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"]).optional(),
       }))
       .mutation(async ({ input }) => {
         const run = await db.getPipelineRun(input.runId);
@@ -1219,8 +1221,10 @@ Return JSON in this exact format:
             {
               headline: input.headline || undefined,
               subheadline: input.subheadline || undefined,
-              backgroundPrompt: input.backgroundPrompt || undefined,
+              customDescription: input.customDescription || undefined,
               referenceImageUrl: input.referenceImageUrl || undefined,
+              styleMode: input.styleMode || undefined,
+              adAngle: input.adAngle || undefined,
             }
           );
           return { success: true, url: result.url, variation: result.variation };
