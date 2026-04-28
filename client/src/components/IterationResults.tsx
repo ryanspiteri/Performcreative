@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ChildGenerationControls } from "./ChildGenerationControls";
-import { VISUAL_DESCRIPTION_MAX, iterationBriefV1Schema, type IterationBriefV1, type IterationBriefVariationV1 } from "../../../shared/iterationBriefSchema";
+import { VISUAL_DESCRIPTION_MAX, iterationBriefV1Schema, type IterationBriefV1, type IterationBriefVariationV1, type StyleMode, type AdAngle } from "../../../shared/iterationBriefSchema";
 
 type EditableFields = Pick<IterationBriefVariationV1, "headline" | "subheadline" | "visualDescription" | "backgroundNote" | "angle" | "benefitCallouts">;
 
@@ -16,7 +16,14 @@ export function IterationResults({ run }: { run: any }) {
   const [approvalNotes, setApprovalNotes] = useState("");
   const [variationApprovalNotes, setVariationApprovalNotes] = useState("");
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
-  const [regenOverrides, setRegenOverrides] = useState<{ headline?: string; subheadline?: string; backgroundPrompt?: string; referenceImageUrl?: string }>({});
+  const [regenOverrides, setRegenOverrides] = useState<{
+    headline?: string;
+    subheadline?: string;
+    customDescription?: string;
+    referenceImageUrl?: string;
+    styleMode?: StyleMode;
+    adAngle?: AdAngle;
+  }>({});
   const [regenUploading, setRegenUploading] = useState(false);
   const [showRegenForm, setShowRegenForm] = useState<number | null>(null);
   const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
@@ -237,8 +244,10 @@ export function IterationResults({ run }: { run: any }) {
       variationIndex: index,
       headline: regenOverrides.headline || undefined,
       subheadline: regenOverrides.subheadline || undefined,
-      backgroundPrompt: regenOverrides.backgroundPrompt || undefined,
+      customDescription: regenOverrides.customDescription || undefined,
       referenceImageUrl: regenOverrides.referenceImageUrl || undefined,
+      styleMode: regenOverrides.styleMode || undefined,
+      adAngle: regenOverrides.adAngle || undefined,
     });
   };
 
@@ -820,25 +829,57 @@ export function IterationResults({ run }: { run: any }) {
                             </div>
                             <input
                               type="text"
-                              placeholder="New headline (optional)"
+                              placeholder="Headline (leave blank to keep current)"
                               value={regenOverrides.headline || ""}
                               onChange={(e) => setRegenOverrides(prev => ({ ...prev, headline: e.target.value }))}
                               className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600"
                             />
                             <input
                               type="text"
-                              placeholder="New subheadline (optional)"
+                              placeholder="Subheadline (leave blank to keep current)"
                               value={regenOverrides.subheadline || ""}
                               onChange={(e) => setRegenOverrides(prev => ({ ...prev, subheadline: e.target.value }))}
                               className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600"
                             />
                             <textarea
-                              placeholder="Background prompt (optional, e.g. 'dark moody gym background with smoke')"
-                              value={regenOverrides.backgroundPrompt || ""}
-                              onChange={(e) => setRegenOverrides(prev => ({ ...prev, backgroundPrompt: e.target.value }))}
+                              placeholder="Describe the scene — anything you want to change (background, mood, props, characters, composition, lighting...)"
+                              value={regenOverrides.customDescription || ""}
+                              onChange={(e) => setRegenOverrides(prev => ({ ...prev, customDescription: e.target.value }))}
                               className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600 resize-none"
-                              rows={2}
+                              rows={3}
                             />
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Style Fidelity</label>
+                                <select
+                                  value={regenOverrides.styleMode || ""}
+                                  onChange={(e) => setRegenOverrides(prev => ({ ...prev, styleMode: (e.target.value || undefined) as StyleMode | undefined }))}
+                                  className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300"
+                                >
+                                  <option value="">Run default ({run.styleMode || "EVOLVE_REFERENCE"})</option>
+                                  <option value="MATCH_REFERENCE">Match reference</option>
+                                  <option value="EVOLVE_REFERENCE">Evolve reference</option>
+                                  <option value="DEPART_FROM_REFERENCE">Depart from reference</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Ad Angle</label>
+                                <select
+                                  value={regenOverrides.adAngle || ""}
+                                  onChange={(e) => setRegenOverrides(prev => ({ ...prev, adAngle: (e.target.value || undefined) as AdAngle | undefined }))}
+                                  className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300"
+                                >
+                                  <option value="">Keep current</option>
+                                  <option value="auto">Auto</option>
+                                  <option value="claim_led">Claim-led</option>
+                                  <option value="before_after">Before / after</option>
+                                  <option value="testimonial">Testimonial</option>
+                                  <option value="ugc_organic">UGC organic</option>
+                                  <option value="product_hero">Product hero</option>
+                                  <option value="lifestyle">Lifestyle</option>
+                                </select>
+                              </div>
+                            </div>
                             {/* Reference image upload */}
                             {regenOverrides.referenceImageUrl ? (
                               <div className="flex items-center gap-2 bg-[#191B1F] border border-white/10 rounded px-2 py-1.5">
