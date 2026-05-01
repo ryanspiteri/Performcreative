@@ -1019,6 +1019,9 @@ Return JSON in this exact format:
         creativityLevel: z.enum(["SAFE", "BOLD", "WILD"]).optional(),
         styleMode: z.enum(["MATCH_REFERENCE", "EVOLVE_REFERENCE", "DEPART_FROM_REFERENCE"]).optional(),
         adAngle: z.enum(["auto", "claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"]).optional(),
+        /** Per-variation ad angles (length should equal variationCount). When provided,
+            takes precedence over the scalar adAngle. "auto" entries let Claude pick that slot. */
+        adAngles: z.array(z.enum(["auto", "claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"])).optional(),
         variationTypes: z.array(z.enum(["headline_only", "background_only", "layout_only", "benefit_callouts_only", "props_only", "talent_swap", "full_remix"])).optional(),
         variationCount: z.number().min(1).max(50).optional(),
         aspectRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]).optional(),
