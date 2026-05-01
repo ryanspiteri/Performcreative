@@ -188,6 +188,10 @@ export interface IterationPipelineInput {
   /** Ad angle from /iterate picker. "auto" = let Claude diversify per variation;
       anything else = lock every variation to this angle. */
   adAngle?: import("../../shared/iterationBriefSchema").AdAngle;
+  /** Per-variation ad angles (length must equal variationCount). When provided
+      this overrides `adAngle` — Claude is told the exact angle for each variation,
+      with "auto" meaning "you pick this one". */
+  adAngles?: import("../../shared/iterationBriefSchema").AdAngle[];
   styleMode?: import("../../shared/iterationBriefSchema").StyleMode;
 }
 
@@ -256,6 +260,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
             runAdaptationMode ?? "concept",
             input.foreplayAdBrand,
             input.adAngle ?? "auto",
+            input.adAngles,
           )
         : generateIterationBrief(
             analysis,
@@ -264,6 +269,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
             input.variationCount || 3,
             input.variationTypes,
             input.adAngle ?? "auto",
+            input.adAngles,
           ),
       STEP_TIMEOUT,
       "Stage 2: Iteration Brief"
@@ -1083,6 +1089,65 @@ Output a structured analysis so we can brief image generation to MATCH this styl
 }
 
 /**
+ * Build the ad-angle instruction for the brief prompt. Three modes:
+ * - per-variation: explicit list of angle-per-index, with "auto" slots
+ *   meaning "you (Claude) pick this one"
+ * - locked: every variation uses the same specific angle
+ * - diversify: every variation gets a different angle (legacy "auto")
+ */
+function buildAdAngleInstruction(
+  runAdAngle: import("../../shared/iterationBriefSchema").AdAngle,
+  perVariationAngles: import("../../shared/iterationBriefSchema").AdAngle[] | undefined,
+  variationCount: number,
+): string {
+  const definitions = `Definitions:
+- claim_led: bold benefit promise hero. Big visible claim text. Product as supporting hero.
+- before_after: transformation framing. Split-screen, time-lapse cues, or paired imagery.
+- testimonial: first-person social proof. Quote-style headline. Real-feeling person on camera.
+- ugc_organic: unpolished, real-user feel. Phone-camera aesthetic, natural lighting, candid framing.
+- product_hero: product is the star. Clean composition, minimal supporting copy.
+- lifestyle: scene/setting with a person using the product naturally.`;
+
+  if (perVariationAngles && perVariationAngles.length > 0) {
+    const trimmed = perVariationAngles.slice(0, variationCount);
+    const allAuto = trimmed.every((a) => a === "auto");
+    const allSame = trimmed.every((a) => a === trimmed[0]);
+    if (allAuto) {
+      // Same as legacy auto path — let Claude diversify.
+      return `AD ANGLE — DIVERSIFY:
+The user selected "Auto" for every variation. Pick a DIFFERENT adAngle for each variation from {claim_led, before_after, testimonial, ugc_organic, product_hero, lifestyle}. No two variations should share the same adAngle when the count allows it. Match each variation's headline + visualDescription + backgroundNote to its chosen adAngle.
+${definitions}`;
+    }
+    if (allSame && trimmed[0] !== "auto") {
+      return `AD ANGLE — LOCKED:
+Set EVERY variation's adAngle to "${trimmed[0]}" and shape each variation's headline + visualDescription + backgroundNote to fit that angle.
+${definitions}`;
+    }
+    const lines = trimmed
+      .map((a, i) => {
+        if (a === "auto") {
+          return `- Variation ${i + 1}: AUTO — you choose, but pick something different from any locked angle in this list and from other AUTO slots.`;
+        }
+        return `- Variation ${i + 1}: ${a}`;
+      })
+      .join("\n");
+    return `AD ANGLE — PER VARIATION:
+The user picked specific angles for some variations. Set each variation's adAngle EXACTLY as listed below, and shape its headline + visualDescription + backgroundNote to fit. For "AUTO" slots, you pick the angle.
+${lines}
+${definitions}`;
+  }
+
+  if (runAdAngle === "auto") {
+    return `AD ANGLE — DIVERSIFY:
+The user selected "Auto" angle. Pick a DIFFERENT adAngle for each variation from {claim_led, before_after, testimonial, ugc_organic, product_hero, lifestyle}. No two variations should share the same adAngle when the variation count allows it. Match each variation's headline + visualDescription + backgroundNote to its chosen adAngle.
+${definitions}`;
+  }
+  return `AD ANGLE — LOCKED:
+The user selected "${runAdAngle}" angle. Set EVERY variation's adAngle to "${runAdAngle}" and shape each variation's headline + visualDescription + backgroundNote to fit that angle.
+${definitions}`;
+}
+
+/**
  * Generate an iteration brief — N new copy angles that keep the visual DNA
  * but test different headlines, subheadlines, and visual descriptions.
  * Returns a valid v1 brief. Retries once on malformed JSON, then falls back
@@ -1095,18 +1160,9 @@ async function generateIterationBrief(
   variationCount: number = 3,
   variationTypes?: string[],
   runAdAngle: import("../../shared/iterationBriefSchema").AdAngle = "auto",
+  perVariationAngles?: import("../../shared/iterationBriefSchema").AdAngle[],
 ): Promise<BriefGenerationResult> {
-  const adAngleInstruction = runAdAngle === "auto"
-    ? `AD ANGLE — DIVERSIFY:
-The user selected "Auto" angle. Pick a DIFFERENT adAngle for each variation from this set: claim_led, before_after, testimonial, ugc_organic, product_hero, lifestyle. No two variations should share the same adAngle when the variation count allows it. Match each variation's headline + visualDescription + backgroundNote to its chosen adAngle (e.g., a testimonial variation has first-person quote-style copy and a real-feeling person; a product_hero variation centres the tub with minimal copy; a before_after variation uses split-screen transformation framing).`
-    : `AD ANGLE — LOCKED:
-The user selected "${runAdAngle}" angle. Set EVERY variation's adAngle to "${runAdAngle}" and shape each variation's headline + visualDescription + backgroundNote to fit that angle. Definitions:
-- claim_led: bold benefit promise as the hero. Big visible claim text. Product as supporting hero.
-- before_after: transformation framing. Split-screen, time-lapse cues, or paired imagery showing change.
-- testimonial: first-person social proof. Quote-style headline. Real-feeling person on camera.
-- ugc_organic: unpolished, real-user feel. Phone-camera aesthetic, natural lighting, candid framing.
-- product_hero: product is the star. Clean composition, minimal supporting copy.
-- lifestyle: scene/setting with a person using the product naturally.`;
+  const adAngleInstruction = buildAdAngleInstruction(runAdAngle, perVariationAngles, variationCount);
 
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
 
@@ -1302,11 +1358,17 @@ async function generateCompetitorIterationBrief(
   adaptationMode: IterationAdaptationMode,
   competitorBrand?: string,
   runAdAngle: import("../../shared/iterationBriefSchema").AdAngle = "auto",
+  perVariationAngles?: import("../../shared/iterationBriefSchema").AdAngle[],
 ): Promise<BriefGenerationResult> {
   const isConcept = adaptationMode === "concept";
-  const adAngleInstruction = runAdAngle === "auto"
-    ? `AD ANGLE — DIVERSIFY: Pick a DIFFERENT adAngle for each variation from {claim_led, before_after, testimonial, ugc_organic, product_hero, lifestyle}. Match each variation's headline/visualDescription/backgroundNote to its chosen adAngle.`
-    : `AD ANGLE — LOCKED to "${runAdAngle}": set EVERY variation's adAngle to "${runAdAngle}" and shape headline/visualDescription/backgroundNote to fit that angle. Definitions: claim_led = bold benefit promise hero; before_after = transformation framing; testimonial = first-person social proof; ugc_organic = unpolished real-user feel; product_hero = product as star; lifestyle = scene with person.`;
+  // Competitor brief generation always asks for ~3 variations downstream;
+  // pass the actual perVariationAngles length as the count so the helper
+  // formats the per-variation list correctly when supplied.
+  const adAngleInstruction = buildAdAngleInstruction(
+    runAdAngle,
+    perVariationAngles,
+    perVariationAngles?.length ?? 3,
+  );
   const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."}
 
 ${adAngleInstruction}

@@ -53,6 +53,8 @@ export default function IterateWinners() {
   const [runId, setRunId] = useState<number | null>(null);
   const [styleMode, setStyleMode] = useState<StyleMode>("EVOLVE_REFERENCE");
   const [adAngle, setAdAngle] = useState<AdAngle>("auto");
+  const [usePerVariationAngles, setUsePerVariationAngles] = useState(false);
+  const [perVariationAngles, setPerVariationAngles] = useState<AdAngle[]>(Array(5).fill("auto"));
   const [variationType, setVariationType] = useState<VariationType>("full_remix"); // Legacy single selection
   const [variationCount, setVariationCount] = useState(5);
   const [perVariationStrategies, setPerVariationStrategies] = useState<VariationType[]>(Array(5).fill('full_remix'));
@@ -126,6 +128,13 @@ export default function IterateWinners() {
     });
     setPerVariationPersonIds(prev => {
       const newArray: (number | null)[] = Array(variationCount).fill(null);
+      for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
+        newArray[i] = prev[i];
+      }
+      return newArray;
+    });
+    setPerVariationAngles(prev => {
+      const newArray: AdAngle[] = Array(variationCount).fill("auto");
       for (let i = 0; i < Math.min(prev.length, variationCount); i++) {
         newArray[i] = prev[i];
       }
@@ -300,6 +309,7 @@ export default function IterateWinners() {
         }),
         styleMode,
         adAngle,
+        ...(usePerVariationAngles && { adAngles: perVariationAngles.slice(0, variationCount) }),
         variationTypes: usePerVariationMode ? perVariationStrategies : [variationType],
         variationCount,
         ...(usePerVariationMode && { selectedPersonIds: perVariationPersonIds }),
@@ -790,27 +800,94 @@ export default function IterateWinners() {
           {/* Ad Angle — what format of ad Claude should write */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-300 mb-3">Ad Angle</label>
-            <div className="bg-white/5 rounded-lg p-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {AD_ANGLE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setAdAngle(opt.value)}
-                    role="radio"
-                    aria-checked={adAngle === opt.value}
-                    className={`px-3 py-2 rounded-sm text-left border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
-                      adAngle === opt.value
-                        ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
-                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
-                    }`}
-                  >
-                    <div className="font-semibold text-xs">{opt.label}</div>
-                    <div className="text-[11px] opacity-75 mt-0.5">{opt.desc}</div>
-                  </button>
-                ))}
+            <div className="bg-white/5 rounded-lg p-6 space-y-4">
+              {/* Mode toggle */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setUsePerVariationAngles(false)}
+                  className={`flex-1 px-4 py-2.5 rounded-sm text-sm font-medium transition-all ${
+                    !usePerVariationAngles ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  All Same Angle
+                </button>
+                <button
+                  onClick={() => setUsePerVariationAngles(true)}
+                  className={`flex-1 px-4 py-2.5 rounded-sm text-sm font-medium transition-all ${
+                    usePerVariationAngles ? "bg-[#FF3838] text-white" : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  Custom Per Variation
+                </button>
               </div>
-              {adAngle === "auto" && (
-                <p className="text-[11px] text-gray-500 italic mt-3">Claude will infer the angle from the winning ad's structure.</p>
+
+              {!usePerVariationAngles ? (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {AD_ANGLE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setAdAngle(opt.value)}
+                        role="radio"
+                        aria-checked={adAngle === opt.value}
+                        className={`px-3 py-2 rounded-sm text-left border-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#FF3838] ${
+                          adAngle === opt.value
+                            ? "bg-[#FF3838]/10 border-[#FF3838] text-white"
+                            : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border-transparent"
+                        }`}
+                      >
+                        <div className="font-semibold text-xs">{opt.label}</div>
+                        <div className="text-[11px] opacity-75 mt-0.5">{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {adAngle === "auto" && (
+                    <p className="text-[11px] text-gray-500 italic">Claude will infer the angle from the winning ad's structure.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setPerVariationAngles(Array(variationCount).fill("auto"))}
+                      className="px-3 py-2 rounded-sm text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      All Auto
+                    </button>
+                    <button
+                      onClick={() => {
+                        const cycle: AdAngle[] = ["claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"];
+                        setPerVariationAngles(Array.from({ length: variationCount }, (_, i) => cycle[i % cycle.length]));
+                      }}
+                      className="px-3 py-2 rounded-sm text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      One of Each
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {Array.from({ length: variationCount }).map((_, index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500 w-20 shrink-0">Variation {index + 1}</span>
+                        <select
+                          value={perVariationAngles[index] ?? "auto"}
+                          onChange={(e) => {
+                            const next = [...perVariationAngles];
+                            next[index] = e.target.value as AdAngle;
+                            setPerVariationAngles(next);
+                          }}
+                          className="flex-1 px-3 py-2 rounded-sm bg-white/10 text-white text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-[#FF3838]"
+                        >
+                          {AD_ANGLE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label} — {opt.desc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-500 italic">"Auto" slots let Claude pick that variation's angle from the winning ad's structure.</p>
+                </>
               )}
             </div>
           </div>
@@ -1137,7 +1214,14 @@ export default function IterateWinners() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Ad Angle:</span>
-                <span className="text-white font-medium">{AD_ANGLE_OPTIONS.find(o => o.value === adAngle)?.label ?? adAngle}</span>
+                <span className="text-white font-medium text-right">
+                  {usePerVariationAngles
+                    ? perVariationAngles
+                        .slice(0, variationCount)
+                        .map((a) => AD_ANGLE_OPTIONS.find((o) => o.value === a)?.label ?? a)
+                        .join(", ")
+                    : AD_ANGLE_OPTIONS.find(o => o.value === adAngle)?.label ?? adAngle}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Style Fidelity:</span>
