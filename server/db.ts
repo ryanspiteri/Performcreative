@@ -705,6 +705,7 @@ export async function upsertProductInfo(data: InsertProductInfo) {
       flavourVariants: data.flavourVariants,
       pricing: data.pricing,
       additionalNotes: data.additionalNotes,
+      painPoints: data.painPoints,
     }).where(eq(productInfo.product, data.product));
     return existing[0].id;
   } else {

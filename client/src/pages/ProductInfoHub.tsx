@@ -13,6 +13,7 @@ const FIELDS = [
   { key: "claims", label: "Claims", placeholder: "Approved marketing claims (e.g., Clinically dosed, Australian made...)", rows: 3 },
   { key: "targetAudience", label: "Target Audience", placeholder: "Who is this product for? (e.g., Active adults 25-45, fitness enthusiasts looking to lean out...)", rows: 3 },
   { key: "keySellingPoints", label: "Key Selling Points", placeholder: "Top selling points for ads (e.g., No proprietary blends, Transparent dosing...)", rows: 3 },
+  { key: "painPoints", label: "Pain Points", placeholder: "Customer pain points this product solves, one per line. Used by /iterate to surface variation angles. (e.g., Belly fat that won't budge / Afternoon energy crash / Afraid of caffeine jitters)", rows: 5 },
   { key: "flavourVariants", label: "Flavour Variants", placeholder: "Available flavours (e.g., Grape, Mango, Lime Splice, Pink Lemonade...)", rows: 2 },
   { key: "pricing", label: "Pricing", placeholder: "Pricing info (e.g., $59.95 AUD / 40 serves, Subscribe & Save 15% off...)", rows: 2 },
   { key: "additionalNotes", label: "Additional Notes", placeholder: "Any other info the AI should know (e.g., Recently reformulated, Pairs well with Thermoburn...)", rows: 3 },

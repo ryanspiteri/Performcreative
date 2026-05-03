@@ -13,7 +13,7 @@ import { transcribeVideo } from "./services/whisper";
 import { createMultipleScriptTasks } from "./services/clickup";
 import { runVideoPipelineStages1to3, runVideoPipelineStage4, runVideoPipelineStage5, completeVideoPipelineWithoutClickUp } from "./services/videoPipeline";
 import { runStaticPipeline, runStaticStage4, runStaticStage7, runStaticRevision } from "./services/staticPipeline";
-import { runIterationStages1to2, runIterationStage3, runIterationStage4, regenerateIterationVariation } from "./services/iterationPipeline";
+import { runIterationStages1to2, runIterationStage2, runIterationStage3, runIterationStage4, regenerateIterationVariation } from "./services/iterationPipeline";
 import { generateProductAdWithNanoBananaPro } from "./services/nanoBananaPro";
 import { pushIterationRunToClickUp } from "./services/iterationClickUp";
 import { TRPCError } from "@trpc/server";
@@ -1108,6 +1108,69 @@ Return JSON in this exact format:
         return { runId, status: "running" };
       }),
 
+    // Stage 1b approval — user picks per-variation pain points from the
+    // reverse-engineered candidates (or free-form / auto). Resumes the
+    // pipeline by triggering Stage 2 brief generation.
+    approveIterationPainPoints: protectedProcedure
+      .input(z.object({
+        runId: z.number(),
+        approved: z.boolean(),
+        notes: z.string().optional(),
+        selectedPainPoints: z
+          .array(
+            z.object({
+              title: z.string().min(1).max(100),
+              description: z.string().max(500),
+              source: z.enum(["library", "freeform", "auto"]),
+            }),
+          )
+          .optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const run = await db.getPipelineRun(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.iterationStage !== "stage_1b_pain_points_approval") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Pipeline is not in pain-point approval stage (current stage: " + run.iterationStage + ")",
+          });
+        }
+
+        if (!input.approved) {
+          await db.updatePipelineRun(input.runId, {
+            status: "failed",
+            errorMessage: `Pain-point approval rejected: ${input.notes || "No reason given"}`,
+            iterationStage: "stage_1b_pain_points_approval",
+          });
+          return { success: true };
+        }
+
+        const variationCount = run.variationCount || 3;
+        const selections = input.selectedPainPoints ?? [];
+        // Defensive: pad/truncate to variationCount; auto slots fill any gap.
+        const normalised = Array.from({ length: variationCount }, (_, i) => {
+          const s = selections[i];
+          if (!s) return { title: "Auto", description: "", source: "auto" as const };
+          return {
+            title: s.title.trim().slice(0, 100),
+            description: s.description.trim().slice(0, 500),
+            source: s.source,
+          };
+        });
+
+        await db.updatePipelineRun(input.runId, {
+          iterationSelectedPainPoints: JSON.stringify(normalised),
+          iterationStage: "stage_2_brief",
+        });
+
+        runIterationStage2(input.runId).catch((err: any) => {
+          console.error("[Pipeline] Iteration stage 2 failed:", err);
+          db.updatePipelineRun(input.runId, { status: "failed", errorMessage: err.message });
+        });
+
+        return { success: true };
+      }),
+
     approveIterationBrief: protectedProcedure
       .input(z.object({
         runId: z.number(),
@@ -1144,6 +1207,9 @@ Return JSON in this exact format:
 
     // Save user edits to the iteration brief during the stage_2b_approval gate.
     // Refuses to write if the run has moved past approval (race guard).
+    // Once pain points have been selected (Stage 1b done), enforces that the
+    // brief's variations.length matches the run's locked variationCount —
+    // prevents pain-point/variation misalignment downstream.
     updateIterationBrief: protectedProcedure
       .input(z.object({
         runId: z.number(),
@@ -1157,6 +1223,15 @@ Return JSON in this exact format:
             code: "BAD_REQUEST",
             message: "Brief can only be edited before approval. This run is already in stage: " + run.iterationStage,
           });
+        }
+        if (run.iterationSelectedPainPoints) {
+          const expected = run.variationCount ?? input.brief.variations.length;
+          if (input.brief.variations.length !== expected) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Variation count is locked at ${expected} after pain-point approval. Re-run iterate to change count.`,
+            });
+          }
         }
         await db.updatePipelineRun(input.runId, {
           iterationBrief: JSON.stringify(input.brief),
@@ -1596,6 +1671,7 @@ Return JSON in this exact format:
         flavourVariants: z.string().optional(),
         pricing: z.string().optional(),
         additionalNotes: z.string().optional(),
+        painPoints: z.string().max(8000).optional(),
       }))
       .mutation(async ({ input }) => {
         const id = await db.upsertProductInfo(input);

@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ChildGenerationControls } from "./ChildGenerationControls";
-import { VISUAL_DESCRIPTION_MAX, iterationBriefV1Schema, type IterationBriefV1, type IterationBriefVariationV1, type StyleMode, type AdAngle } from "../../../shared/iterationBriefSchema";
+import { VISUAL_DESCRIPTION_MAX, iterationBriefV1Schema, type IterationBriefV1, type IterationBriefVariationV1, type StyleMode } from "../../../shared/iterationBriefSchema";
 
 type EditableFields = Pick<IterationBriefVariationV1, "headline" | "subheadline" | "visualDescription" | "backgroundNote" | "angle" | "benefitCallouts">;
 
@@ -22,13 +22,21 @@ export function IterationResults({ run }: { run: any }) {
     customDescription?: string;
     referenceImageUrl?: string;
     styleMode?: StyleMode;
-    adAngle?: AdAngle;
   }>({});
   const [regenUploading, setRegenUploading] = useState(false);
   const [showRegenForm, setShowRegenForm] = useState<number | null>(null);
   const [uploadingToCanva, setUploadingToCanva] = useState<number | null>(null);
   const [canvaDesignUrls, setCanvaDesignUrls] = useState<Record<number, string>>({});
   const [pushingToClickUp, setPushingToClickUp] = useState(false);
+
+  // Stage 1b pain-point approval gate state.
+  // Shape: each variation slot holds either { mode: "library", index } pointing
+  // at a candidate, or { mode: "freeform", title, description }, or "auto".
+  type PainPointSlot =
+    | { mode: "library"; candidateIndex: number }
+    | { mode: "freeform"; title: string; description: string }
+    | { mode: "auto" };
+  const [painPointSlots, setPainPointSlots] = useState<PainPointSlot[]>([]);
 
   // Clear regen overrides when switching between variation forms
   useEffect(() => {
@@ -67,6 +75,11 @@ export function IterationResults({ run }: { run: any }) {
 
   const approveBrief = trpc.pipeline.approveIterationBrief.useMutation({
     onSuccess: () => { toast.success("Brief approved! Generating variations..."); utils.pipeline.get.invalidate(); utils.pipeline.list.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const approvePainPoints = trpc.pipeline.approveIterationPainPoints.useMutation({
+    onSuccess: () => { toast.success("Pain points locked. Generating brief..."); utils.pipeline.get.invalidate(); utils.pipeline.list.invalidate(); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -227,6 +240,7 @@ export function IterationResults({ run }: { run: any }) {
 
   const stages = [
     { key: "stage_1_analysis", label: "Analysis", icon: Eye },
+    { key: "stage_1b_pain_points_approval", label: "Pain Points", icon: AlertTriangle },
     { key: "stage_2_brief", label: "Creative Brief", icon: FileText },
     { key: "stage_2b_approval", label: "Brief Approval", icon: ThumbsUp },
     { key: "stage_3_generation", label: "Generate", icon: Sparkles },
@@ -234,6 +248,84 @@ export function IterationResults({ run }: { run: any }) {
     { key: "stage_4_clickup", label: "ClickUp", icon: ListChecks },
     { key: "completed", label: "Done", icon: CheckCircle },
   ];
+
+  // Parse Stage 1b candidates for the approval gate.
+  type PainPointCandidate = {
+    title: string;
+    description: string;
+    source: "library" | "derived";
+    recommendation: "winner_hits" | "strong_test" | "adjacent_test";
+    rationale: string;
+  };
+  const painPointCandidates: PainPointCandidate[] = (() => {
+    if (!run.iterationPainPointCandidates) return [];
+    try {
+      const raw = typeof run.iterationPainPointCandidates === "string"
+        ? JSON.parse(run.iterationPainPointCandidates)
+        : run.iterationPainPointCandidates;
+      return Array.isArray(raw) ? raw : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const variationCount: number = run.variationCount || 3;
+
+  // Default-init the per-variation slots once candidates land. Pre-fill the
+  // first variation with the "winner_hits" candidate (so the user has an
+  // anchor to compare against), then strong_test candidates by recommendation
+  // order, falling back to "auto" for any extra slots.
+  useEffect(() => {
+    if (iterationStage !== "stage_1b_pain_points_approval") return;
+    if (painPointSlots.length === variationCount) return;
+    if (painPointCandidates.length === 0) {
+      setPainPointSlots(Array.from({ length: variationCount }, () => ({ mode: "auto" as const })));
+      return;
+    }
+    const winnerIdx = painPointCandidates.findIndex((c) => c.recommendation === "winner_hits");
+    const strongIdxs = painPointCandidates
+      .map((c, i) => ({ c, i }))
+      .filter(({ c, i }) => c.recommendation === "strong_test" && i !== winnerIdx)
+      .map(({ i }) => i);
+    const fillOrder: number[] = [];
+    if (winnerIdx >= 0) fillOrder.push(winnerIdx);
+    fillOrder.push(...strongIdxs);
+    painPointCandidates.forEach((_, i) => {
+      if (!fillOrder.includes(i)) fillOrder.push(i);
+    });
+    const next: PainPointSlot[] = Array.from({ length: variationCount }, (_, slotIdx) => {
+      const candidateIdx = fillOrder[slotIdx];
+      if (candidateIdx === undefined) return { mode: "auto" as const };
+      return { mode: "library" as const, candidateIndex: candidateIdx };
+    });
+    setPainPointSlots(next);
+    // Eslint exhaustive-deps would want painPointCandidates here, but it's a
+    // derived value — initialising once on stage entry is the intent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iterationStage, variationCount, run.iterationPainPointCandidates]);
+
+  const buildSelectedPainPoints = () => {
+    return painPointSlots.map((slot): { title: string; description: string; source: "library" | "freeform" | "auto" } => {
+      if (slot.mode === "library") {
+        const c = painPointCandidates[slot.candidateIndex];
+        if (!c) return { title: "Auto", description: "", source: "auto" };
+        return { title: c.title, description: c.description, source: "library" };
+      }
+      if (slot.mode === "freeform") {
+        return {
+          title: slot.title.trim().slice(0, 100),
+          description: slot.description.trim().slice(0, 500),
+          source: "freeform",
+        };
+      }
+      return { title: "Auto", description: "", source: "auto" };
+    });
+  };
+
+  const painPointsValid = painPointSlots.every((slot) => {
+    if (slot.mode === "freeform") return slot.title.trim().length > 0;
+    return true;
+  });
 
   const stageIndex = stages.findIndex(s => s.key === iterationStage);
 
@@ -247,7 +339,8 @@ export function IterationResults({ run }: { run: any }) {
       customDescription: regenOverrides.customDescription || undefined,
       referenceImageUrl: regenOverrides.referenceImageUrl || undefined,
       styleMode: regenOverrides.styleMode || undefined,
-      adAngle: regenOverrides.adAngle || undefined,
+      // adAngle dropdown was removed — pain-point is the steering axis now,
+      // and pain points are locked at gate approval (re-run iterate to change).
     });
   };
 
@@ -388,6 +481,143 @@ export function IterationResults({ run }: { run: any }) {
           </div>
           <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
             {run.iterationAnalysis}
+          </div>
+        </div>
+      )}
+
+      {/* Stage 1b: Pain Point Approval Gate */}
+      {iterationStage === "stage_1b_pain_points_approval" && run.status !== "failed" && (
+        <div className="bg-[#191B1F] border border-white/5 rounded-xl p-5">
+          <div className="flex items-start justify-between mb-4 gap-4">
+            <div>
+              <h2 className="text-white font-semibold flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-4 h-4 text-[#FF3838]" /> Stage 1b: Pick Pain Points
+              </h2>
+              <p className="text-xs text-gray-500">
+                Reverse-engineered candidates ranked by fit. Pick one pain point per variation, or leave on "Auto" to let Claude choose. The brief writes each variation to attack the pain you assign.
+              </p>
+            </div>
+          </div>
+
+          {painPointCandidates.length === 0 ? (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-sm text-amber-200">
+              No candidates were surfaced. You can still proceed by setting all slots to free-form or auto.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+              {painPointCandidates.map((c, i) => {
+                const badge =
+                  c.recommendation === "winner_hits" ? { label: "Winner already hits", color: "bg-blue-500/15 text-blue-300 border-blue-500/30" } :
+                  c.recommendation === "strong_test" ? { label: "Recommended", color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" } :
+                  { label: "Adjacent test", color: "bg-white/5 text-gray-400 border-white/10" };
+                return (
+                  <div key={i} className="bg-[#01040A] border border-white/5 rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className="text-sm font-semibold text-white">{c.title}</h3>
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${badge.color} whitespace-nowrap`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-2 leading-relaxed">{c.description}</p>
+                    <p className="text-[11px] text-gray-500 italic">{c.rationale}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <h3 className="text-white font-medium text-sm mb-3">Assign pain points per variation</h3>
+          <div className="space-y-3 mb-6">
+            {painPointSlots.map((slot, i) => (
+              <div key={i} className="bg-[#01040A] border border-white/5 rounded-lg p-3">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-xs text-gray-500 w-24 shrink-0">Variation {i + 1}</span>
+                  <select
+                    value={slot.mode === "library" ? `lib:${slot.candidateIndex}` : slot.mode}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const next = [...painPointSlots];
+                      if (v === "auto") next[i] = { mode: "auto" };
+                      else if (v === "freeform") next[i] = { mode: "freeform", title: "", description: "" };
+                      else if (v.startsWith("lib:")) next[i] = { mode: "library", candidateIndex: parseInt(v.slice(4), 10) };
+                      setPainPointSlots(next);
+                    }}
+                    className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#FF3838]"
+                  >
+                    <option value="auto">Auto — Claude picks</option>
+                    {painPointCandidates.map((c, idx) => (
+                      <option key={idx} value={`lib:${idx}`}>
+                        {c.title}{c.recommendation === "winner_hits" ? " (winner already hits)" : c.recommendation === "strong_test" ? " (recommended)" : ""}
+                      </option>
+                    ))}
+                    <option value="freeform">Custom (type your own)…</option>
+                  </select>
+                </div>
+                {slot.mode === "freeform" && (
+                  <div className="ml-[6.5rem] space-y-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Pain point title (e.g. Mid-afternoon energy crash)"
+                      value={slot.title}
+                      onChange={(e) => {
+                        const next = [...painPointSlots];
+                        next[i] = { mode: "freeform", title: e.target.value.slice(0, 100), description: slot.description };
+                        setPainPointSlots(next);
+                      }}
+                      maxLength={100}
+                      className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600"
+                    />
+                    <textarea
+                      placeholder="One or two sentences describing the pain in customer language (max 500 chars)"
+                      value={slot.description}
+                      onChange={(e) => {
+                        const next = [...painPointSlots];
+                        next[i] = { mode: "freeform", title: slot.title, description: e.target.value.slice(0, 500) };
+                        setPainPointSlots(next);
+                      }}
+                      maxLength={500}
+                      rows={2}
+                      className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600 resize-none"
+                    />
+                  </div>
+                )}
+                {slot.mode === "library" && painPointCandidates[slot.candidateIndex] && (
+                  <p className="ml-[6.5rem] text-[11px] text-gray-500 mt-1">{painPointCandidates[slot.candidateIndex].description}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() =>
+                approvePainPoints.mutate({
+                  runId: run.id,
+                  approved: true,
+                  selectedPainPoints: buildSelectedPainPoints(),
+                })
+              }
+              disabled={approvePainPoints.isPending || !painPointsValid}
+              title={!painPointsValid ? "Free-form pain points need a title" : undefined}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {approvePainPoints.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+              Lock In & Generate Brief
+            </button>
+            <button
+              onClick={() =>
+                approvePainPoints.mutate({
+                  runId: run.id,
+                  approved: false,
+                  notes: "User rejected pain-point candidates",
+                })
+              }
+              disabled={approvePainPoints.isPending}
+              className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              <ThumbsDown className="w-4 h-4" />
+              Reject (re-run iterate)
+            </button>
           </div>
         </div>
       )}
@@ -848,37 +1078,18 @@ export function IterationResults({ run }: { run: any }) {
                               className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 placeholder-gray-600 resize-none"
                               rows={3}
                             />
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Style Fidelity</label>
-                                <select
-                                  value={regenOverrides.styleMode || ""}
-                                  onChange={(e) => setRegenOverrides(prev => ({ ...prev, styleMode: (e.target.value || undefined) as StyleMode | undefined }))}
-                                  className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300"
-                                >
-                                  <option value="">Run default ({run.styleMode || "EVOLVE_REFERENCE"})</option>
-                                  <option value="MATCH_REFERENCE">Match reference</option>
-                                  <option value="EVOLVE_REFERENCE">Evolve reference</option>
-                                  <option value="DEPART_FROM_REFERENCE">Depart from reference</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Ad Angle</label>
-                                <select
-                                  value={regenOverrides.adAngle || ""}
-                                  onChange={(e) => setRegenOverrides(prev => ({ ...prev, adAngle: (e.target.value || undefined) as AdAngle | undefined }))}
-                                  className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300"
-                                >
-                                  <option value="">Keep current</option>
-                                  <option value="auto">Auto</option>
-                                  <option value="claim_led">Claim-led</option>
-                                  <option value="before_after">Before / after</option>
-                                  <option value="testimonial">Testimonial</option>
-                                  <option value="ugc_organic">UGC organic</option>
-                                  <option value="product_hero">Product hero</option>
-                                  <option value="lifestyle">Lifestyle</option>
-                                </select>
-                              </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Style Fidelity</label>
+                              <select
+                                value={regenOverrides.styleMode || ""}
+                                onChange={(e) => setRegenOverrides(prev => ({ ...prev, styleMode: (e.target.value || undefined) as StyleMode | undefined }))}
+                                className="w-full bg-[#191B1F] border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300"
+                              >
+                                <option value="">Run default ({run.styleMode || "EVOLVE_REFERENCE"})</option>
+                                <option value="MATCH_REFERENCE">Match reference</option>
+                                <option value="EVOLVE_REFERENCE">Evolve reference</option>
+                                <option value="DEPART_FROM_REFERENCE">Depart from reference</option>
+                              </select>
                             </div>
                             {/* Reference image upload */}
                             {regenOverrides.referenceImageUrl ? (
@@ -1039,7 +1250,7 @@ export function IterationResults({ run }: { run: any }) {
       )}
 
       {/* Running indicator */}
-      {isRunning && iterationStage && iterationStage !== "completed" && iterationStage !== "stage_2b_approval" && iterationStage !== "stage_3b_variation_approval" && (
+      {isRunning && iterationStage && iterationStage !== "completed" && iterationStage !== "stage_1b_pain_points_approval" && iterationStage !== "stage_2b_approval" && iterationStage !== "stage_3b_variation_approval" && (
         <div className="bg-[#01040A] border border-[#FF3838]/30 rounded-lg p-4">
           <div className="flex items-center gap-2 text-[#FF3838] text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />

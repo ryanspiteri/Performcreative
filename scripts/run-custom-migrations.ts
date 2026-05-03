@@ -25,6 +25,7 @@ async function run() {
     "0021_add_iteration_source_type_adaptation.sql",
     "0022_add_script_pipeline_columns.sql",
     "0024_add_tags_to_product_renders.sql",
+    "0025_add_pain_points.sql",
   ];
 
   for (const name of migrations) {
