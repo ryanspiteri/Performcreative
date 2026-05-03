@@ -74,6 +74,12 @@ export const pipelineRuns = mysqlTable("pipeline_runs", {
   iterationBrief: text("iterationBrief"),
   iterationStage: varchar("iterationStage", { length: 64 }),
   iterationVariations: json("iterationVariations"),
+  /** Stage 1b output: JSON array of candidate pain points (title, description,
+   *  source, recommendation, rationale) ranked by Claude. Null for legacy runs. */
+  iterationPainPointCandidates: text("iterationPainPointCandidates"),
+  /** User-approved pain points per variation. JSON array of length variationCount,
+   *  each entry { title, description, source: "library"|"freeform"|"auto" }. */
+  iterationSelectedPainPoints: text("iterationSelectedPainPoints"),
   /** @deprecated — Risk Level cut in favour of styleMode + adAngle. Kept for backward-compat reads. */
   creativityLevel: mysqlEnum("creativityLevel", ["SAFE", "BOLD", "WILD"]).default("BOLD"),
   /** Style preservation mode for Gemini prompt — see shared/iterationBriefSchema.ts STYLE_MODES */
@@ -172,6 +178,9 @@ export const productInfo = mysqlTable("product_info", {
   flavourVariants: text("flavourVariants"),
   pricing: text("pricing"),
   additionalNotes: text("additionalNotes"),
+  /** User-curated pain points, one per line. Used by iteration Stage 1b
+   *  reverse-engineering to surface candidate pain points for variations. */
+  painPoints: text("painPoints"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

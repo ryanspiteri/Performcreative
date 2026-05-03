@@ -28,6 +28,15 @@ function stripMarkdownFences(text: string): string {
   return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
 }
 
+function safeJsonParse<T = unknown>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 function validateBriefJson(text: string): IterationBriefV1 | null {
   let parsed: unknown;
   try {
@@ -230,7 +239,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
 
     await db.updatePipelineRun(runId, {
       iterationAnalysis: analysis,
-      iterationStage: "stage_2_brief",
+      iterationStage: "stage_1b_pain_points_approval",
     });
     console.log(`[Iteration] Stage 1 complete. Analysis: ${analysis.substring(0, 200)}...`);
   } catch (err: any) {
@@ -243,36 +252,89 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     return;
   }
 
-  // ---- STAGE 2: Generate iteration brief with 3 new copy angles ----
+  // ---- STAGE 1b: Reverse-engineer pain-point candidates and pause for approval ----
   try {
-    console.log(`[Iteration] Stage 2: Generating iteration brief...`);
+    console.log(`[Iteration] Stage 1b: Reverse-engineering pain points...`);
     const run = await db.getPipelineRun(runId);
     const analysis = run?.iterationAnalysis || "";
-    const runSourceType = (run?.iterationSourceType as IterationSourceType) ?? sourceType;
-    const runAdaptationMode = run?.iterationAdaptationMode as IterationAdaptationMode | null | undefined;
+    const productInfoForPainPoints = await buildIterationProductContext(input.product);
+    const productInfoRow = await db.getProductInfo(input.product);
+    const curatedPainPoints = (productInfoRow as any)?.painPoints ?? null;
 
+    const candidates = await withTimeout(
+      reverseEngineerPainPoints(analysis, input.product, productInfoForPainPoints, curatedPainPoints),
+      STEP_TIMEOUT,
+      "Stage 1b: Pain Points",
+    );
+
+    await db.updatePipelineRun(runId, {
+      iterationPainPointCandidates: JSON.stringify(candidates),
+      // stage already set to stage_1b_pain_points_approval above
+    });
+    console.log(`[Iteration] Stage 1b complete. ${candidates.length} candidates surfaced. Paused at approval gate.`);
+  } catch (err: any) {
+    console.error(`[Iteration] Stage 1b failed:`, err.message);
+    await db.updatePipelineRun(runId, {
+      status: "failed",
+      errorMessage: `Stage 1b failed: ${err.message}`,
+      iterationStage: "stage_1b_pain_points_approval",
+    });
+    return;
+  }
+  return; // pause — Stage 2 runs after pain-point approval via runIterationStage2
+}
+
+/**
+ * Stage 2: generate the iteration brief. Called from `approveIterationPainPoints`
+ * after the user picks per-variation pain points. Reads the analysis +
+ * selected pain points from the DB; the original input object isn't available
+ * here so we reconstruct what we need from the persisted run.
+ */
+export async function runIterationStage2(runId: number) {
+  const run = await db.getPipelineRun(runId);
+  if (!run) {
+    console.error(`[Iteration] runIterationStage2: run ${runId} not found`);
+    return;
+  }
+  const product = run.product;
+  const productInfoContext = await buildIterationProductContext(product);
+  const sourceType = (run.iterationSourceType as IterationSourceType) ?? "own_ad";
+  const adaptationMode = run.iterationAdaptationMode as IterationAdaptationMode | null | undefined;
+  const analysis = run.iterationAnalysis || "";
+  const variationCount = run.variationCount || 3;
+  const variationTypes = run.variationTypes ? safeJsonParse<string[]>(run.variationTypes) ?? undefined : undefined;
+  const selectedPainPoints = run.iterationSelectedPainPoints
+    ? (safeJsonParse<SelectedPainPoint[]>(run.iterationSelectedPainPoints) ?? undefined)
+    : undefined;
+  const runAdAngle = (run.adAngle as import("../../shared/iterationBriefSchema").AdAngle | null) ?? "auto";
+
+  try {
+    console.log(`[Iteration] Stage 2: Generating iteration brief (run ${runId})...`);
     const briefResult = await withTimeout(
-      runSourceType === "competitor_ad"
+      sourceType === "competitor_ad"
         ? generateCompetitorIterationBrief(
             analysis,
-            input.product,
+            product,
             productInfoContext,
-            runAdaptationMode ?? "concept",
-            input.foreplayAdBrand,
-            input.adAngle ?? "auto",
-            input.adAngles,
+            adaptationMode ?? "concept",
+            run.foreplayAdBrand ?? undefined,
+            runAdAngle,
+            undefined,
+            selectedPainPoints,
+            variationCount,
           )
         : generateIterationBrief(
             analysis,
-            input.product,
+            product,
             productInfoContext,
-            input.variationCount || 3,
-            input.variationTypes,
-            input.adAngle ?? "auto",
-            input.adAngles,
+            variationCount,
+            variationTypes,
+            runAdAngle,
+            undefined,
+            selectedPainPoints,
           ),
       STEP_TIMEOUT,
-      "Stage 2: Iteration Brief"
+      "Stage 2: Iteration Brief",
     );
 
     await db.updatePipelineRun(runId, {
@@ -283,7 +345,7 @@ export async function runIterationStages1to2(runId: number, input: IterationPipe
     if (briefResult.qualityWarning) {
       console.warn(`[Iteration] Stage 2 used fallback brief — user must edit before approval`);
     }
-    console.log(`[Iteration] Stage 2 complete. Paused at approval gate.`);
+    console.log(`[Iteration] Stage 2 complete. Paused at brief approval gate.`);
   } catch (err: any) {
     console.error(`[Iteration] Stage 2 failed:`, err.message);
     await db.updatePipelineRun(runId, {
@@ -1088,8 +1150,185 @@ Output a structured analysis so we can brief image generation to MATCH this styl
   return resContent?.text || JSON.stringify(resContent);
 }
 
+// ============================================================
+// PAIN-POINT-DRIVEN ITERATION (Stage 1b)
+// ============================================================
+
+/** A pain point as surfaced by Stage 1b reverse-engineering. */
+export interface PainPointCandidate {
+  title: string;
+  description: string;
+  /** "library" = pulled from the user's curated list on product_info.painPoints
+   *  "derived" = Claude derived it from targetAudience/benefits/keySellingPoints */
+  source: "library" | "derived";
+  /** "winner_hits" = the uploaded ad already attacks this pain
+   *  "strong_test" = adjacent pain Claude recommends testing
+   *  "adjacent_test" = further-out pain worth a slot */
+  recommendation: "winner_hits" | "strong_test" | "adjacent_test";
+  rationale: string;
+}
+
+/** A pain point as approved by the user, locked onto a variation slot. */
+export interface SelectedPainPoint {
+  title: string;
+  description: string;
+  source: "library" | "freeform" | "auto";
+}
+
+/** Caps applied at upsert / approval time. Mirror in the router input. */
+export const PAIN_POINT_TITLE_MAX = 100;
+export const PAIN_POINT_DESCRIPTION_MAX = 500;
+export const PAIN_POINTS_FIELD_MAX = 8000;
+
 /**
- * Build the ad-angle instruction for the brief prompt. Three modes:
+ * Iteration-local product context. Calls `buildProductInfoContext` (which is
+ * shared across pipelines and intentionally NOT extended) and appends the
+ * pain-points block. Only the iteration pipeline reads this; static / script /
+ * UGC pipelines keep their existing prompts unchanged.
+ */
+async function buildIterationProductContext(product: string): Promise<string> {
+  const base = await buildProductInfoContext(product);
+  try {
+    const info = await db.getProductInfo(product);
+    const painPoints = (info as any)?.painPoints?.toString().trim();
+    if (painPoints) {
+      return base ? `${base}\nPain Points (curated list):\n${painPoints}` : `Pain Points (curated list):\n${painPoints}`;
+    }
+  } catch {
+    /* swallow — pain points are non-critical */
+  }
+  return base;
+}
+
+/**
+ * Build the per-variation pain-point instruction for the brief prompt. Two modes:
+ * - empty / no pain points: returns empty string (caller falls through to the
+ *   legacy adAngle instruction)
+ * - per-variation: explicit list, one pain point per variation slot. AUTO slots
+ *   tell Claude to pick a distinct pain point of his own choosing.
+ */
+export function buildPainPointInstruction(
+  selectedPainPoints: SelectedPainPoint[] | undefined,
+): string {
+  if (!selectedPainPoints || selectedPainPoints.length === 0) return "";
+  const allAuto = selectedPainPoints.every((p) => p.source === "auto");
+  if (allAuto) {
+    return `PAIN POINT — DIVERSIFY:
+The user selected "Auto" for every variation. Pick a DIFFERENT pain point for each variation. Each variation's headline + visualDescription + backgroundNote must make that specific pain felt. No two variations should attack the same pain when the count allows it.`;
+  }
+  const lines = selectedPainPoints
+    .map((p, i) => {
+      if (p.source === "auto") {
+        return `- Variation ${i + 1}: AUTO — pick a pain point yourself, distinct from the locked picks in this list and from other AUTO slots.`;
+      }
+      return `- Variation ${i + 1}: ${p.title}\n  Description: ${p.description}`;
+    })
+    .join("\n");
+  return `PAIN POINT — PER VARIATION:
+Each variation must hit a specific pain point. Set the variation's adAngle to a single short slug derived from the pain point title (lowercase, dashes). Shape headline + subheadline + visualDescription + backgroundNote so the named pain is felt — the headline should articulate the problem or its solution, the visual should embody who suffers from it.
+${lines}`;
+}
+
+/**
+ * Stage 1b: reverse-engineer 4–6 candidate pain points for the user to choose
+ * from. Reads the winner's analysis + the curated pain-points field on
+ * product_info. If the curated field is populated, Claude ranks library entries.
+ * If it's empty, Claude derives candidates from targetAudience / benefits /
+ * keySellingPoints. Mirrors the brief-generator retry pattern: one retry on
+ * malformed JSON, then a deterministic fallback so the run never hard-stops.
+ */
+export async function reverseEngineerPainPoints(
+  analysis: string,
+  product: string,
+  productInfoContext: string,
+  curatedPainPoints: string | null | undefined,
+): Promise<PainPointCandidate[]> {
+  const hasLibrary = !!curatedPainPoints && curatedPainPoints.trim().length > 0;
+  const sourceMode = hasLibrary ? "library" : "derived";
+  const libraryBlock = hasLibrary
+    ? `\n\nCURATED PAIN-POINT LIBRARY (rank and pick from this list verbatim where possible — title MUST match a list entry; only paraphrase the description):\n${curatedPainPoints}`
+    : `\n\nNo curated pain points are stored for this product yet. Derive 4–6 candidates from the product's targetAudience, benefits, and keySellingPoints. Mark every candidate with source: "derived".`;
+
+  const system = `You are a senior DTC creative strategist. Your job is to look at a winning ad and figure out which pain point it actually attacks, then surface 4–6 ADJACENT pain points the brand should test in variations.
+
+A pain point is a specific problem the customer feels — "afternoon energy crash", "stubborn belly fat", "afraid of caffeine jitters". It is NOT an ad format ("testimonial", "claim_led"). Pain points describe what's WRONG in the customer's life that this product fixes.
+
+Rules:
+1. Identify which pain point the winning ad already attacks. Mark exactly ONE candidate with recommendation: "winner_hits". This is the baseline.
+2. Surface 3–5 ADJACENT pain points the brand should test in variations. Mark these recommendation: "strong_test" (closest to the winner's audience) or "adjacent_test" (further-out, more speculative).
+3. Total candidates: 4–6.
+4. Each candidate: title (short, ${PAIN_POINT_TITLE_MAX} chars max), description (1–2 sentences explaining the pain in customer language, ${PAIN_POINT_DESCRIPTION_MAX} chars max), source ("${sourceMode}"), recommendation, rationale (one line on why this pain matters for THIS product and THIS winner).
+5. Return ONLY valid JSON. No markdown, no code fences.
+
+Output schema:
+{
+  "candidates": [
+    { "title": "string", "description": "string", "source": "library" | "derived", "recommendation": "winner_hits" | "strong_test" | "adjacent_test", "rationale": "string" }
+  ]
+}`;
+
+  const userPrompt = `Winning ad analysis for ONEST Health ${product}:
+
+${analysis}
+
+${productInfoContext ? `\nProduct context:\n${productInfoContext}` : ""}${libraryBlock}
+
+Return the JSON object now.`;
+
+  const callOnce = async (): Promise<PainPointCandidate[] | null> => {
+    const res = await claudeClient.post("/messages", {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 2000,
+      system,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+    const content = res.data?.content;
+    let raw = "";
+    if (Array.isArray(content)) raw = content.map((c: any) => c.text || "").join("\n");
+    else raw = content?.text || "";
+    raw = stripMarkdownFences(raw);
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.candidates) && parsed.candidates.length >= 2) {
+        return parsed.candidates.map((c: any) => ({
+          title: String(c.title ?? "").slice(0, PAIN_POINT_TITLE_MAX),
+          description: String(c.description ?? "").slice(0, PAIN_POINT_DESCRIPTION_MAX),
+          source: c.source === "library" || c.source === "derived" ? c.source : sourceMode,
+          recommendation: ["winner_hits", "strong_test", "adjacent_test"].includes(c.recommendation)
+            ? c.recommendation
+            : "adjacent_test",
+          rationale: String(c.rationale ?? ""),
+        }));
+      }
+    } catch {
+      /* fall through to retry */
+    }
+    return null;
+  };
+
+  let candidates = await callOnce();
+  if (!candidates) {
+    console.warn(`[Iteration] reverseEngineerPainPoints: first call invalid, retrying`);
+    candidates = await callOnce();
+  }
+  if (!candidates) {
+    console.warn(`[Iteration] reverseEngineerPainPoints: both calls invalid, returning fallback skeleton`);
+    return [
+      {
+        title: "Identify the winner's core pain",
+        description: "Claude couldn't reverse-engineer pain points. Pick free-form pain points based on what the ad actually attacks.",
+        source: sourceMode,
+        recommendation: "winner_hits",
+        rationale: "Fallback — manual pain-point selection required.",
+      },
+    ];
+  }
+  return candidates;
+}
+
+/**
+ * Build the ad-angle instruction for the brief prompt (legacy fallback for runs
+ * that don't go through Stage 1b). Three modes:
  * - per-variation: explicit list of angle-per-index, with "auto" slots
  *   meaning "you (Claude) pick this one"
  * - locked: every variation uses the same specific angle
@@ -1161,12 +1400,17 @@ async function generateIterationBrief(
   variationTypes?: string[],
   runAdAngle: import("../../shared/iterationBriefSchema").AdAngle = "auto",
   perVariationAngles?: import("../../shared/iterationBriefSchema").AdAngle[],
+  selectedPainPoints?: SelectedPainPoint[],
 ): Promise<BriefGenerationResult> {
-  const adAngleInstruction = buildAdAngleInstruction(runAdAngle, perVariationAngles, variationCount);
+  const painPointInstruction = buildPainPointInstruction(selectedPainPoints);
+  const adAngleInstruction = painPointInstruction
+    ? "" // pain-point flow takes precedence; ad-format is no longer a user knob
+    : buildAdAngleInstruction(runAdAngle, perVariationAngles, variationCount);
+  const angleSection = painPointInstruction || adAngleInstruction;
 
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
 
-${adAngleInstruction}
+${angleSection}
 
 IMPORTANT VISUAL RULE:
 - The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
@@ -1359,19 +1603,22 @@ async function generateCompetitorIterationBrief(
   competitorBrand?: string,
   runAdAngle: import("../../shared/iterationBriefSchema").AdAngle = "auto",
   perVariationAngles?: import("../../shared/iterationBriefSchema").AdAngle[],
+  selectedPainPoints?: SelectedPainPoint[],
+  variationCountArg?: number,
 ): Promise<BriefGenerationResult> {
   const isConcept = adaptationMode === "concept";
-  // Competitor brief generation always asks for ~3 variations downstream;
-  // pass the actual perVariationAngles length as the count so the helper
-  // formats the per-variation list correctly when supplied.
-  const adAngleInstruction = buildAdAngleInstruction(
-    runAdAngle,
-    perVariationAngles,
-    perVariationAngles?.length ?? 3,
-  );
+  // variationCount source priority: explicit arg > selectedPainPoints length > perVariationAngles length > 3.
+  // Caller (runIterationStage2) passes the run's variationCount so output count matches the rest of the pipeline.
+  const variationCount =
+    variationCountArg ?? selectedPainPoints?.length ?? perVariationAngles?.length ?? 3;
+  const painPointInstruction = buildPainPointInstruction(selectedPainPoints);
+  const adAngleInstruction = painPointInstruction
+    ? ""
+    : buildAdAngleInstruction(runAdAngle, perVariationAngles, variationCount);
+  const angleSection = painPointInstruction || adAngleInstruction;
   const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."}
 
-${adAngleInstruction}
+${angleSection}
 
 IMPORTANT VISUAL RULE:
 - The product name may contain words like "Hyperburn", "Thermosleep", "Thermoburn", or "Ignite". These are BRAND names, NOT visual instructions.
@@ -1385,7 +1632,7 @@ DO NOT BLEED PRODUCT DESIGN INTO visualDescription OR backgroundNote:
 
 Return ONLY valid JSON. No markdown, no code blocks.`;
 
-  const variationCount = 3;
+  // variationCount is now resolved from the function args at the top.
 
   const userPrompt = `Based on this analysis of a COMPETITOR ad (${competitorBrand || "other brand"}):
 
