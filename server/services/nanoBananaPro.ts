@@ -18,9 +18,11 @@
 import axios from "axios";
 import { storagePut } from "../storage";
 
-const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
-if (!GOOGLE_AI_API_KEY) {
-  throw new Error("GOOGLE_AI_API_KEY environment variable is not set");
+const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY ?? "";
+
+function requireApiKey(): string {
+  if (!GOOGLE_AI_API_KEY) throw new Error("GOOGLE_AI_API_KEY environment variable is not set");
+  return GOOGLE_AI_API_KEY;
 }
 
 /** Which Gemini image model to use */
@@ -195,7 +197,7 @@ async function generateProductAdWithNanaBananaPro_internal(
     // timeout handles the long tail without inflating the floor for fast
     // requests.
     const HTTP_TIMEOUT = 360_000;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GOOGLE_AI_API_KEY}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${requireApiKey()}`;
     const requestConfig = {
       headers: { "Content-Type": "application/json" },
       timeout: HTTP_TIMEOUT,
