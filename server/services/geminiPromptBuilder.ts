@@ -44,6 +44,8 @@ export interface PromptBuildOptions {
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
   targetAudience?: string;
   hasPersonReference?: boolean;
+  /** Benefit callout pills to render on the ad (e.g. ["Melts stubborn belly bloat", ...]). */
+  benefitCallouts?: string[];
 }
 
 // Label specs lift the tub description out of abstract ("preserve label, colour,
@@ -230,6 +232,7 @@ export function buildReferenceBasedPrompt(options: PromptBuildOptions): string {
     styleMode,
     aspectRatio = "1:1",
     hasPersonReference = false,
+    benefitCallouts,
   } = options;
 
   const leadingVisual = (visualDescription && visualDescription.trim().length > 0)
@@ -255,9 +258,9 @@ NOTE: Do NOT render any standalone brand logo, wordmark, or text-only brand-mark
 
 ${styleModeBlock(styleMode, variationType)}
 ${carveout}${adAngleBlock(adAngle) ? "\n" + adAngleBlock(adAngle) + "\n\n" : ""}=== NEW COPY FOR THIS VERSION ===
-Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}
+Headline: "${headline}"${subheadline ? `\nSubheadline: "${subheadline}"` : ''}${benefitCallouts && benefitCallouts.length > 0 ? `\nBenefit callout pills:\n${benefitCallouts.map(b => `- ${b}`).join("\n")}` : ''}
 
-Render the headline${subheadline ? ' and subheadline' : ''} in the SAME STYLE as the reference image (placement, size, typography, colour, effects). If the reference has text at the top, put it at the top. Replicate whatever text approach the reference uses.
+Render the headline${subheadline ? ', subheadline,' : ''}${benefitCallouts && benefitCallouts.length > 0 ? ' and benefit callout pills' : ''} in the SAME STYLE as the reference image (placement, size, typography, colour, effects). If the reference has benefit pill badges on the left side, render them at the same size and position. If the reference has text at the top, put it at the top. Replicate whatever text approach the reference uses.
 
 === VISUAL DESCRIPTION FOR THIS VARIATION ===
 ${leadingVisual}

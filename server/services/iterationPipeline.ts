@@ -13,6 +13,7 @@ import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProduc
 import {
   iterationBriefV1Schema,
   VISUAL_DESCRIPTION_MAX,
+  VARIATION_TYPES,
   type IterationBriefV1,
   type VariationType as BriefVariationType,
 } from "../../shared/iterationBriefSchema";
@@ -26,6 +27,11 @@ export interface BriefGenerationResult {
 
 function stripMarkdownFences(text: string): string {
   return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+}
+
+/** Remove inline markdown bold/italic markers (** and *) from a string. */
+function stripMarkdownInline(text: string): string {
+  return text.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1").trim();
 }
 
 function safeJsonParse<T = unknown>(raw: string | null | undefined): T | null {
@@ -47,13 +53,19 @@ function sanitizeRawBrief(parsed: unknown): unknown {
   }
   const obj = parsed as Record<string, unknown>;
   const validVariationTypes = new Set(VARIATION_TYPES as readonly string[]);
+  const stripStr = (v: unknown) => typeof v === "string" ? stripMarkdownInline(v) : v;
   return {
     ...obj,
     variations: (obj.variations as any[]).map((v: any) => ({
       ...v,
+      headline: stripStr(v.headline),
+      subheadline: stripStr(v.subheadline),
+      angle: stripStr(v.angle),
+      angleDescription: stripStr(v.angleDescription),
       visualDescription: typeof v.visualDescription === "string"
-        ? v.visualDescription.slice(0, VISUAL_DESCRIPTION_MAX)
+        ? stripMarkdownInline(v.visualDescription).slice(0, VISUAL_DESCRIPTION_MAX)
         : v.visualDescription,
+      backgroundNote: stripStr(v.backgroundNote),
       variationType: validVariationTypes.has(v.variationType) ? v.variationType : "full_remix",
     })),
   };
@@ -570,6 +582,7 @@ export async function runIterationStage3(runId: number, run: any) {
           adAngle: v.adAngle,
           visualDescription: v.visualDescription || undefined,
           backgroundStyleDescription: v.backgroundNote || undefined,
+          benefitCallouts: Array.isArray(v.benefitCallouts) && v.benefitCallouts.length > 0 ? v.benefitCallouts : undefined,
           referenceFxPresent: briefFxPresent,
           detectedFxTypes: briefDetectedFx,
           styleMode: runStyleMode,
@@ -910,6 +923,7 @@ export async function regenerateIterationVariation(
     ? (briefData.detectedFxTypes as import("../../shared/iterationBriefSchema").DetectedFxType[])
     : [];
 
+  const regenBenefitCallouts = Array.isArray(v.benefitCallouts) && v.benefitCallouts.length > 0 ? v.benefitCallouts : undefined;
   const geminiPrompt = buildReferenceBasedPrompt({
     headline,
     subheadline: subheadline || undefined,
@@ -919,6 +933,7 @@ export async function regenerateIterationVariation(
     variationType: v.variationType,
     adAngle: regenAdAngle,
     visualDescription: sceneDescription,
+    benefitCallouts: regenBenefitCallouts,
     referenceFxPresent: regenFxPresent,
     detectedFxTypes: regenDetectedFx,
     styleMode: regenStyleMode,
