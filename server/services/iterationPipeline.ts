@@ -37,6 +37,28 @@ function safeJsonParse<T = unknown>(raw: string | null | undefined): T | null {
   }
 }
 
+/**
+ * Clamp fields that Claude frequently gets wrong before running strict schema validation.
+ * This prevents a single over-length visualDescription from invalidating an otherwise correct brief.
+ */
+function sanitizeRawBrief(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as any).variations)) {
+    return parsed;
+  }
+  const obj = parsed as Record<string, unknown>;
+  const validVariationTypes = new Set(VARIATION_TYPES as readonly string[]);
+  return {
+    ...obj,
+    variations: (obj.variations as any[]).map((v: any) => ({
+      ...v,
+      visualDescription: typeof v.visualDescription === "string"
+        ? v.visualDescription.slice(0, VISUAL_DESCRIPTION_MAX)
+        : v.visualDescription,
+      variationType: validVariationTypes.has(v.variationType) ? v.variationType : "full_remix",
+    })),
+  };
+}
+
 function validateBriefJson(text: string): IterationBriefV1 | null {
   let parsed: unknown;
   try {
@@ -44,7 +66,7 @@ function validateBriefJson(text: string): IterationBriefV1 | null {
   } catch {
     return null;
   }
-  const result = iterationBriefV1Schema.safeParse(parsed);
+  const result = iterationBriefV1Schema.safeParse(sanitizeRawBrief(parsed));
   return result.success ? result.data : null;
 }
 
