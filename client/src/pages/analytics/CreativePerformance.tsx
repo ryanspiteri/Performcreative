@@ -781,7 +781,7 @@ function GenerateFromWinnerDialog({
           <Button
             onClick={handleGenerateScripts}
             disabled={detailQuery.isLoading}
-            className="bg-emerald-500 hover:bg-emerald-400 text-black"
+            className="bg-[#FF3838] hover:bg-[#FF5555] text-white"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1.5" />
             Generate Scripts

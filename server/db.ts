@@ -1473,16 +1473,16 @@ export async function getReviewCalibrationData(limit = 4): Promise<ReviewCalibra
     const rows = await db.execute(sql`
       SELECT
         pr.scriptsJson,
-        MAX(cs.hookScore) AS hookScore,
-        MAX(cs.convertScore) AS convertScore
+        SUM(cs.hookScore * cs.aggregatedImpressions) / NULLIF(SUM(cs.aggregatedImpressions), 0) AS hookScore,
+        SUM(cs.convertScore * cs.aggregatedImpressions) / NULLIF(SUM(cs.aggregatedImpressions), 0) AS convertScore
       FROM ${pipelineRuns} pr
       JOIN ${creativeAssets} ca ON ca.pipelineRunId = pr.id
       JOIN ${creativeScores} cs ON cs.creativeAssetId = ca.id
       WHERE pr.pipelineType IN ('script', 'video')
         AND pr.status = 'completed'
         AND pr.scriptsJson IS NOT NULL
-        AND cs.aggregatedImpressions >= 100
       GROUP BY pr.id
+      HAVING SUM(cs.aggregatedImpressions) >= 100
       ORDER BY pr.createdAt DESC
       LIMIT 50
     `);

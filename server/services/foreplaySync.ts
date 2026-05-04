@@ -236,27 +236,32 @@ export function startAutoSync(): void {
   console.log(`${TAG} Starting auto-sync (every 24 hours)`);
 
   (async () => {
-    const lastSync = await getLastSyncCompletedAt();
-    const now = Date.now();
-    const elapsedMs = lastSync ? now - lastSync.getTime() : Infinity;
+    try {
+      const lastSync = await getLastSyncCompletedAt();
+      const now = Date.now();
+      const elapsedMs = lastSync ? now - lastSync.getTime() : Infinity;
 
-    if (lastSync && elapsedMs < MIN_AUTO_SYNC_GAP_MS) {
-      const nextInMs = SYNC_INTERVAL_MS - elapsedMs;
-      const nextInMin = Math.round(nextInMs / 60000);
-      console.log(`${TAG} Last sync was ${Math.round(elapsedMs / 60000)}min ago — skipping initial sync, next in ${nextInMin}min`);
-      scheduleNext(nextInMs);
-      return;
+      if (lastSync && elapsedMs < MIN_AUTO_SYNC_GAP_MS) {
+        const nextInMs = SYNC_INTERVAL_MS - elapsedMs;
+        const nextInMin = Math.round(nextInMs / 60000);
+        console.log(`${TAG} Last sync was ${Math.round(elapsedMs / 60000)}min ago — skipping initial sync, next in ${nextInMin}min`);
+        scheduleNext(nextInMs);
+        return;
+      }
+
+      // First sync in >23h (or none ever) — run immediately, but still dedupe content first
+      console.log(`${TAG} Cleaning up content-duplicate creatives...`);
+      const deleted = await db.deduplicateExistingCreatives();
+      if (deleted > 0) console.log(`${TAG} Removed ${deleted} content-duplicate rows`);
+
+      console.log(`${TAG} Running initial sync...`);
+      const result = await syncFromForeplay();
+      console.log(`${TAG} Initial sync: ${result.newCount} new creatives`);
+      scheduleNext(SYNC_INTERVAL_MS);
+    } catch (err) {
+      console.error(`${TAG} Auto-sync startup failed:`, err);
+      scheduleNext(SYNC_INTERVAL_MS);
     }
-
-    // First sync in >23h (or none ever) — run immediately, but still dedupe content first
-    console.log(`${TAG} Cleaning up content-duplicate creatives...`);
-    const deleted = await db.deduplicateExistingCreatives();
-    if (deleted > 0) console.log(`${TAG} Removed ${deleted} content-duplicate rows`);
-
-    console.log(`${TAG} Running initial sync...`);
-    const result = await syncFromForeplay();
-    console.log(`${TAG} Initial sync: ${result.newCount} new creatives`);
-    scheduleNext(SYNC_INTERVAL_MS);
   })();
 }
 
