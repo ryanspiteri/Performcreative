@@ -10,6 +10,7 @@ import { buildReferenceBasedPrompt, type CreativityLevel } from "./geminiPromptB
 import { validateProductFidelity } from "./visionQA";
 import { overlayBrandLogo } from "./brandLogoOverlay";
 import { withTimeout, claudeClient, STEP_TIMEOUT, VARIATION_TIMEOUT, buildProductInfoContext, runWithConcurrency } from "./_shared";
+import { WINNING_AD_FRAMEWORK } from "./winningAdFramework";
 import {
   iterationBriefV1Schema,
   VISUAL_DESCRIPTION_MAX,
@@ -1464,6 +1465,8 @@ async function generateIterationBrief(
 
   const system = `You are an elite DTC performance creative strategist. You specialise in iterating on winning ad creatives — keeping what works and testing new angles. You understand that the visual DNA (layout, colours, typography style, product placement) should be preserved while the COPY (headline, subheadline, angle) should be varied to find new winners.
 
+${WINNING_AD_FRAMEWORK}
+
 ${angleSection}
 
 IMPORTANT VISUAL RULE:
@@ -1671,6 +1674,8 @@ async function generateCompetitorIterationBrief(
     : buildAdAngleInstruction(runAdAngle, perVariationAngles, variationCount);
   const angleSection = painPointInstruction || adAngleInstruction;
   const system = `You are an elite DTC creative strategist for ONEST Health. You are creating an iteration brief based on a COMPETITOR ad analysis (${competitorBrand || "another brand"}). ${isConcept ? "ADAPT the concept and angle for ONEST — use our own visual style and messaging." : "REPLICATE the visual style for ONEST — same layout, colours, typography; use ONEST product and ONEST copy only."}
+
+${WINNING_AD_FRAMEWORK}
 
 ${angleSection}
 
