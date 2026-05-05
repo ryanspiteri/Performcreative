@@ -166,7 +166,12 @@ function styleModeBlock(
   switch (resolved) {
     case "MATCH_REFERENCE":
       return `=== STYLE FIDELITY — MATCH REFERENCE ===
-Treat Image 1's composition, colour palette, lighting, texture, and typographic style as LOCKED. Reproduce them as faithfully as you can while substituting the copy below and using the product render from Image 2. Do not introduce props, colours, or compositions that aren't present in Image 1.${overrideNote}`;
+Treat Image 1's composition, colour palette, lighting, texture, and typographic style as LOCKED. Reproduce them as faithfully as you can while substituting the copy below and using the product render from Image 2. Do not introduce props, colours, or compositions that aren't present in Image 1.
+
+Pay particular attention to these background/layout elements:
+- Background gradient: match the gradient direction, colours, and tone exactly
+- Floating decorative background shapes: if Image 1 has floating abstract blobs, spheres, organic shapes, or 3D objects in the background, reproduce them at similar scale, placement, and colour
+- Benefit callout style: if Image 1 uses pill-shaped badges, bordered callouts, or floating labels, match their shape, border-radius, size, and typographic weight exactly${overrideNote}`;
     case "DEPART_FROM_REFERENCE":
       return `=== STYLE FIDELITY — DEPART FROM REFERENCE ===
 Use Image 1 as a quality benchmark only — for production polish and aesthetic family. You may reinvent composition, lighting, palette, and props. Still use the product render from Image 2. Still produce a coherent supplement ad that feels premium.${overrideNote}`;
@@ -174,6 +179,11 @@ Use Image 1 as a quality benchmark only — for production polish and aesthetic 
     default:
       return `=== STYLE FIDELITY — EVOLVE REFERENCE ===
 Study Image 1 carefully and replicate its overall layout, text placement, colour palette, lighting, product placement, background style, typography hierarchy, and aesthetic. Vary only what the variation brief calls for. Someone should look at your output beside Image 1 and say "same campaign, different headline".
+
+Pay particular attention to these background/layout elements:
+- Background gradient: match the gradient direction, colours, and tone from Image 1 unless the variation description specifies otherwise
+- Floating decorative background shapes: if Image 1 has floating abstract blobs, spheres, organic shapes, or 3D objects in the background, include similar elements at similar scale, placement, and colour
+- Benefit callout style: if Image 1 uses pill-shaped badges, bordered callouts, or floating labels around the product, reproduce that style for the new callout copy below
 
 Where the VISUAL DESCRIPTION FOR THIS VARIATION (below) explicitly describes a different background colour, layout, composition, or palette from Image 1, the variation description WINS. The style mode sets the aesthetic family; the variation description sets the specific composition for this one variation.${overrideNote}`;
   }
