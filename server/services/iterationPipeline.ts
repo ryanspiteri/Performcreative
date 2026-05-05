@@ -89,7 +89,7 @@ function buildFallbackBrief(
   analysis: string,
 ): IterationBriefV1 {
   const firstHeadlineMatch = analysis.match(/headline[^:]*:\s*["']?([^"'\n]+)["']?/i);
-  const originalHeadline = (firstHeadlineMatch?.[1] || "UPDATE ME").trim().slice(0, 120);
+  const originalHeadline = stripMarkdownInline((firstHeadlineMatch?.[1] || "UPDATE ME").trim()).slice(0, 120);
   const validTypes: BriefVariationType[] = [
     "headline_only",
     "background_only",
@@ -1588,7 +1588,7 @@ visualDescription MUST be ${VISUAL_DESCRIPTION_MAX} characters or fewer.`;
   async function callClaude(userContent: string): Promise<string> {
     const body = {
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: 8000,
       system,
       messages: [{ role: "user", content: userContent }],
     };
@@ -1712,7 +1712,7 @@ visualDescription MUST be ${VISUAL_DESCRIPTION_MAX} characters or fewer. Every v
   async function callClaude(userContent: string): Promise<string> {
     const res = await claudeClient.post("/messages", {
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: 8000,
       system,
       messages: [{ role: "user", content: userContent }],
     });
