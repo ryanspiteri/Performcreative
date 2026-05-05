@@ -53,9 +53,12 @@ function sanitizeRawBrief(parsed: unknown): unknown {
   }
   const obj = parsed as Record<string, unknown>;
   const validVariationTypes = new Set(VARIATION_TYPES as readonly string[]);
+  const validAdAngles = new Set(["auto", "claim_led", "before_after", "testimonial", "ugc_organic", "product_hero", "lifestyle"]);
   const stripStr = (v: unknown) => typeof v === "string" ? stripMarkdownInline(v) : v;
   return {
     ...obj,
+    originalHeadline: stripStr(obj.originalHeadline),
+    originalAngle: stripStr(obj.originalAngle),
     variations: (obj.variations as any[]).map((v: any) => ({
       ...v,
       headline: stripStr(v.headline),
@@ -67,19 +70,31 @@ function sanitizeRawBrief(parsed: unknown): unknown {
         : v.visualDescription,
       backgroundNote: stripStr(v.backgroundNote),
       variationType: validVariationTypes.has(v.variationType) ? v.variationType : "full_remix",
+      adAngle: validAdAngles.has(v.adAngle) ? v.adAngle : undefined,
     })),
   };
 }
 
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
 function validateBriefJson(text: string): IterationBriefV1 | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return null;
+  const candidates = [text, extractJsonObject(text)].filter(Boolean) as string[];
+  for (const candidate of candidates) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    const result = iterationBriefV1Schema.safeParse(sanitizeRawBrief(parsed));
+    if (result.success) return result.data;
   }
-  const result = iterationBriefV1Schema.safeParse(sanitizeRawBrief(parsed));
-  return result.success ? result.data : null;
+  return null;
 }
 
 /** Deterministic fallback when Claude returns invalid JSON twice. Produces a minimal valid v1 brief. */
@@ -88,8 +103,10 @@ function buildFallbackBrief(
   variationTypes: string[] | undefined,
   analysis: string,
 ): IterationBriefV1 {
-  const firstHeadlineMatch = analysis.match(/headline[^:]*:\s*["']?([^"'\n]+)["']?/i);
-  const originalHeadline = stripMarkdownInline((firstHeadlineMatch?.[1] || "UPDATE ME").trim()).slice(0, 120);
+  const firstHeadlineMatch = analysis.match(/headline[^:]*:([^\n]+)/i);
+  const rawHeadlineLine = (firstHeadlineMatch?.[1] || "").trim();
+  const cleanedHeadline = stripMarkdownInline(rawHeadlineLine).replace(/^["'\s*]+|["'\s*]+$/g, "").trim();
+  const originalHeadline = (cleanedHeadline || "UPDATE ME").slice(0, 120);
   const validTypes: BriefVariationType[] = [
     "headline_only",
     "background_only",
